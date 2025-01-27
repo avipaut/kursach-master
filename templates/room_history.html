@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ room_name }} Chat History</title>
+</head>
+<body>
+
+    <h1>Chat History for Room: {{ room_name }}</h1>
+    
+    <div id="chat-box">
+        {% for message in messages %}
+            <div>
+                <strong>{{ message[0] }}</strong>: {{ message[1] }} <small>{{ message[2] }}</small>
+            </div>
+        {% endfor %}
+    </div>
+
+    <a href="{{ url_for('chat.chat') }}">Back to Chat</a>
+
+</body>
+</html>

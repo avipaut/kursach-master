@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Текстовый редактор</title>
+  <script src="https://cdn.tiny.cloud/1/ofudo4vtsvtofz4dsb090uktwpwx5rkk2qftaxcgx322plmc/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+</head>
+<body>
+  <h1>Интеграция TinyMCE</h1>
+  <textarea id="mytextarea">Hello, World!</textarea>
+
+  <script>
+    tinymce.init({
+      selector: '#mytextarea',  // Указываем элемент, который будет превращен в редактор
+      plugins: 'advlist autolink lists link image charmap print preview anchor',
+      toolbar: 'undo redo | formatselect | bold italic backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | help',
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.min.js"></script>
+</head>
+<body>
+
+    <div class="navbar">
+        <a href="{{ url_for('documents.documents') }}">Documents</a>
+        <a href="{{ url_for('chat.chat') }}">Chat</a>
+        <a href="{{ url_for('reports.reports') }}">Reports</a>
+        <a href="{{ url_for('kpi.kpi') }}">KPI</a>
+        <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
+    </div>
+
+    <div class="container">
+        <h1>Chat Room</h1>
+
+        <!-- Форма выбора комнаты -->
+        <form id="room-form" method="POST">
+            <label for="room">Select Room:</label>
+            <select id="room" name="room">
+                {% for room in rooms %}
+                    <option value="{{ room[0] }}">{{ room[0] }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Join Room</button>
+        </form>
+
+        <!-- Список пользователей -->
+        <div id="user-list">
+            <h3>Users</h3>
+            <ul>
+                {% for user in users %}
+                    {% if user[2] %} <!-- Проверка на наличие имени комнаты -->
+                        <li><a href="{{ url_for('chat.room_history', room_name=user[2]) }}">{{ user[1] }} (Room: {{ user[2] }})</a></li>
+                    {% else %}
+                        <li>{{ user[1] }} (No Room Assigned)</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Список комнат -->
+        <div id="room-list">
+            <h3>Rooms</h3>
+            <ul>
+                {% for room in rooms %}
+                    <li>{{ room[0] }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Чат -->
+        <div id="chat-container" style="display: none;">
+            <div id="chat-box" style="border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: scroll;"></div>
+            <form id="message-form" action="#" method="POST">
+                <input type="text" id="message" placeholder="Type a message..." required>
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const socket = io.connect('http://localhost:5000');
+        const chatContainer = document.getElementById('chat-container');
+        const messageForm = document.getElementById('message-form');
+        const chatBox = document.getElementById('chat-box');
+        const messageInput = document.getElementById('message');
+        const roomSelect = document.getElementById('room');
+        let currentRoom = null;
+
+        // При отправке сообщения
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = messageInput.value;
+            if (message.trim() !== "") {
+                socket.emit('send_message', { message: message, room: currentRoom });
+                messageInput.value = ''; // Очищаем поле ввода
+            }
+        });
+
+        // При получении нового сообщения
+        socket.on('receive_message', (data) => {
+            if (data.room === currentRoom) {
+                const newMessage = document.createElement('div');
+                newMessage.textContent = `${data.username}: ${data.message}`;
+                chatBox.appendChild(newMessage);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        });
+
+        // При выборе комнаты
+        document.getElementById('room-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            currentRoom = roomSelect.value;
+            socket.emit('join_room', { room: currentRoom });
+            chatContainer.style.display = 'block';
+        });
+    </script>
+
+</body>
+</html>
