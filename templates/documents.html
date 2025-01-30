@@ -7,8 +7,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-
-    <!-- Navigation Bar -->
     <div class="navbar">
         <a href="{{ url_for('documents.documents') }}">Documents</a>
         <a href="{{ url_for('chat.chat') }}">Chat</a>
@@ -17,37 +15,34 @@
         <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
     </div>
 
-    <!-- Document Page Content -->
     <div class="container">
         <h1>Documents</h1>
 
-        <!-- File Upload Form -->
-        <form action="{{ url_for('documents.upload_file') }}" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" required>
-            <button type="submit">Upload Document</button>
-        </form>
+        <div class="form-container">
+            <form action="{{ url_for('documents.upload_file') }}" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" required>
+                <button type="submit">Upload Document</button>
+            </form>
 
-        <!-- File Translation Form -->
-        <h3>Translate Document</h3>
-        <form action="{{ url_for('documents.translate_upload') }}" method="post" enctype="multipart/form-data">
-            <label for="file">Choose file to translate:</label>
-            <input type="file" name="file" required>
-            <br><br>
-            <label for="direction">Choose translation direction:</label>
-            <select name="direction">
-                <option value="ky-ru">Kyrgyz to Russian</option>
-                <option value="ru-ky">Russian to Kyrgyz</option>
-            </select>
-            <button type="submit">Upload and Translate</button>
-        </form>
+            <form action="{{ url_for('documents.translate_upload') }}" method="post" enctype="multipart/form-data">
+                <label for="file">Choose file to translate:</label>
+                <input type="file" name="file" required>
+                <label for="direction">Choose translation direction:</label>
+                <select name="direction">
+                    <option value="ky-ru">Kyrgyz to Russian</option>
+                    <option value="ru-ky">Russian to Kyrgyz</option>
+                </select>
+                <button type="submit">Upload and Translate</button>
+            </form>
+        </div>
 
-        <!-- Logout Form -->
-        <form action="{{ url_for('auth.logout') }}" method="GET" style="margin-top: 20px;">
-            <button type="submit">Log Out</button>
-        </form>
-        <a href="{{ url_for('documents.create_documents') }}" class="btn btn-primary">Create New Document</a>
+        <div class="button-group">
+            <a href="{{ url_for('documents.create_documents') }}" class="btn btn-primary">Create New Document</a>
+            <form action="{{ url_for('auth.logout') }}" method="GET">
+                <button type="submit">Log Out</button>
+            </form>
+        </div>
 
-        <!-- Document List -->
         <h3>Uploaded Documents</h3>
         <ul>
             {% if documents == ["No documents available. Upload a new file!"] %}
@@ -55,22 +50,17 @@
             {% else %}
                 {% for document in documents %}
                     <li>
-                        <!-- View Document -->
                         <a href="{{ url_for('documents.view_file', filename=document) }}" target="_blank">{{ document }}</a>
-
-                        <!-- Delete Document -->
-                        <form action="{{ url_for('documents.delete_file', filename=document) }}" method="POST" style="display:inline;">
-                            <button type="submit">Delete</button>
-                        </form>
-
-                        <!-- Download Document -->
-                        <a href="{{ url_for('documents.download_file', filename=document) }}">Download</a>
-                    
+                        <div class="actions">
+                            <form action="{{ url_for('documents.delete_file', filename=document) }}" method="POST">
+                                <button type="submit">Delete</button>
+                            </form>
+                            <a href="{{ url_for('documents.download_file', filename=document) }}">Download</a>
+                        </div>
                     </li>
                 {% endfor %}
             {% endif %}
         </ul>
     </div>
-
 </body>
 </html>
