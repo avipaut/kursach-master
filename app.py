@@ -8,12 +8,21 @@ from routes.documents import documents_bp
 from routes.chat import chat_bp, socketio
 from routes.zoom import zoom_bp
 from routes.reports import reports_bp
-from routes.kpi import kpi_bp
+from routes.kpi import kpi_bp  # Оставляем import тут
 from routes.auth import auth_bp, init_login_manager
+from routes.models import db  # Импортируем db из models
 
+# Инициализация Flask
 app = Flask(__name__)
 CORS(app)
 socketio.init_app(app, cors_allowed_origins="*")
+
+# Настройки базы данных
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'  # Путь к базе данных
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # Отключить модификации
+
+# Инициализация базы данных
+db.init_app(app)  # Инициализируем db через db из models.py
 
 # Инициализация LoginManager
 login_manager = LoginManager()
@@ -28,7 +37,7 @@ app.register_blueprint(documents_bp, url_prefix='/documents')
 app.register_blueprint(chat_bp, url_prefix='/chat')
 app.register_blueprint(zoom_bp, url_prefix='/zoom')
 app.register_blueprint(reports_bp, url_prefix='/reports')
-app.register_blueprint(kpi_bp, url_prefix='/kpi')
+app.register_blueprint(kpi_bp, url_prefix='/kpi')  # Теперь можно импортировать kpi_bp
 app.register_blueprint(auth_bp, url_prefix='/auth')
 
 # Главный маршрут
@@ -51,6 +60,8 @@ UPLOAD_FOLDER = "uploaded_documents"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app.secret_key = 'your_secret_key_here'
-
+@app.before_request
+def create_tables():
+    db.create_all()
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)

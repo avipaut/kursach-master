@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h2 class="text-2xl font-bold mb-4">KPI Конструктор</h2>
+    
+    <div class="mb-4 flex space-x-2">
+        <button type="button" id="save_kpi" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Сохранить KPI
+        </button>
+        <button type="button" id="add_column" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            Добавить колонку
+        </button>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white border border-gray-300">
+            <thead>
+                <tr id="header-row">
+                    {% for column in kpi_columns %}
+                        <th class="border border-gray-300 px-4 py-2">
+                            <input type="text" 
+                                   name="column_{{ loop.index0 }}" 
+                                   value="{{ column }}"
+                                   class="w-full p-1 border border-gray-300 rounded">
+                        </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row_idx in range(10) %}
+                    <tr>
+                        {% for col_idx in range(kpi_columns|length) %}
+                            <td class="border border-gray-300 px-4 py-2">
+                                <input type="text" 
+                                       class="kpi-input w-full p-1 border border-gray-300 rounded"
+                                       data-row="{{ row_idx }}"
+                                       data-col="{{ col_idx }}"
+                                       value="{{ kpi_data[row_idx][col_idx] if kpi_data[row_idx][col_idx] else '' }}">
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div id="notification" class="fixed top-4 right-4 max-w-sm bg-white border border-gray-300 rounded shadow-lg hidden">
+        <div class="p-4">
+            <p id="notification-message" class="text-gray-800"></p>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script type="text/javascript">
+    // const initialKpiData = {{ kpi_data | tojson | safe }};
+    
+    function showNotification(message, type = 'success') {
+        const notification = $('#notification');
+        const messageElement = $('#notification-message');
+        
+        messageElement.text(message);
+        notification.removeClass('hidden bg-green-100 bg-red-100')
+                   .addClass(type === 'success' ? 'bg-green-100' : 'bg-red-100')
+                   .fadeIn();
+                   
+        setTimeout(() => {
+            notification.fadeOut();
+        }, 3000);
+    }
+
+    $(document).ready(function() {
+        // Обработчик сохранения KPI
+        $("#save_kpi").click(function() {
+            const kpiDataToSend = {};
+            
+            $("table tbody tr").each(function(rowIdx) {
+                $(this).find("td").each(function(colIdx) {
+                    const value = $(this).find("input").val();
+                    if (value) {
+                        kpiDataToSend[`row_${rowIdx}_col_${colIdx}`] = value;
+                    }
+                });
+            });
+
+            $.ajax({
+                url: "{{ url_for('kpi.save_kpi') }}",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify(kpiDataToSend),
+                success: function(response) {
+                    if (response.status === "success") {
+                        showNotification("KPI успешно сохранены");
+                    } else {
+                        showNotification(response.message || "Ошибка при сохранении", "error");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Ошибка при сохранении KPI:", error);
+                    showNotification("Ошибка при сохранении KPI", "error");
+                }
+            });
+        });
+
+        // Обработчик добавления колонки
+        $("#add_column").click(function() {
+            $.ajax({
+                url: "{{ url_for('kpi.add_column') }}",
+                type: "POST",
+                success: function(response) {
+                    if (response.status === "success") {
+                        // Добавляем новую колонку в заголовок
+                        const newColIndex = $("#header-row th").length;
+                        const headerCell = `
+                            <th class="border border-gray-300 px-4 py-2">
+                                <input type="text" 
+                                       name="column_${newColIndex}" 
+                                       value="${response.new_column}"
+                                       class="w-full p-1 border border-gray-300 rounded">
+                            </th>
+                        `;
+                        $("#header-row").append(headerCell);
+
+                        // Добавляем ячейки в каждую строку
+                        $("table tbody tr").each(function(rowIdx) {
+                            const cell = `
+                                <td class="border border-gray-300 px-4 py-2">
+                                    <input type="text" 
+                                           class="kpi-input w-full p-1 border border-gray-300 rounded"
+                                           data-row="${rowIdx}"
+                                           data-col="${newColIndex}"
+                                           value="">
+                                </td>
+                            `;
+                            $(this).append(cell);
+                        });
+
+                        showNotification("Колонка успешно добавлена");
+                    } else {
+                        showNotification(response.message || "Ошибка при добавлении колонки", "error");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Ошибка при добавлении колонки:", error);
+                    showNotification("Ошибка при добавлении колонки", "error");
+                }
+            });
+        });
+
+        // Автоматическое сохранение при потере фокуса
+        $(document).on('blur', '.kpi-input', function() {
+            const row = $(this).data('row');
+            const col = $(this).data('col');
+            const value = $(this).val();
+            
+            if (value !== initialKpiData[row]?.[col]) {
+                const data = {};
+                data[`row_${row}_col_${col}`] = value;
+                
+                $.ajax({
+                    url: "{{ url_for('kpi.save_kpi') }}",
+                    type: "POST",
+                    contentType: "application/json",
+                    data: JSON.stringify(data),
+                    success: function(response) {
+                        if (response.status === "success") {
+                            showNotification("Значение сохранено");
+                        }
+                    }
+                });
+            }
+        });
+    });
+</script>
+{% endblock %}
