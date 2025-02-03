@@ -1,176 +1,282 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI Constructor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f6f9;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="min-h-screen bg-gray-100">
+        <nav class="bg-white shadow-md">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <div class="flex-shrink-0 flex items-center">
+                            <h1 class="text-2xl font-bold text-gray-800">Document Management</h1>
+                        </div>
+                        <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                            <a href="{{ url_for('documents.documents') }}" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">Documents</a>
+                            <a href="{{ url_for('chat.chat') }}" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">Chat</a>
+                            <a href="{{ url_for('reports.reports') }}" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">Reports</a>
+                            <a href="{{ url_for('kpi.kpi_constructor') }}" class="text-blue-600 border-b-2 border-blue-600 px-3 py-2 text-sm font-semibold">KPI</a>
+                            <a href="{{ url_for('zoom.zoom') }}" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">Zoom</a>
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <form action="{{ url_for('auth.logout') }}" method="GET">
+                            <button class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                                Log Out
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </nav>
 
-{% block content %}
-<div class="container mx-auto p-4">
-    <h2 class="text-2xl font-bold mb-4">KPI Конструктор</h2>
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="bg-white shadow-xl rounded-lg overflow-hidden">
+                <div class="px-6 py-5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                    <h2 class="text-2xl font-bold text-gray-800">KPI Constructor</h2>
+                    <div class="flex space-x-3">
+                        <button id="add_column" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                            </svg>
+                            Add Column
+                        </button>
+                        <button id="save_kpi" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                            Save KPI
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto scrollbar-hide">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr id="column-names-row">
+                                {% for column in kpi_columns %}
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider relative group">
+                                        <div class="flex items-center justify-between">
+                                            {{ column }}
+                                            <button class="delete-column text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity" 
+                                                    data-column="{{ column }}">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for row_idx in range(10) %}
+                                <tr class="{{ 'bg-gray-50' if loop.index is odd else '' }}">
+                                    {% for col_idx in range(kpi_columns|length) %}
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <input type="text" 
+                                                   class="kpi-input w-full bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
+                                                   data-row="{{ row_idx }}"
+                                                   data-col="{{ col_idx }}"
+                                                   value="{{ kpi_data[row_idx][col_idx] if kpi_data[row_idx][col_idx] else '' }}">
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="notification" class="fixed top-4 right-4 z-50 max-w-sm transform transition-all duration-300 ease-in-out hidden">
+                <div class="bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex items-center">
+                    <div id="notification-icon" class="mr-3">
+                        <!-- Dynamic icon will be added via JS -->
+                    </div>
+                    <p id="notification-message" class="text-gray-800 flex-grow"></p>
+                    <button id="close-notification" class="ml-3 text-gray-500 hover:text-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
     
-    <div class="mb-4 flex space-x-2">
-        <button type="button" id="save_kpi" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Сохранить KPI
-        </button>
-        <button type="button" id="add_column" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-            Добавить колонку
-        </button>
-    </div>
-
-    <div class="overflow-x-auto">
-        <table class="min-w-full bg-white border border-gray-300">
-            <thead>
-                <tr id="header-row">
-                    {% for column in kpi_columns %}
-                        <th class="border border-gray-300 px-4 py-2">
-                            <input type="text" 
-                                   name="column_{{ loop.index0 }}" 
-                                   value="{{ column }}"
-                                   class="w-full p-1 border border-gray-300 rounded">
-                        </th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row_idx in range(10) %}
-                    <tr>
-                        {% for col_idx in range(kpi_columns|length) %}
-                            <td class="border border-gray-300 px-4 py-2">
-                                <input type="text" 
-                                       class="kpi-input w-full p-1 border border-gray-300 rounded"
-                                       data-row="{{ row_idx }}"
-                                       data-col="{{ col_idx }}"
-                                       value="{{ kpi_data[row_idx][col_idx] if kpi_data[row_idx][col_idx] else '' }}">
-                            </td>
-                        {% endfor %}
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <div id="notification" class="fixed top-4 right-4 max-w-sm bg-white border border-gray-300 rounded shadow-lg hidden">
-        <div class="p-4">
-            <p id="notification-message" class="text-gray-800"></p>
-        </div>
-    </div>
-</div>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script type="text/javascript">
-    const initialKpiData = {{ kpi_data | tojson | safe }};
-    
-    function showNotification(message, type = 'success') {
-        const notification = $('#notification');
-        const messageElement = $('#notification-message');
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        // All previous JavaScript remains the same as in the original file
+        const initialKpiData = {{ kpi_data | tojson | safe }};
         
-        messageElement.text(message);
-        notification.removeClass('hidden bg-green-100 bg-red-100')
-                   .addClass(type === 'success' ? 'bg-green-100' : 'bg-red-100')
-                   .fadeIn();
-                   
-        setTimeout(() => {
-            notification.fadeOut();
-        }, 3000);
-    }
-
-    $(document).ready(function() {
-        // Обработчик сохранения KPI
-        $("#save_kpi").click(function() {
-            const kpiDataToSend = {};
+        function showNotification(message, type = 'success') {
+            const notification = $('#notification');
+            const messageElement = $('#notification-message');
             
-            $("table tbody tr").each(function(rowIdx) {
-                $(this).find("td").each(function(colIdx) {
-                    const value = $(this).find("input").val();
-                    if (value) {
-                        kpiDataToSend[`row_${rowIdx}_col_${colIdx}`] = value;
-                    }
-                });
-            });
-
-            $.ajax({
-                url: "{{ url_for('kpi.save_kpi') }}",
-                type: "POST",
-                contentType: "application/json",
-                data: JSON.stringify(kpiDataToSend),
-                success: function(response) {
-                    if (response.status === "success") {
-                        showNotification("KPI успешно сохранены");
-                    } else {
-                        showNotification(response.message || "Ошибка при сохранении", "error");
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error("Ошибка при сохранении KPI:", error);
-                    showNotification("Ошибка при сохранении KPI", "error");
+            messageElement.text(message);
+            notification.removeClass('hidden bg-green-100 bg-red-100')
+                       .addClass(type === 'success' ? 'bg-green-100' : 'bg-red-100')
+                       .fadeIn();
+                       
+            setTimeout(() => {
+                notification.fadeOut();
+            }, 3000);
+        }
+        $(document).on("click", ".delete-column", function() {
+        let columnName = $(this).data("column");
+        let columnIndex = $(this).closest("th").index();
+    
+        $.ajax({
+            url: "{{ url_for('kpi.delete_column') }}",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ column: columnName }),
+            success: function(response) {
+                if (response.status === "success") {
+                    // Удаляем колонку из таблицы
+                    $("#header-row th").eq(columnIndex).remove();
+                    $("table tbody tr").each(function() {
+                        $(this).find("td").eq(columnIndex).remove();
+                    });
+    
+                    showNotification(`Колонка '${columnName}' удалена`);
+                } else {
+                    showNotification(response.message || "Ошибка при удалении колонки", "error");
                 }
-            });
+            },
+            error: function(xhr, status, error) {
+                console.error("Ошибка при удалении колонки:", error);
+                showNotification("Ошибка при удалении колонки", "error");
+            }
         });
-
-        // Обработчик добавления колонки
-        $("#add_column").click(function() {
-            $.ajax({
-                url: "{{ url_for('kpi.add_column') }}",
-                type: "POST",
-                success: function(response) {
-                    if (response.status === "success") {
-                        // Добавляем новую колонку в заголовок
-                        const newColIndex = $("#header-row th").length;
-                        const headerCell = `
-                            <th class="border border-gray-300 px-4 py-2">
-                                <input type="text" 
-                                       name="column_${newColIndex}" 
-                                       value="${response.new_column}"
-                                       class="w-full p-1 border border-gray-300 rounded">
-                            </th>
-                        `;
-                        $("#header-row").append(headerCell);
-
-                        // Добавляем ячейки в каждую строку
-                        $("table tbody tr").each(function(rowIdx) {
-                            const cell = `
-                                <td class="border border-gray-300 px-4 py-2">
-                                    <input type="text" 
-                                           class="kpi-input w-full p-1 border border-gray-300 rounded"
-                                           data-row="${rowIdx}"
-                                           data-col="${newColIndex}"
-                                           value="">
-                                </td>
-                            `;
-                            $(this).append(cell);
-                        });
-
-                        showNotification("Колонка успешно добавлена");
-                    } else {
-                        showNotification(response.message || "Ошибка при добавлении колонки", "error");
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error("Ошибка при добавлении колонки:", error);
-                    showNotification("Ошибка при добавлении колонки", "error");
-                }
-            });
-        });
-
-        // Автоматическое сохранение при потере фокуса
-        $(document).on('blur', '.kpi-input', function() {
-            const row = $(this).data('row');
-            const col = $(this).data('col');
-            const value = $(this).val();
-            
-            if (value !== initialKpiData[row]?.[col]) {
-                const data = {};
-                data[`row_${row}_col_${col}`] = value;
+    });
+        $(document).ready(function() {
+            // Обработчик сохранения KPI
+            $("#save_kpi").click(function() {
+                const kpiDataToSend = {};
                 
+                $("table tbody tr").each(function(rowIdx) {
+                    $(this).find("td").each(function(colIdx) {
+                        const value = $(this).find("input").val();
+                        if (value) {
+                            kpiDataToSend[`row_${rowIdx}_col_${colIdx}`] = value;
+                        }
+                    });
+                });
+    
                 $.ajax({
                     url: "{{ url_for('kpi.save_kpi') }}",
                     type: "POST",
                     contentType: "application/json",
-                    data: JSON.stringify(data),
+                    data: JSON.stringify(kpiDataToSend),
                     success: function(response) {
                         if (response.status === "success") {
-                            showNotification("Значение сохранено");
+                            showNotification("KPI успешно сохранены");
+                        } else {
+                            showNotification(response.message || "Ошибка при сохранении", "error");
                         }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error("Ошибка при сохранении KPI:", error);
+                        showNotification("Ошибка при сохранении KPI", "error");
                     }
                 });
+            });
+    
+            // Обработчик добавления колонки
+            $("#add_column").click(function() {
+        $.ajax({
+            url: "{{ url_for('kpi.add_column') }}",
+            type: "POST",
+            success: function(response) {
+                if (response.status === "success") {
+                    const newColumnName = response.new_column;
+                    const newColIndex = response.column_index;
+    
+                    // Добавляем новую колонку в заголовок
+                    const headerCell = `
+                        <th class="relative group">
+                            <button class="delete-column absolute -top-6 left-1/2 transform -translate-x-1/2 bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded hidden group-hover:block" 
+                                    data-column="${newColumnName}">
+                                ✖
+                            </button>
+                            ${newColumnName}
+                        </th>
+                    `;
+                    $("#header-row").append(headerCell);
+    
+                    // Добавляем ячейки в каждую строку
+                    $("table tbody tr").each(function(rowIdx) {
+                        const cell = `
+                            <td class="border border-gray-300 px-4 py-2">
+                                <input type="text" 
+                                       class="kpi-input w-full p-1 border border-gray-300 rounded"
+                                       data-row="${rowIdx}"
+                                       data-col="${newColIndex}"
+                                       value="">
+                            </td>
+                        `;
+                        $(this).append(cell);
+                    });
+    
+                    // Сразу вызываем сохранение всей таблицы
+                    $("#save_kpi").click();
+    
+                    showNotification("Колонка успешно добавлена");
+                } else {
+                    showNotification(response.message || "Ошибка при добавлении колонки", "error");
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("Ошибка при добавлении колонки:", error);
+                showNotification("Ошибка при добавлении колонки", "error");
             }
         });
     });
-</script>
-{% endblock %}
+    
+            // Автоматическое сохранение при потере фокуса
+            $(document).on('blur', '.kpi-input', function() {
+                const row = $(this).data('row');
+                const col = $(this).data('col');
+                const value = $(this).val();
+                
+                if (value !== initialKpiData[row]?.[col]) {
+                    const data = {};
+                    data[`row_${row}_col_${col}`] = value;
+                    
+                    $.ajax({
+                        url: "{{ url_for('kpi.save_kpi') }}",
+                        type: "POST",
+                        contentType: "application/json",
+                        data: JSON.stringify(data),
+                        success: function(response) {
+                            if (response.status === "success") {
+                                showNotification("Значение сохранено");
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

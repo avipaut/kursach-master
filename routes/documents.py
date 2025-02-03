@@ -1,53 +1,74 @@
-from flask import Blueprint, render_template, request, redirect, url_for, send_from_directory
+from flask import Blueprint, render_template, request, redirect, url_for, send_from_directory, flash
 import os
 from googletrans import Translator
 from flask_login import current_user, login_required
-
+from werkzeug.utils import secure_filename
+from datetime import datetime
+import mimetypes
 documents_bp = Blueprint('documents', __name__)
 
 # Основная папка для загрузок
 BASE_UPLOAD_FOLDER = "uploaded_documents"
 
-# Создаём папку для каждого пользователя
 def get_user_upload_folder(user_id):
+    """Create and return a unique folder for each user's uploads"""
     user_folder = os.path.join(BASE_UPLOAD_FOLDER, str(user_id))
-    if not os.path.exists(user_folder):
-        os.makedirs(user_folder)
+    os.makedirs(user_folder, exist_ok=True)
     return user_folder
 
 translator = Translator()
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ['pdf', 'docx', 'txt', 'jpg', 'png']
-
+    """Check if the file extension is allowed"""
+    ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt', 'jpg', 'png', 'jpeg', 'doc', 'rtf'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def get_file_icon(filename):
+    """Determine the appropriate icon based on file type"""
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    icons = {
+        'pdf': 'fa-file-pdf',
+        'docx': 'fa-file-word',
+        'doc': 'fa-file-word',
+        'txt': 'fa-file-alt',
+        'jpg': 'fa-file-image',
+        'jpeg': 'fa-file-image',
+        'png': 'fa-file-image',
+        'rtf': 'fa-file-alt'
+    }
+    return icons.get(ext, 'fa-file')
 # Защищаем маршрут с загрузкой файлов
 @documents_bp.route('/translate_upload', methods=['GET', 'POST'])
 @login_required
 async def translate_upload():
     if request.method == 'POST':
         if 'file' not in request.files:
+            flash('No file part', 'error')
             return redirect(request.url)
 
         file = request.files['file']
         translation_direction = request.form.get('direction', 'ky-ru')
 
-        if file and allowed_file(file.filename) and file.filename.endswith('.txt'):
-            filename = file.filename
-            # Папка для текущего пользователя
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
             user_folder = get_user_upload_folder(current_user.id)
             filepath = os.path.join(user_folder, filename)
             file.save(filepath)
-            translated_content = await translate_file(filepath, direction=translation_direction)
-            if translated_content:
-                translated_filename = f"translated_{filename}"
-                translated_filepath = os.path.join(user_folder, translated_filename)
-                with open(translated_filepath, 'w', encoding='utf-8') as f:
-                    f.write(translated_content)
-                return redirect(url_for('documents.view_file', filename=translated_filename))
-            else:
-                return f"Translation failed: {translated_content}", 500  
+
+            try:
+                translated_content = await translate_file(filepath, direction=translation_direction)
+                if translated_content:
+                    translated_filename = f"translated_{filename}"
+                    translated_filepath = os.path.join(user_folder, translated_filename)
+                    with open(translated_filepath, 'w', encoding='utf-8') as f:
+                        f.write(translated_content)
+                    flash('File translated successfully!', 'success')
+                    return redirect(url_for('documents.view_file', filename=translated_filename))
+                else:
+                    flash('Translation failed', 'error')
+            except Exception as e:
+                flash(f'Error during translation: {str(e)}', 'error')
         else:
-            return "Only text files (.txt) are supported for translation", 400
+            flash('Unsupported file type', 'error')
 
     return render_template('translate_upload.html')
 
@@ -71,13 +92,27 @@ async def translate_file(filepath, direction='ky-ru'):
 @documents_bp.route('/')
 @login_required
 def documents():
-    # Папка текущего пользователя
     user_folder = get_user_upload_folder(current_user.id)
-    documents = os.listdir(user_folder)
-    print(f"Documents found for user {current_user.id}: {documents}")
+    documents = []
+    
+    try:
+        for filename in os.listdir(user_folder):
+            filepath = os.path.join(user_folder, filename)
+            file_stats = os.stat(filepath)
+            documents.append({
+                'name': filename,
+                'size': f"{file_stats.st_size / 1024:.2f} KB",
+                'uploaded_at': datetime.fromtimestamp(file_stats.st_mtime).strftime('%Y-%m-%d %H:%M'),
+                'icon': get_file_icon(filename)
+            })
+    except Exception as e:
+        flash(f'Error reading documents: {str(e)}', 'error')
+
     if not documents:
-        documents = ["No documents available. Upload a new file!"]
+        documents = [{'name': "No documents available. Upload a new file!"}]
+    
     return render_template('documents.html', documents=documents)
+
 
 
 @documents_bp.route('/create_documents', methods=['GET', 'POST'])
@@ -89,19 +124,25 @@ def create_documents():
 @login_required
 def upload_file():
     if 'file' not in request.files:
+        flash('No file part', 'error')
         return redirect(request.url)
+    
     file = request.files['file']
+    if file.filename == '':
+        flash('No selected file', 'error')
+        return redirect(request.url)
+    
     if file and allowed_file(file.filename):
-        filename = file.filename
-        # Папка текущего пользователя
+        filename = secure_filename(file.filename)
         user_folder = get_user_upload_folder(current_user.id)
         filepath = os.path.join(user_folder, filename)
         file.save(filepath)
-        print(f"File uploaded: {filename}")  
-        return redirect(url_for('documents.documents')) 
+        
+        flash(f'File {filename} uploaded successfully!', 'success')
+        return redirect(url_for('documents.documents'))
     
+    flash('File type not allowed', 'error')
     return redirect(url_for('documents.documents'))
-
 # Удаление файла
 @documents_bp.route('/delete/<filename>', methods=['POST'])
 @login_required

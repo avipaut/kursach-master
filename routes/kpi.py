@@ -83,7 +83,28 @@ def add_column():
     except Exception as e:
         logger.error(f"Ошибка при добавлении колонки: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+@kpi_bp.route('/delete_column', methods=['POST'])
+def delete_column():
+    """Удаляет конкретную колонку по имени."""
+    try:
+        data = request.get_json()
+        column_name = data.get("column")
 
+        if not column_name or column_name not in kpi_columns:
+            return jsonify({"status": "error", "message": "Колонка не найдена"}), 400
+        
+        # Удаляем колонку из списка
+        kpi_columns.remove(column_name)
+
+        # Удаляем данные из БД
+        db.session.query(KPI).filter(KPI.column_name == column_name).delete()
+        db.session.commit()
+
+        logger.info(f"Удалена колонка: {column_name}")
+        return jsonify({"status": "success"})
+    except Exception as e:
+        logger.error(f"Ошибка при удалении колонки: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 @kpi_bp.route('/save_kpi', methods=['POST'])
 def save_kpi():
     """Сохраняет данные KPI в базу данных."""

@@ -3,64 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documents</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Document Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f4f6f9;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-top: 30px;
+        }
+        .file-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+        }
+        .file-icon {
+            font-size: 24px;
+            margin-right: 15px;
+            color: #6c757d;
+        }
+        .file-details {
+            display: flex;
+            flex-direction: column;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+        .flash-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
 </head>
 <body>
-    <div class="navbar">
-        <a href="{{ url_for('documents.documents') }}">Documents</a>
-        <a href="{{ url_for('chat.chat') }}">Chat</a>
-        <a href="{{ url_for('reports.reports') }}">Reports</a>
-        <a href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
-        <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
-    </div>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Document Management</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="{{ url_for('documents.documents') }}">Documents</a>
+                <a class="nav-link" href="{{ url_for('chat.chat') }}">Chat</a>
+                <a class="nav-link" href="{{ url_for('reports.reports') }}">Reports</a>
+                <a class="nav-link" href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
+                <a class="nav-link" href="{{ url_for('zoom.zoom') }}">Zoom</a>
+                <form action="{{ url_for('auth.logout') }}" method="GET" class="nav-link">
+                    <button class="btn btn-outline-danger btn-sm">Log Out</button>
+                </form>
+            </div>
+        </div>
+    </nav>
 
     <div class="container">
-        <h1>Documents</h1>
-
-        <div class="form-container">
-            <form action="{{ url_for('documents.upload_file') }}" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" required>
-                <button type="submit">Upload Document</button>
-            </form>
-
-            <form action="{{ url_for('documents.translate_upload') }}" method="post" enctype="multipart/form-data">
-                <label for="file">Choose file to translate:</label>
-                <input type="file" name="file" required>
-                <label for="direction">Choose translation direction:</label>
-                <select name="direction">
-                    <option value="ky-ru">Kyrgyz to Russian</option>
-                    <option value="ru-ky">Russian to Kyrgyz</option>
-                </select>
-                <button type="submit">Upload and Translate</button>
-            </form>
-        </div>
-
-        <div class="button-group">
-            <a href="{{ url_for('documents.create_documents') }}" class="btn btn-primary">Create New Document</a>
-            <form action="{{ url_for('auth.logout') }}" method="GET">
-                <button type="submit">Log Out</button>
-            </form>
-        </div>
-
-        <h3>Uploaded Documents</h3>
-        <ul>
-            {% if documents == ["No documents available. Upload a new file!"] %}
-                <li>{{ documents[0] }}</li>
-            {% else %}
-                {% for document in documents %}
-                    <li>
-                        <a href="{{ url_for('documents.view_file', filename=document) }}" target="_blank">{{ document }}</a>
-                        <div class="actions">
-                            <form action="{{ url_for('documents.delete_file', filename=document) }}" method="POST">
-                                <button type="submit">Delete</button>
-                            </form>
-                            <a href="{{ url_for('documents.download_file', filename=document) }}">Download</a>
-                        </div>
-                    </li>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
                 {% endfor %}
             {% endif %}
-        </ul>
+        {% endwith %}
+
+        <div class="row">
+            <div class="col-md-6">
+                <h2>Upload Document</h2>
+                <form action="{{ url_for('documents.upload_file') }}" method="post" enctype="multipart/form-data" class="mb-4">
+                    <div class="input-group">
+                        <input type="file" class="form-control" name="file" required>
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                    </div>
+                </form>
+            </div>
+            <div class="col-md-6">
+                <h2>Translate Document</h2>
+                <form action="{{ url_for('documents.translate_upload') }}" method="post" enctype="multipart/form-data">
+                    <div class="input-group mb-3">
+                        <input type="file" class="form-control" name="file" required>
+                        <select name="direction" class="form-select" style="max-width: 200px;">
+                            <option value="ky-ru">Kyrgyz to Russian</option>
+                            <option value="ru-ky">Russian to Kyrgyz</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success">Translate</button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2>Uploaded Documents</h2>
+        <div class="file-list">
+            {% if documents == [{'name': "No documents available. Upload a new file!"}] %}
+                <div class="alert alert-info">
+                    {{ documents[0].name }}
+                </div>
+            {% else %}
+                {% for doc in documents %}
+                    <div class="file-item">
+                        <div class="file-info">
+                            <i class="fas {{ doc.icon or 'fa-file' }} file-icon"></i>
+                            <div class="file-details">
+                                <strong>{{ doc.name }}</strong>
+                                {% if doc.size and doc.uploaded_at %}
+                                    <small class="text-muted">
+                                        {{ doc.size }} | Uploaded: {{ doc.uploaded_at }}
+                                    </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="actions">
+                            <a href="{{ url_for('documents.view_file', filename=doc.name) }}" 
+                               class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                            <a href="{{ url_for('documents.download_file', filename=doc.name) }}" 
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-download"></i> Download
+                            </a>
+                            <form action="{{ url_for('documents.delete_file', filename=doc.name) }}" 
+                                  method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                        onclick="return confirm('Are you sure you want to delete this file?');">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-hide flash messages after 5 seconds
+        setTimeout(function() {
+            var flashMessages = document.querySelectorAll('.flash-message');
+            flashMessages.forEach(function(message) {
+                message.style.display = 'none';
+            });
+        }, 5000);
+    </script>
 </body>
 </html>
