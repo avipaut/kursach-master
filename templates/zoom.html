@@ -1,7 +1,74 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание Zoom-конференции</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Document Management</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="{{ url_for('documents.documents') }}">Documents</a>
+                <a class="nav-link" href="{{ url_for('chat.chat') }}">Chat</a>
+                <a class="nav-link" href="{{ url_for('reports.reports') }}">Reports</a>
+                <a class="nav-link" href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
+                <a class="nav-link" href="{{ url_for('zoom.zoom') }}">Zoom</a>
+                <form action="{{ url_for('auth.logout') }}" method="GET" class="nav-link">
+                    <button class="btn btn-outline-danger btn-sm">Log Out</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+    <div class="bg-white shadow-lg rounded-lg p-8 max-w-lg w-full">
+        <h2 class="text-2xl font-bold text-center mb-6">Создать Zoom-конференцию</h2>
+        
+        <div class="mb-4">
+            <label class="block text-gray-700 font-bold mb-2">Тема:</label>
+            <input id="topic" type="text" placeholder="Введите тему" class="w-full px-4 py-2 border rounded-lg">
+        </div>
 
-{% block content %}
-<h2>Zoom Integration</h2>
-<p>Create Zoom meetings directly from the system.</p>
-<button onclick="alert('Zoom meeting link generated!')">Create Meeting</button>
-{% endblock %}
+        <div class="mb-4">
+            <label class="block text-gray-700 font-bold mb-2">Продолжительность (минуты):</label>
+            <input id="duration" type="number" value="30" class="w-full px-4 py-2 border rounded-lg">
+        </div>
+
+        <button onclick="createMeeting()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
+            Создать конференцию
+        </button>
+
+        <div id="result" class="mt-4 text-center hidden">
+            <p class="text-green-600 font-bold">Ссылка на конференцию:</p>
+            <a id="meeting-link" href="#" class="text-blue-500 hover:underline" target="_blank"></a>
+        </div>
+        
+        <script>
+            async function createMeeting() {
+                const topic = document.getElementById("topic").value || "Новая конференция";
+                const duration = document.getElementById("duration").value || 30;
+        
+                const response = await fetch("/zoom/create_meeting", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ topic, duration })
+                });
+        
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById("result").classList.remove("hidden");
+                    document.getElementById("meeting-link").href = data.web_url;  // Используем ссылку для браузера
+                    document.getElementById("meeting-link").textContent = data.web_url;  // Показываем ссылку
+                } else {
+                    alert("Ошибка при создании конференции: " + JSON.stringify(data.error));
+                }
+            }
+        </script>
+        
+
+</body>
+</html>
