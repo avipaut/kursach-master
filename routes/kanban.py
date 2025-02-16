@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 from routes.db_kanban import  db  # Импортируйте объект app из main.py
 
 kanban_bp = Blueprint('kanban', __name__)
@@ -22,6 +22,10 @@ class Card(db.Model):
     description = db.Column(db.Text, nullable=True)
     list_id = db.Column(db.Integer, db.ForeignKey('lists.id'), nullable=False)
     order = db.Column(db.Integer, nullable=False, default=0)  # Новое поле для порядка
+
+@kanban_bp.route('/')
+def kanban_board():
+    return render_template('kanban.html')  # Указываем, что рендерим kanban.html
 
 
 # Helper function to generate a consistent JSON response
