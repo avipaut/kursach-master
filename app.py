@@ -11,6 +11,9 @@ from routes.reports import reports_bp
 from routes.kpi import kpi_bp
 from routes.auth import auth_bp, init_login_manager
 from routes.models import db
+from routes.kanban import kanban_bp  # Импортируем Kanban Blueprint
+
+
 
 # Инициализация Flask
 app = Flask(__name__)
@@ -39,6 +42,8 @@ app.register_blueprint(zoom_bp, url_prefix='/zoom')
 app.register_blueprint(reports_bp, url_prefix='/reports')
 app.register_blueprint(kpi_bp, url_prefix='/kpi')
 app.register_blueprint(auth_bp, url_prefix='/auth')
+app.register_blueprint(kanban_bp, url_prefix='/kanban')  # Регистрируем его
+
 
 
 # Главный маршрут

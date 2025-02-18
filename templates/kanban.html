@@ -3,9 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
+    <title>Kanban Board</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
+    <script src="{{ url_for('static', filename='js/kanban.js') }}"></script>
+    </head>
 <body>
+    <div class="navbar">
+        <a href="{{ url_for('documents.documents') }}">Documents</a>
+        <a href="{{ url_for('chat.chat') }}">Chat</a>
+        <a href="{{ url_for('reports.reports') }}">Reports</a>
+        <a href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
+        <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
+        <a href="{{ url_for('kanban.kanban_board') }}">Перейти в Kanban Board</a>
+    </div>
     
+    <div class="kanban-container">
+        <h1>Kanban Board</h1>
+        <div class="boards">
+            <button id="add-board">Добавить доску</button>
+            <div id="board-list"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            fetch("/boards")
+                .then(response => response.json())
+                .then(data => {
+                    let boardList = document.getElementById("board-list");
+                    data.forEach(board => {
+                        let div = document.createElement("div");
+                        div.className = "board";
+                        div.innerHTML = `<h2>${board.name}</h2>`;
+                        boardList.appendChild(div);
+                    });
+                });
+        });
+    </script>
 </body>
 </html>
