@@ -10,8 +10,8 @@
     <div class="navbar">
         
         <a href="{{ url_for('documents.documents') }}">Documents</a>
-        <a href="{{ url_for('chat.chat') }}">Chat</a>
-        <a href="{{ url_for('reports.reports') }}">Reports</a>
+        <a href="{{ url_for('chat.messenger_page') }}">Chat</a>
+        <a href="{{ url_for('reports.view_reports') }}">Reports</a>
         <a href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
         <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
         <a href="{{ url_for('kanban.kanban_board') }}">Trello</a>
@@ -23,4 +23,5 @@
         {% block content %}{% endblock %}
     </div>
 </body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </html>
