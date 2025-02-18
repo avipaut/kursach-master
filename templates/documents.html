@@ -59,8 +59,8 @@
             <a class="navbar-brand" href="#">Document Management</a>
             <div class="navbar-nav">
                 <a class="nav-link" href="{{ url_for('documents.documents') }}">Documents</a>
-                <a class="nav-link" href="{{ url_for('chat.chat') }}">Chat</a>
-                <a class="nav-link" href="{{ url_for('reports.reports') }}">Reports</a>
+                <a class="nav-link" href="{{ url_for('chat.messenger_page') }}">Chat</a>
+                <a class="nav-link" href="{{ url_for('reports.view_reports') }}">Reports</a>
                 <a class="nav-link" href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
                 <a class="nav-link" href="{{ url_for('zoom.zoom') }}">Zoom</a>
                 <form action="{{ url_for('auth.logout') }}" method="GET" class="nav-link">
