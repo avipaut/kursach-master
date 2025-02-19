@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Add Report</h2>
+    <form method="POST" action="{{ url_for('reports.add_report') }}">
+        <div class="mb-3">
+            <label for="title" class="form-label">Title:</label>
+            <input type="text" name="title" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label for="content" class="form-label">Content:</label>
+            <textarea name="content" class="form-control" rows="5" required></textarea>
+        </div>
+        <div class="mb-3">
+            <label for="date" class="form-label">Date:</label>
+            <input type="date" name="date" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label for="author" class="form-label">Author:</label>
+            <input type="text" name="author" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label for="category" class="form-label">Category:</label>
+            <input type="text" name="category" class="form-control">
+        </div>
+        <button type="submit" class="btn btn-primary">Add Report</button>
+    </form>
+</div>
+{% endblock %}
