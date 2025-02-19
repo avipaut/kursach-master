@@ -1,44 +1,62 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kanban Board</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
-    <script src="{{ url_for('static', filename='js/kanban.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='kanban.css') }}">
     </head>
-<body>
     <div class="navbar">
         <a href="{{ url_for('documents.documents') }}">Documents</a>
         <a href="{{ url_for('chat.messenger_page') }}">Chat</a>
         <a href="{{ url_for('reports.view_reports') }}">Reports</a>
         <a href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
         <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
-        <a href="{{ url_for('kanban.kanban_board') }}">Перейти в Kanban Board</a>
+        <a href="{{ url_for('kanban.kanban_board') }}">Trello</a>
     </div>
+<body>
     
-    <div class="kanban-container">
+     <div class="kanban-container">
         <h1>Kanban Board</h1>
         <div class="boards">
             <button id="add-board">Добавить доску</button>
             <div id="board-list"></div>
         </div>
     </div>
+    <script src="{{ url_for('static', filename='kanban.js') }}"></script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Доска</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='kanban.css') }}">
+    <script defer src="{{ url_for('static', filename='kanban.js') }}"></script>
+    <nav>
+        <div>
+        <a href="{{ url_for('documents.documents') }}">Documents</a>
+        <a href="{{ url_for('chat.chat') }}">Chat</a>
+        <a href="{{ url_for('reports.reports') }}">Reports</a>
+        <a href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
+        <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
+        <a href="{{ url_for('kanban.kanban_board') }}">Trello</a>
+    </div>
+</nav>
+</head>
+<body>
+   
     
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            fetch("/boards")
-                .then(response => response.json())
-                .then(data => {
-                    let boardList = document.getElementById("board-list");
-                    data.forEach(board => {
-                        let div = document.createElement("div");
-                        div.className = "board";
-                        div.innerHTML = `<h2>${board.name}</h2>`;
-                        boardList.appendChild(div);
-                    });
-                });
-        });
-    </script>
+    <h1>Kanban Доска</h1>
+    <div>
+        <input type="text" id="boardName" placeholder="Название доски">
+        <button onclick="createBoard()">Создать доску</button>
+    </div>
+    <h1>Kanban Boards</h1>
+    <div id="boards-container"></div>
+    
 </body>
 </html>
+

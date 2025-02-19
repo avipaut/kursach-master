@@ -3,6 +3,7 @@ from flask_socketio import SocketIO
 from flask_cors import CORS
 from flask_login import LoginManager, current_user
 import os
+from flask_migrate import Migrate 
 
 from routes.documents import documents_bp
 from routes.chat import chat_bp, socketio
@@ -24,14 +25,15 @@ socketio.init_app(app, cors_allowed_origins="*")
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Инициализация базы данных
-db.init_app(app)
 
 # Инициализация LoginManager
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
 
+# Инициализация базы данных
+db.init_app(app)
+migrate = Migrate(app, db)
 # Передаём login_manager в auth.py
 init_login_manager(login_manager)
 

@@ -1,7 +1,11 @@
-from flask import Blueprint, jsonify, render_template, request
-from routes.db_kanban import  db  # Импортируйте объект app из main.py
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
+from flask_login import login_required, current_user
+from routes.models import db  # Используем уже инициализированный db из app.py
+
 
 kanban_bp = Blueprint('kanban', __name__)
+
+
 class Board(db.Model):
     __tablename__ = 'boards'
     id = db.Column(db.Integer, primary_key=True)
@@ -23,8 +27,8 @@ class Card(db.Model):
     list_id = db.Column(db.Integer, db.ForeignKey('lists.id'), nullable=False)
     order = db.Column(db.Integer, nullable=False, default=0)  # Новое поле для порядка
 
-@kanban_bp.route('/')
-def kanban_board():
+@kanban_bp.route('/kanban', endpoint='kanban_board')
+def trello():
     return render_template('kanban.html')  # Указываем, что рендерим kanban.html
 
 
@@ -32,14 +36,17 @@ def kanban_board():
 def serialize_board(board):
     return {"id": board.id, "name": board.name}
 
-# Get all boards
 @kanban_bp.route('/boards', methods=['GET'])
+@login_required
 def get_boards():
-    boards = Board.query.all()
-    return jsonify([{"id": b.id, "name": b.name} for b in boards])
+    boards = Board.query.all()  # Получаем все доски
+    return jsonify([{"id": board.id, "name": board.name} for board in boards])  # Возвращаем JSON
+
+
 
 
 @kanban_bp.route('/boards', methods=['POST'])
+@login_required  # Только для авторизованных пользователей
 def create_board():
     data = request.json
     new_board = Board(name=data['name'])
@@ -70,7 +77,9 @@ def delete_board(board_id):
 ###########
 
 # Получить все списки для конкретной доски
+# Пример защищенного маршрута для работы с карточками (списки)
 @kanban_bp.route('/boards/<int:board_id>/lists', methods=['GET'])
+@login_required  # Защищаем маршрут
 def get_lists(board_id):
     board = Board.query.get(board_id)
     if not board:
@@ -80,15 +89,19 @@ def get_lists(board_id):
 
 # Создать новый список в доске
 @kanban_bp.route('/boards/<int:board_id>/lists', methods=['POST'])
+@login_required
 def create_list(board_id):
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
+    
     data = request.json
     new_list = List(name=data['name'], board_id=board_id)
     db.session.add(new_list)
     db.session.commit()
+    
     return jsonify({"id": new_list.id, "name": new_list.name}), 201
+
 
 # Обновить список
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>', methods=['PUT'])
@@ -285,3 +298,4 @@ def reorder_card(board_id, list_id, card_id):
     db.session.commit()
 
     return jsonify({"id": card.id, "title": card.title, "description": card.description, "order": card.order}), 200
+
