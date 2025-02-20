@@ -8,11 +8,12 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import mimetypes
 import re
-
+from .config import BASE_UPLOAD_FOLDER 
 documents_bp = Blueprint('documents', __name__)
+from .trash import TrashManager  # добавьте этот импорт
 
 # Основная папка для загрузок
-BASE_UPLOAD_FOLDER = "uploaded_documents"
+trash_manager = TrashManager(BASE_UPLOAD_FOLDER)
 
 def normalize_filename(filename):
     """
@@ -109,7 +110,7 @@ def translate_upload():
         if file and allowed_file(file.filename):
             # Use normalized filename with Unicode support
             filename = normalize_filename(file.filename)
-            user_folder = get_user_upload_folder(current_user.username)
+            user_folder = get_user_upload_folder(current_user.id)
             filepath = os.path.join(user_folder, filename)
             file.save(filepath)
 
@@ -139,7 +140,7 @@ def translate_upload():
 @documents_bp.route('/')
 @login_required
 def documents():
-    user_folder = get_user_upload_folder(current_user.username)
+    user_folder = get_user_upload_folder(current_user.id)
     documents = []
     
     try:
@@ -180,7 +181,7 @@ def upload_file():
     if file and allowed_file(file.filename):
         # Use our custom filename sanitizer instead of secure_filename
         filename = normalize_filename(file.filename)
-        user_folder = get_user_upload_folder(current_user.username)
+        user_folder = get_user_upload_folder(current_user.id)
         filepath = os.path.join(user_folder, filename)
         file.save(filepath)
         
@@ -214,34 +215,34 @@ def secure_filename_with_cyrillic(filename):
 @login_required
 def delete_file(filename):
     try:
-        # Папка текущего пользователя
-        user_folder = get_user_upload_folder(current_user.username)
+        user_folder = get_user_upload_folder(current_user.id)
         filepath = os.path.join(user_folder, filename)
-        os.remove(filepath)
-        print(f"File deleted: {filename}")
+        trash_manager.move_to_trash(current_user.id, filename, filepath)
+        flash(f"File moved to trash: {filename}", 'success')
         return redirect(url_for('documents.documents'))
-    except FileNotFoundError:
-        return "File not found", 404
+    except Exception as e:
+        flash(f"Error moving file to trash: {str(e)}", 'error')
+        return redirect(url_for('documents.documents'))
 
 @documents_bp.route('/view/<filename>')
 @login_required
 def view_file(filename):
     # Папка текущего пользователя
-    user_folder = get_user_upload_folder(current_user.username)
+    user_folder = get_user_upload_folder(current_user.id)
     return send_from_directory(user_folder, filename)
 
 @documents_bp.route('/download/<filename>')
 @login_required
 def download_file(filename):
     # Папка текущего пользователя
-    user_folder = get_user_upload_folder(current_user.username)
+    user_folder = get_user_upload_folder(current_user.id)
     return send_from_directory(user_folder, filename, as_attachment=True)
 
 @documents_bp.route('/translate/<filename>', methods=['GET', 'POST'])
 @login_required
 def translate_file_route(filename):
     # Папка текущего пользователя
-    user_folder = get_user_upload_folder(current_user.username)
+    user_folder = get_user_upload_folder(current_user.id)
     filepath = os.path.join(user_folder, filename)
 
     if not os.path.exists(filepath):
