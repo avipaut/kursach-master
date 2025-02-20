@@ -1,76 +1,229 @@
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
+/* Reset and base styles */
+* {
     margin: 0;
-    padding: 20px;
-    text-align: center;
-}
-header {
-    margin-bottom: 20px;
-}
-
-nav {
-    background: #333;
-    padding: 10px;
-}
-
-nav ul {
-    list-style: none;
     padding: 0;
-    display: flex;
-    gap: 15px;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-nav a {
+body {
+    background-color: #f0f2f5;
+    color: #172b4d;
+    line-height: 1.5;
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar styles */
+.sidebar {
+    width: 280px;
+    background: #1a1a1a;
+    padding: 1.5rem;
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    color: white;
+    overflow-y: auto;
+}
+
+.sidebar-header {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 1rem;
+}
+
+.sidebar-title {
+    color: white;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.create-board-section {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.board-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.board-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
     color: white;
     text-decoration: none;
 }
 
-h1 {
-    text-align: center;
-    color: #333;
+.board-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
-#boards-container {
+.board-item.active {
+    background-color: #0052cc;
+}
+
+.board-icon {
+    width: 24px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    margin-right: 0.75rem;
     display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+    align-items: center;
     justify-content: center;
 }
 
-.board {
+/* Main content area */
+.main-content {
+    flex: 1;
+    margin-left: 280px;
+    padding: 2rem;
+    min-height: 100vh;
+}
+
+/* Board view */
+.board-view {
+    display: none;
+    height: calc(100vh - 4rem);
     background: white;
-    padding: 15px;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.board-view.active {
+    display: block;
+}
+
+.board-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+.board-title {
+    font-size: 1.75rem;
+    color: #1a1a1a;
+}
+
+/* Lists container */
+.lists-wrapper {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    height: calc(100% - 4rem);
+    padding: 1rem;
+}
+
+/* List styles */
+.list {
+    background: #f4f5f7;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    width: 250px;
-    text-align: center;
-}
-.board h3 {
-    margin: 0;
-    padding-bottom: 10px;
-}
-.board button {
-    background-color: #ff4d4d;
-    color: white;
-    border: none;
-    padding: 8px;
-    border-radius: 5px;
-    cursor: pointer;
-}
-.board button:hover {
-    background-color: #ff1a1a;
+    min-width: 300px;
+    max-width: 300px;
+    padding: 1rem;
+    height: fit-content;
+    max-height: 100%;
+    overflow-y: auto;
 }
 
-button {
-    background: #007bff;
-    color: white;
-    border: none;
-    padding: 5px 10px;
-    cursor: pointer;
-    border-radius: 5px;
+/* Previous card and drag-drop styles remain the same */
+.card {
+    cursor: grab;
+    user-select: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+    background: white;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-button:hover {
-    background: #0056b3;
+.card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.list.drag-over {
+    background-color: #e3e9ff;
+    border: 2px dashed #0052cc;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 1rem;
+    }
+
+    .list {
+        min-width: 250px;
+    }
+}
+
+/* Animation effects */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.board, .list, .card {
+    animation: fadeIn 0.3s ease-out;
+}
+
+
+
+
+
+/* Drag and drop styles */
+.card {
+    cursor: grab;
+    user-select: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.list {
+    min-height: 100px;
+    transition: background-color 0.2s;
+}
+
+.list.drag-over {
+    background-color: #e3e9ff;
+    border: 2px dashed #0052cc;
+}
+
+/* Card placeholder while dragging */
+.card-placeholder {
+    height: 80px;
+    background-color: #f0f0f0;
+    border: 2px dashed #ccc;
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
 }
