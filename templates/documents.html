@@ -53,17 +53,66 @@
         }
         .navbar-nav {
             position: fixed;
-            top: 0; /* Фиксируем сверху */
+            top: 0;
             left: 50%;
-            transform: translateX(-50%); /* Центрируем по горизонтали */
-            display: flex; /* Выравниваем элементы в строку */
-            gap: 15px; /* Добавляем промежутки между ссылками */
-            background: white; /* Фон (при необходимости) */
-            padding: 10px 20px; /* Отступы для лучшего отображения */
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Тень для визуального отделения */
-            border-radius: 8px; /* Закругление углов */
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            background: white;
+            width: 100%;
+            padding: 10px 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            z-index: 1000;
+            font-size: larger;
         }
-
+        .sort-controls {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .sort-button {
+            padding: 5px 10px;
+            margin-right: 10px;
+            border: none;
+            background: none;
+            color: #6c757d;
+            cursor: pointer;
+        }
+        .sort-button.active {
+            color: #0d6efd;
+            font-weight: bold;
+        }
+        .sort-button i {
+            margin-left: 5px;
+        }
+        .search-container {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        .no-results {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -117,9 +166,8 @@
                             <option value="ky-ru">Kyrgyz to Russian</option>
                             <option value="ru-ky">Russian to Kyrgyz</option>
                         </select>
-                        <button type="submit" style = "" class="btn btn-success">Translate</button>
+                        <button type="submit" class="btn btn-success">Translate</button>
                     </div>
-                    
                 </form>
             </div>
         </div>
@@ -127,6 +175,23 @@
         <hr>
 
         <h2>Uploaded Documents</h2>
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="Search files by name..." id="searchInput">
+        </div>
+        
+        <div class="sort-controls">
+            <strong>Sort by: </strong>
+            <button class="sort-button active" data-sort="name">
+                Name <i class="fas fa-sort"></i>
+            </button>
+            <button class="sort-button" data-sort="date">
+                Date <i class="fas fa-sort"></i>
+            </button>
+            <button class="sort-button" data-sort="size">
+                Size <i class="fas fa-sort"></i>
+            </button>
+        </div>
+
         <div class="file-list">
             {% if documents == [{'name': "No documents available. Upload a new file!"}] %}
                 <div class="alert alert-info">
@@ -134,7 +199,10 @@
                 </div>
             {% else %}
                 {% for doc in documents %}
-                    <div class="file-item">
+                    <div class="file-item" 
+                         data-name="{{ doc.name }}"
+                         data-size="{{ doc.size }}"
+                         data-date="{{ doc.uploaded_at }}">
                         <div class="file-info">
                             <i class="fas {{ doc.icon or 'fa-file' }} file-icon"></i>
                             <div class="file-details">
@@ -166,18 +234,122 @@
                     </div>
                 {% endfor %}
             {% endif %}
+            <div class="no-results" style="display: none;">
+                No files found matching your search.
+            </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Auto-hide flash messages after 5 seconds
+        // Auto-hide flash messages
         setTimeout(function() {
             var flashMessages = document.querySelectorAll('.flash-message');
             flashMessages.forEach(function(message) {
                 message.style.display = 'none';
             });
         }, 5000);
+
+        // Search and Sorting functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const sortButtons = document.querySelectorAll('.sort-button');
+            const searchInput = document.getElementById('searchInput');
+            const noResults = document.querySelector('.no-results');
+            let currentSort = 'name';
+            let ascending = true;
+
+            // Search functionality
+            function searchFiles() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const fileItems = document.querySelectorAll('.file-item');
+                let hasVisibleFiles = false;
+
+                fileItems.forEach(item => {
+                    const fileName = item.dataset.name.toLowerCase();
+                    if (fileName.includes(searchTerm)) {
+                        item.style.display = '';
+                        hasVisibleFiles = true;
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+
+                noResults.style.display = hasVisibleFiles ? 'none' : 'block';
+            }
+
+            searchInput.addEventListener('input', searchFiles);
+
+            function sortFiles(sortBy) {
+                const fileList = document.querySelector('.file-list');
+                const files = Array.from(fileList.querySelectorAll('.file-item'));
+                
+                if (files.length <= 1) return;
+
+                files.sort((a, b) => {
+                    let valueA = a.dataset[sortBy].toLowerCase();
+                    let valueB = b.dataset[sortBy].toLowerCase();
+
+                    if (sortBy === 'size') {
+                        valueA = convertSizeToBytes(valueA);
+                        valueB = convertSizeToBytes(valueB);
+                    } else if (sortBy === 'date') {
+                        valueA = new Date(valueA).getTime();
+                        valueB = new Date(valueB).getTime();
+                    }
+
+                    if (ascending) {
+                        return valueA > valueB ? 1 : -1;
+                    } else {
+                        return valueA < valueB ? 1 : -1;
+                    }
+                });
+
+                files.forEach(file => fileList.appendChild(file));
+                searchFiles(); // Re-apply search filter after sorting
+            }
+
+            function convertSizeToBytes(sizeStr) {
+                const units = {
+                    'B': 1,
+                    'KB': 1024,
+                    'MB': 1024 * 1024,
+                    'GB': 1024 * 1024 * 1024
+                };
+                
+                const matches = sizeStr.match(/^(\d+\.?\d*)\s*(B|KB|MB|GB)/i);
+                if (!matches) return 0;
+                
+                const size = parseFloat(matches[1]);
+                const unit = matches[2].toUpperCase();
+                
+                return size * units[unit];
+            }
+
+            sortButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const sortBy = this.dataset.sort;
+                    
+                    if (currentSort === sortBy) {
+                        ascending = !ascending;
+                    } else {
+                        ascending = true;
+                    }
+
+                    sortButtons.forEach(btn => {
+                        btn.classList.remove('active');
+                        btn.querySelector('i').className = 'fas fa-sort';
+                    });
+                    this.classList.add('active');
+                    this.querySelector('i').className = `fas fa-sort-${ascending ? 'up' : 'down'}`;
+
+                    currentSort = sortBy;
+                    sortFiles(sortBy);
+                });
+            });
+
+            // Initial sort
+            sortFiles('name');
+        });
     </script>
 </body>
 </html>

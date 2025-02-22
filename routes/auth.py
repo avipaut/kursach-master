@@ -18,17 +18,17 @@ def init_login_manager(manager):
         return User.get(user_id)
 
 # === Инициализация базы данных ===
-def init_db():
-    with sqlite3.connect('users.db') as con:
-        cur = con.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        )''')
-        con.commit()
+# def init_db():
+#     with sqlite3.connect('users.db') as con:
+#         cur = con.cursor()
+#         cur.execute('''CREATE TABLE IF NOT EXISTS users (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             username TEXT UNIQUE NOT NULL,
+#             password TEXT NOT NULL
+#         )''')
+#         con.commit()
 
-init_db()
+# init_db()
 
 # === Класс пользователя ===
 class User(UserMixin):
@@ -38,7 +38,7 @@ class User(UserMixin):
 
     @staticmethod
     def get(user_id):
-        with sqlite3.connect('users.db') as con:
+        with sqlite3.connect('instance/main.db') as con:
             cur = con.cursor()
             cur.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
             user = cur.fetchone()
@@ -48,7 +48,7 @@ class User(UserMixin):
 
     @staticmethod
     def get_by_username(username):
-        with sqlite3.connect('users.db') as con:
+        with sqlite3.connect('instance/main.db') as con:
             cur = con.cursor()
             cur.execute("SELECT id, username, password FROM users WHERE username = ?", (username,))
             user = cur.fetchone()
@@ -68,7 +68,7 @@ def register():
         hashed_password = generate_password_hash(password)
 
         try:
-            with sqlite3.connect('users.db') as con:
+            with sqlite3.connect('instance/main.db') as con:
                 cur = con.cursor()
                 cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
                 con.commit()
