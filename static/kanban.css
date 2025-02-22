@@ -12,6 +12,81 @@ body {
     line-height: 1.5;
     display: flex;
     min-height: 100vh;
+    padding-top: 60px; /* Space for navbar */
+}
+
+/* Navbar styles */
+.navbar-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #1a1a1a;
+    z-index: 1000;
+    height: 60px;
+}
+
+.navbar {
+    display: flex;
+    align-items: center;
+    padding: 0 2rem;
+    height: 100%;
+}
+
+.nav-links {
+    display: flex;
+    gap: 1.5rem;
+    margin-left: auto;
+}
+
+.nav-links a {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.nav-links a:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Menu Icon Styles */
+.menu-trigger {
+    width: 30px;
+    height: 30px;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    margin-right: 1.5rem;
+    padding: 5px;
+    background: transparent;
+    border: none;
+    z-index: 1001;
+}
+
+.menu-trigger span {
+    display: block;
+    width: 100%;
+    height: 3px;
+    background-color: white;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+}
+
+/* Анимация иконки меню при активном состоянии */
+.menu-trigger.active span:nth-child(1) {
+    transform: translateY(8px) rotate(45deg);
+}
+
+.menu-trigger.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.menu-trigger.active span:nth-child(3) {
+    transform: translateY(-8px) rotate(-45deg);
 }
 
 /* Sidebar styles */
@@ -19,33 +94,29 @@ body {
     width: 280px;
     background: #1a1a1a;
     padding: 1.5rem;
-    height: 100vh;
+    height: calc(100vh - 60px);
     position: fixed;
-    left: 0;
-    top: 0;
+    left: -280px; /* Сайдбар скрыт по умолчанию */
+    top: 60px;
     color: white;
     overflow-y: auto;
+    transition: all 0.3s ease; /* Плавное появление */
+    z-index: 999;
 }
 
-.sidebar-header {
-    padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 1rem;
+/* Active state for sidebar */
+.sidebar.active {
+    left: 0;
+    z-index: 1000; /* Убедитесь, что сайдбар выше других элементов */
 }
 
-.sidebar-title {
-    color: white;
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
+
+/* Main content shift when sidebar is active */
+.main-content.shifted {
+    margin-left: 280px; /* Сдвигаем контент при открытом сайдбаре */
 }
 
-.create-board-section {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-}
-
+/* Board list styles */
 .board-list {
     display: flex;
     flex-direction: column;
@@ -80,14 +151,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-}
-
-/* Main content area */
-.main-content {
-    flex: 1;
-    margin-left: 280px;
-    padding: 2rem;
-    min-height: 100vh;
 }
 
 /* Board view */
@@ -139,16 +202,16 @@ body {
     overflow-y: auto;
 }
 
-/* Previous card and drag-drop styles remain the same */
+/* Card styles */
 .card {
-    cursor: grab;
-    user-select: none;
-    transition: transform 0.2s, box-shadow 0.2s;
     background: white;
     border-radius: 6px;
     padding: 1rem;
     margin-bottom: 0.75rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    cursor: grab;
+    user-select: none;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .card.dragging {
@@ -162,24 +225,34 @@ body {
     background-color: #e3e9ff;
     border: 2px dashed #0052cc;
 }
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-    }
-
-    .main-content {
-        margin-left: 0;
-        padding: 1rem;
-    }
-
-    .list {
-        min-width: 250px;
-    }
+/* Приоритеты для карточек */
+.card.low {
+    border-left: 5px solid #28a745; /* Зеленый для низкого приоритета */
+    background-color: #f1fdf1; /* Светло-зеленый фон */
 }
+
+.card.medium {
+    border-left: 5px solid #ffc107; /* Желтый для среднего приоритета */
+    background-color: #fff3cd; /* Светло-желтый фон */
+}
+
+.card.high {
+    border-left: 5px solid #dc3545; /* Красный для высокого приоритета */
+    background-color: #f8d7da; /* Светло-красный фон */
+}
+
+.priority-select {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.priority-select select {
+    padding: 5px;
+    border-radius: 4px;
+    font-size: 1rem;
+    width: 100%;
+}
+
 
 /* Animation effects */
 @keyframes fadeIn {
@@ -191,39 +264,26 @@ body {
     animation: fadeIn 0.3s ease-out;
 }
 
-
-
-
-
-/* Drag and drop styles */
-.card {
-    cursor: grab;
-    user-select: none;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.card.dragging {
-    opacity: 0.5;
-    cursor: grabbing;
-    transform: scale(1.02);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.list {
-    min-height: 100px;
-    transition: background-color 0.2s;
-}
-
-.list.drag-over {
-    background-color: #e3e9ff;
-    border: 2px dashed #0052cc;
-}
-
-/* Card placeholder while dragging */
-.card-placeholder {
-    height: 80px;
-    background-color: #f0f0f0;
-    border: 2px dashed #ccc;
-    border-radius: 6px;
-    margin-bottom: 0.75rem;
+/* Sidebar styles for small screens */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        max-width: 280px;
+    }
+    
+    .main-content {
+        margin-left: 0 !important;
+    }
+    .list {
+        min-width: 250px;
+    }
+    
+    .nav-links {
+        gap: 0.5rem;
+    }
+    
+    .nav-links a {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
 }
