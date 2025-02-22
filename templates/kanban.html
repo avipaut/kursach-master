@@ -5,9 +5,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kanban Доска</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='kanban.css') }}">
-    <script defer src="{{ url_for('static', filename='kanban.js') }}"></script>
 </head>
 <body>
-    <!-- The structure will be created by JavaScript -->
+    <div class="navbar-container">
+        <nav class="navbar">
+            <button class="menu-trigger" type="button" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <div class="nav-links">
+                <a href="{{ url_for('documents.documents') }}">Documents</a>
+                <a href="{{ url_for('chat.messenger_page') }}">Chat</a>
+                <a href="{{ url_for('reports.view_reports') }}">Reports</a>
+                <a href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
+                <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
+            </div>
+        </nav>
+    </div><script>// Добавьте этот скрипт перед закрывающим тегом </body>
+ document.addEventListener("DOMContentLoaded", function() {
+    // Задержка 1 секунда
+    setTimeout(function() {
+        const menuTrigger = document.querySelector('.menu-trigger');
+        const sidebar = document.querySelector('.sidebar');
+        const mainContent = document.querySelector('.main-content');
+
+        // Проверка, существуют ли необходимые элементы
+        if (!menuTrigger || !sidebar || !mainContent) {
+            console.error('Один или несколько элементов не найдены!');
+            return;
+        }
+
+        let isOpen = false;  // Переменная для отслеживания состояния меню
+
+        console.log('JavaScript работает!');
+
+        menuTrigger.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Меню было нажато!');
+
+            isOpen = !isOpen;  // Меняем состояние при каждом клике
+            console.log('isOpen:', isOpen);
+
+            if (isOpen) {
+                console.log('Открываем меню');
+                sidebar.classList.add('active');
+                mainContent.classList.add('shifted');
+                menuTrigger.classList.add('active');
+            } else {
+                console.log('Закрываем меню');
+                sidebar.classList.remove('active');
+                mainContent.classList.remove('shifted');
+                menuTrigger.classList.remove('active');
+            }
+        });
+    }, 1000);  // Задержка 1 секунда (1000 миллисекунд)
+});
+
+
+</script>    <script defer src="{{ url_for('static', filename='kanban.js') }}"></script>
 </body>
 </html>
