@@ -13,6 +13,7 @@ from routes.kpi import kpi_bp
 from routes.auth import auth_bp, init_login_manager
 from routes.models import db
 from routes.kanban import kanban_bp  # Импортируем Kanban Blueprint
+from routes.trash import trash_bp
 
 
 
@@ -45,7 +46,7 @@ app.register_blueprint(reports_bp, url_prefix='/reports')
 app.register_blueprint(kpi_bp, url_prefix='/kpi')
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(kanban_bp, url_prefix='/kanban')  # Регистрируем его
-
+app.register_blueprint(trash_bp, url_prefix='/trash')
 
 
 # Главный маршрут

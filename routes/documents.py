@@ -8,11 +8,12 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import mimetypes
 import re
-
+from .config import BASE_UPLOAD_FOLDER 
 documents_bp = Blueprint('documents', __name__)
+from .trash import TrashManager  # добавьте этот импорт
 
 # Основная папка для загрузок
-BASE_UPLOAD_FOLDER = "uploaded_documents"
+trash_manager = TrashManager(BASE_UPLOAD_FOLDER)
 
 def normalize_filename(filename):
     """
@@ -214,14 +215,14 @@ def secure_filename_with_cyrillic(filename):
 @login_required
 def delete_file(filename):
     try:
-        # Папка текущего пользователя
         user_folder = get_user_upload_folder(current_user.id)
         filepath = os.path.join(user_folder, filename)
-        os.remove(filepath)
-        print(f"File deleted: {filename}")
+        trash_manager.move_to_trash(current_user.id, filename, filepath)
+        flash(f"File moved to trash: {filename}", 'success')
         return redirect(url_for('documents.documents'))
-    except FileNotFoundError:
-        return "File not found", 404
+    except Exception as e:
+        flash(f"Error moving file to trash: {str(e)}", 'error')
+        return redirect(url_for('documents.documents'))
 
 @documents_bp.route('/view/<filename>')
 @login_required
