@@ -225,6 +225,34 @@ body {
     background-color: #e3e9ff;
     border: 2px dashed #0052cc;
 }
+/* Приоритеты для карточек */
+.card.low {
+    border-left: 5px solid #28a745; /* Зеленый для низкого приоритета */
+    background-color: #f1fdf1; /* Светло-зеленый фон */
+}
+
+.card.medium {
+    border-left: 5px solid #ffc107; /* Желтый для среднего приоритета */
+    background-color: #fff3cd; /* Светло-желтый фон */
+}
+
+.card.high {
+    border-left: 5px solid #dc3545; /* Красный для высокого приоритета */
+    background-color: #f8d7da; /* Светло-красный фон */
+}
+
+.priority-select {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.priority-select select {
+    padding: 5px;
+    border-radius: 4px;
+    font-size: 1rem;
+    width: 100%;
+}
+
 
 /* Animation effects */
 @keyframes fadeIn {
