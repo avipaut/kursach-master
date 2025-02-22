@@ -3,75 +3,412 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Создание Zoom-конференции</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <title>Календарь и Zoom-конференции</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
-<body class="bg-gray-100 flex items-center justify-center h-screen">
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">Document Management</a>
-            <div class="navbar-nav">
-                <a class="nav-link" href="{{ url_for('documents.documents') }}">Documents</a>
-                <a class="nav-link" href="{{ url_for('chat.messenger_page') }}">Chat</a>
-                <a class="nav-link" href="{{ url_for('reports.view_reports') }}">Reports</a>
-                <a class="nav-link" href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
-                <a class="nav-link" href="{{ url_for('zoom.zoom') }}">Zoom</a>
-                <a class= "nav-link" href="{{ url_for('kanban.kanban_board') }}">Trello</a>
+<body class="bg-gray-50">
+    <nav class="bg-blue-600 text-white p-4">
+        <div class="container mx-auto">
+            <h1 class="text-2xl font-bold">Календарь и Zoom-конференции</h1>
+        </div>
+    </nav>
 
-                <form action="{{ url_for('auth.logout') }}" method="GET" class="nav-link">
+    <div class="container mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Календарь -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-semibold mb-4">Календарь</h2>
+                <div id="calendar" class="min-h-[600px]"></div>
+            </div>
+
+            <!-- Форма создания событий -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="mb-6">
+                    <button onclick="toggleForm('task')" class="mr-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+                        Создать задачу
+                    </button>
+                    <button onclick="toggleForm('zoom')" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                        Создать Zoom встречу
+                    </button>
+                </div>
+
+                <!-- Форма создания задачи -->
+                <form id="task-form" class="hidden space-y-4">
+                    <h2 class="text-xl font-semibold mb-4">Создание задачи</h2>
                     
-                    <button class="btn btn-outline-danger btn-sm">Log Out</button>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Название</label>
+                        <input type="text" id="task-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Дата начала</label>
+                            <input type="date" id="task-start-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Время начала</label>
+                            <input type="time" id="task-start-time" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Описание</label>
+                        <textarea id="task-description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Цвет</label>
+                        <input type="color" id="task-color" value="#3788d8" class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="checkbox" id="task-all-day" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <label for="task-all-day" class="ml-2 text-sm text-gray-700">Весь день</label>
+                    </div>
+
+                    <button type="submit" class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                        Создать задачу
+                    </button>
+                </form>
+
+                <!-- Форма создания Zoom встречи -->
+                <!-- Форма создания Zoom встречи -->
+<form id="zoom-form" class="hidden space-y-4">
+    <h2 class="text-xl font-semibold mb-4">Создание Zoom встречи</h2>
+    
+    <div>
+        <label class="block text-sm font-medium text-gray-700">Тема встречи</label>
+        <input type="text" id="zoom-topic" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Дата</label>
+            <input type="date" id="zoom-start-date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Время</label>
+            <input type="time" id="zoom-start-time" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+        </div>
+    </div>
+
+    <div>
+        <label class="block text-sm font-medium text-gray-700">Продолжительность (минуты)</label>
+        <input type="number" id="zoom-duration" required min="15" step="15" value="60" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+    </div>
+
+    <div>
+        <label class="block text-sm font-medium text-gray-700">Повестка</label>
+        <textarea id="zoom-agenda" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+    </div>
+
+    <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+        Создать Zoom встречу
+    </button>
+</form>
+                    <!-- Существующая форма Zoom -->
                 </form>
             </div>
         </div>
-    </nav>
-    <div class="bg-white shadow-lg rounded-lg p-8 max-w-lg w-full">
-        <h2 class="text-2xl font-bold text-center mb-6">Создать Zoom-конференцию</h2>
-        
-        <div class="mb-4">
-            <label class="block text-gray-700 font-bold mb-2">Тема:</label>
-            <input id="topic" type="text" placeholder="Введите тему" class="w-full px-4 py-2 border rounded-lg">
-        </div>
+    </div>
 
-        <div class="mb-4">
-            <label class="block text-gray-700 font-bold mb-2">Продолжительность (минуты):</label>
-            <input id="duration" type="number" value="30" class="w-full px-4 py-2 border rounded-lg">
-        </div>
+    <script>
+        let calendar;
+        let currentEvent = null;
 
-        <button onclick="createMeeting()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
-            Создать конференцию
-        </button>
-
-        <div id="result" class="mt-4 text-center hidden">
-            <p class="text-green-600 font-bold">Ссылка на конференцию:</p>
-            <a id="meeting-link" href="#" class="text-blue-500 hover:underline" target="_blank"></a>
-        </div>
-        
-        <script>
-            async function createMeeting() {
-                const topic = document.getElementById("topic").value || "Новая конференция";
-                const duration = document.getElementById("duration").value || 30;
-        
-                const response = await fetch("/zoom/create_meeting", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ topic, duration })
-                });
-        
-                const data = await response.json();
-                
-                if (response.ok) {
-                    document.getElementById("result").classList.remove("hidden");
-                    document.getElementById("meeting-link").href = data.web_url;  // Используем ссылку для браузера
-                    document.getElementById("meeting-link").textContent = data.web_url;  // Показываем ссылку
-                } else {
-                    alert("Ошибка при создании конференции: " + JSON.stringify(data.error));
+        document.addEventListener('DOMContentLoaded', function() {
+            const calendarEl = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+                events: '/zoom/get_events',
+                editable: true,
+                selectable: true,
+                select: function(info) {
+                    handleDateSelect(info);
+                },
+                eventClick: function(info) {
+                    handleEventClick(info.event);
+                },
+                eventDrop: function(info) {
+                    handleEventDrop(info.event);
                 }
-            }
-        </script>
-        
+            });
+            calendar.render();
+        });
 
+        function toggleForm(type) {
+            document.getElementById('task-form').classList.add('hidden');
+            document.getElementById('zoom-form').classList.add('hidden');
+            document.getElementById(`${type}-form`).classList.remove('hidden');
+        }
+
+        function handleDateSelect(info) {
+            document.getElementById('task-start-date').value = info.startStr;
+            document.getElementById('task-start-time').value = '09:00';
+            toggleForm('task');
+        }
+
+        function handleEventClick(event) {
+            currentEvent = event;
+            showEventDetails(event);
+        }
+
+        function handleEventDrop(event) {
+            updateEvent(event);
+        }
+
+        document.getElementById('task-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            createTask();
+        });
+
+        function createTask() {
+    const startDate = document.getElementById('task-start-date').value;
+    const startTime = document.getElementById('task-start-time').value;
+    const start = startTime ? `${startDate}T${startTime}` : startDate;
+
+    const taskData = {
+        title: document.getElementById('task-title').value,
+        start: start,
+        description: document.getElementById('task-description').value,
+        color: document.getElementById('task-color').value,
+        allDay: document.getElementById('task-all-day').checked
+    };
+
+    fetch('/zoom/create_task', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(taskData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        calendar.addEvent(data);
+        showToast('Задача успешно создана');
+        resetTaskForm();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Ошибка при создании задачи', true);
+    });
+}
+
+function createZoomMeeting() {
+    const startDate = document.getElementById('zoom-start-date').value;
+    const startTime = document.getElementById('zoom-start-time').value;
+    
+    const meetingData = {
+        topic: document.getElementById('zoom-topic').value,
+        start_time: `${startDate}T${startTime}:00Z`,
+        duration: document.getElementById('zoom-duration').value,
+        agenda: document.getElementById('zoom-agenda').value
+    };
+
+    fetch('/zoom/create_meeting', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(meetingData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        calendar.addEvent(data.event);
+        showToast('Zoom встреча успешно создана');
+        resetZoomForm();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Ошибка при создании задачи');
+    });
+}
+
+function showToast(message) {
+    Toastify({
+        text: message,
+        duration: 3000,
+        gravity: "top", 
+        position: "right", 
+        style: {
+         background: "#4CAF50"
+        }
+    }).showToast();
+}
+
+function resetTaskForm() {
+    document.getElementById('task-form').reset();
+    document.getElementById('task-form').classList.add('hidden');
+}
+
+document.getElementById('zoom-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    createZoomMeeting();
+});
+
+function createZoomMeeting() {
+    const startDate = document.getElementById('zoom-start-date').value;
+    const startTime = document.getElementById('zoom-start-time').value;
+    const start = startTime ? `${startDate}T${startTime}` : startDate;
+
+    const zoomData = {
+        topic: document.getElementById('zoom-topic').value,
+        start_time: start,
+        duration: document.getElementById('zoom-duration').value,
+        agenda: document.getElementById('zoom-agenda').value,
+    };
+
+    fetch('/zoom/create_meeting', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(zoomData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.meeting) {
+            calendar.addEvent({
+                title: data.meeting.topic,
+                start: data.event.start,
+                end: data.event.end,
+                description: data.event.description,
+                color: data.event.color,
+                url: data.meeting.join_url
+            });
+            showToast('Zoom встреча успешно создана');
+            resetZoomForm();
+        } else {
+            showToast('Ошибка при создании Zoom встречи');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Ошибка при создании Zoom встречи');
+    });
+}
+
+function resetZoomForm() {
+    document.getElementById('zoom-form').reset();
+    document.getElementById('zoom-form').classList.add('hidden');
+}
+
+function updateEvent(event) {
+    const eventData = {
+        start: event.start.toISOString(),
+        end: event.end ? event.end.toISOString() : event.start.toISOString()
+    };
+
+    fetch(`/zoom/update_event/${event.id}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(eventData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        showToast('Событие обновлено');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Ошибка при обновлении события', true);
+        calendar.refetchEvents();
+    });
+}
+
+function deleteEvent() {
+    if (!currentEvent) return;
+
+    if (confirm('Вы уверены, что хотите удалить это событие?')) {
+        fetch(`/zoom/delete_event/${currentEvent.id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            currentEvent.remove();
+            showToast('Событие удалено');
+            closeEventDetails();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Ошибка при удалении события', true);
+        });
+    }
+}
+
+function showEventDetails(event) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.id = 'event-modal';
+    
+    const content = `
+        <div class="bg-white p-6 rounded-lg max-w-lg w-full" style="z-index:10000;" >
+            <h2 class="text-xl font-bold mb-4">${event.title}</h2>
+            <p class="mb-2"><strong>Начало:</strong> ${event.start.toLocaleString()}</p>
+            ${event.end ? `<p class="mb-2"><strong>Конец:</strong> ${event.end.toLocaleString()}</p>` : ''}
+            ${event.extendedProps.description ? `<p class="mb-2"><strong>Описание:</strong> ${event.extendedProps.description}</p>` : ''}
+            ${event.extendedProps.zoom_url ? `
+                <p class="mb-4"><strong>Zoom URL:</strong> <a href="${event.extendedProps.zoom_url}" target="_blank" class="text-blue-500 hover:text-blue-700">${event.extendedProps.zoom_url}</a></p>
+            ` : ''}
+            <div class="flex justify-end space-x-2">
+                <button onclick="deleteEvent()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Удалить</button>
+                <button onclick="closeEventDetails()" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Закрыть</button>
+            </div>
+        </div>
+    `;
+    
+    modal.innerHTML = content;
+    document.body.appendChild(modal);
+}
+
+function closeEventDetails() {
+    const modal = document.getElementById('event-modal');
+    if (modal) {
+        modal.remove();
+    }
+    currentEvent = null;
+}
+
+function showToast(message, isError = false) {
+    Toastify({
+        text: message,
+        duration: 3000,
+        gravity: "top",
+        position: "right",
+        style: {
+        background: isError ? "#EF4444" : "#10B981"
+        }
+    }).showToast();
+}
+
+function resetTaskForm() {
+    document.getElementById('task-form').reset();
+    document.getElementById('task-form').classList.add('hidden');
+}
+
+function resetZoomForm() {
+    document.getElementById('zoom-form').reset();
+    document.getElementById('zoom-form').classList.add('hidden');
+}
+
+// Добавляем обработчик для формы Zoom
+document.getElementById('zoom-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    createZoomMeeting();
+});
+
+</script>
 </body>
 </html>

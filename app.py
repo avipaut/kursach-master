@@ -23,7 +23,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
 socketio.init_app(app, cors_allowed_origins="*")
 
 # Настройки базы данных
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///main.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 
