@@ -207,6 +207,7 @@ function updateCardPriority(boardId, listId, cardId, selectElement) {
     });
 }
 
+// kanban.js
 function createCard(boardId, listId) {
     const cardTitle = document.getElementById(`cardTitle-${listId}`).value;
     if (!cardTitle.trim()) {
@@ -217,7 +218,10 @@ function createCard(boardId, listId) {
     fetch(`/kanban/boards/${boardId}/lists/${listId}/cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: cardTitle })
+        body: JSON.stringify({
+            title: cardTitle,
+            priority: 'low' // Устанавливаем начальный приоритет
+        })
     })
     .then(response => response.json())
     .then(() => {
@@ -225,6 +229,7 @@ function createCard(boardId, listId) {
         loadCards(boardId, listId);
     });
 }
+
 
 function deleteCard(boardId, listId, cardId) {
     if (!confirm("Вы уверены, что хотите удалить эту карточку?")) return;
@@ -277,4 +282,21 @@ function dropCard(event) {
             }
         });
     }
+}
+
+function updateCardPriority(boardId, listId, cardId, selectElement) {
+    const priority = selectElement.value;
+    
+    fetch(`/kanban/boards/${boardId}/lists/${listId}/cards/${cardId}/priority`, {
+        method: 'PUT',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority })
+    })
+    .then(response => {
+        if (response.ok) {
+            // Обновляем стиль карточки
+            const card = selectElement.closest('.card');
+            card.className = `card ${priority}`;
+        }
+    });
 }
