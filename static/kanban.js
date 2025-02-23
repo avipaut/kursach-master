@@ -175,6 +175,10 @@ function loadCards(boardId, listId) {
                      data-list-id="${listId}" 
                      data-board-id="${boardId}">
                     <p>${card.title}</p>
+                    <div class="card-description">${card.description}</div>
+                    <div class="card-user">
+                        <strong>Создатель: </strong>${card.createdBy}  <!-- Добавляем имя пользователя -->
+                    </div>
                     <div class="priority-select">
                         <label for="priority-${card.id}">Приоритет:</label>
                         <select id="priority-${card.id}" onchange="updateCardPriority(${boardId}, ${listId}, ${card.id}, this)">

@@ -140,7 +140,10 @@ def get_cards(board_id, list_id):
 
     # Получаем карточки
     cards = Card.query.filter_by(list_id=list_id).all()
-    return jsonify([{"id": c.id, "title": c.title, "description": c.description} for c in cards])
+    
+    # Возвращаем карточки в виде списка словарей с дополнительной информацией
+    return jsonify([card.to_dict() for card in cards])
+
 
 
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards', methods=['POST'])

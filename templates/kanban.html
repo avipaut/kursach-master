@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kanban Доска</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='kanban.css') }}">
 </head>
+
 <body>
     <div class="navbar-container">
         <nav class="navbar">
@@ -22,47 +24,52 @@
                 <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
             </div>
         </nav>
-    </div><script>// Добавьте этот скрипт перед закрывающим тегом </body>
- document.addEventListener("DOMContentLoaded", function() {
-    // Задержка 1 секунда
-    setTimeout(function() {
-        const menuTrigger = document.querySelector('.menu-trigger');
-        const sidebar = document.querySelector('.sidebar');
-        const mainContent = document.querySelector('.main-content');
+    </div>
 
-        // Проверка, существуют ли необходимые элементы
-        if (!menuTrigger || !sidebar || !mainContent) {
-            console.error('Один или несколько элементов не найдены!');
-            return;
-        }
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Убедимся, что элементы загружены
+            setTimeout(function () {
+                const menuTrigger = document.querySelector('.menu-trigger');
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
 
-        let isOpen = false;  // Переменная для отслеживания состояния меню
+                // Проверка на существование элементов
+                if (!menuTrigger || !sidebar || !mainContent) {
+                    console.error('Один или несколько элементов не найдены!');
+                    return;
+                }
 
-        console.log('JavaScript работает!');
+                let isOpen = false;  // Переменная для отслеживания состояния меню
 
-        menuTrigger.addEventListener('click', function(e) {
-            e.preventDefault();
-            console.log('Меню было нажато!');
+                console.log('JavaScript работает!');
 
-            isOpen = !isOpen;  // Меняем состояние при каждом клике
-            console.log('isOpen:', isOpen);
+                // Обработчик клика по кнопке меню
+                menuTrigger.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    console.log('Меню было нажато!');
 
-            if (isOpen) {
-                console.log('Открываем меню');
-                sidebar.classList.add('active');
-                mainContent.classList.add('shifted');
-                menuTrigger.classList.add('active');
-            } else {
-                console.log('Закрываем меню');
-                sidebar.classList.remove('active');
-                mainContent.classList.remove('shifted');
-                menuTrigger.classList.remove('active');
-            }
+                    isOpen = !isOpen;  // Переключаем состояние
+
+                    if (isOpen) {
+                        console.log('Открываем меню');
+                        sidebar.classList.add('active');
+                        mainContent.classList.add('shifted');
+                        menuTrigger.classList.add('active');
+                    } else {
+                        console.log('Закрываем меню');
+                        sidebar.classList.remove('active');
+                        mainContent.classList.remove('shifted');
+                        menuTrigger.classList.remove('active');
+                    }
+                });
+
+            }, 1000); // Задержка 1 секунда
         });
-    }, 1000);  // Задержка 1 секунда (1000 миллисекунд)
-});
+    </script>
 
-
-</script>    <script defer src="{{ url_for('static', filename='kanban.js') }}"></script>
+    <!-- Подключение JS с функциональностью канбан доски -->
+    <script defer src="{{ url_for('static', filename='kanban.js') }}"></script>
 </body>
+
 </html>
