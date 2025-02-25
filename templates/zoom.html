@@ -117,7 +117,6 @@
             </div>
         </div>
     </div>
-
     <script>
         let calendar;
         let currentEvent = null;
@@ -217,23 +216,43 @@ function createZoomMeeting() {
     };
 
     fetch('/zoom/create_meeting', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(meetingData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        calendar.addEvent(data.event);
-        showToast('Zoom встреча успешно создана');
-        resetZoomForm();
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showToast('Ошибка при создании задачи');
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(meetingData)
+})
+.then(response => {
+    if (!response.ok) {
+        throw new Error(`Ошибка: ${response.statusText}`);
+    }
+    return response.json();
+})
+.then(data => {
+    calendar.addEvent(data.event);
+    showToast('Zoom встреча успешно создана');
+    resetZoomForm();
+})
+.catch(error => {
+    console.error('Error:', error);
+    showToast(`Ошибка при создании задачи: ${error.message}`);
+});
+
+}
+
+function toggleForm(type) {
+    const forms = ['task-form', 'zoom-form'];
+    forms.forEach(form => {
+        if (form === `${type}-form`) {
+            document.getElementById(form).classList.remove('hidden');
+            document.getElementById(form).classList.add('transition', 'opacity-0');
+            setTimeout(() => document.getElementById(form).classList.remove('opacity-0'), 50);
+        } else {
+            document.getElementById(form).classList.add('hidden');
+        }
     });
 }
+
 
 function showToast(message) {
     Toastify({
@@ -256,48 +275,6 @@ document.getElementById('zoom-form').addEventListener('submit', function(e) {
     e.preventDefault();
     createZoomMeeting();
 });
-
-function createZoomMeeting() {
-    const startDate = document.getElementById('zoom-start-date').value;
-    const startTime = document.getElementById('zoom-start-time').value;
-    const start = startTime ? `${startDate}T${startTime}` : startDate;
-
-    const zoomData = {
-        topic: document.getElementById('zoom-topic').value,
-        start_time: start,
-        duration: document.getElementById('zoom-duration').value,
-        agenda: document.getElementById('zoom-agenda').value,
-    };
-
-    fetch('/zoom/create_meeting', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(zoomData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.meeting) {
-            calendar.addEvent({
-                title: data.meeting.topic,
-                start: data.event.start,
-                end: data.event.end,
-                description: data.event.description,
-                color: data.event.color,
-                url: data.meeting.join_url
-            });
-            showToast('Zoom встреча успешно создана');
-            resetZoomForm();
-        } else {
-            showToast('Ошибка при создании Zoom встречи');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showToast('Ошибка при создании Zoom встречи');
-    });
-}
 
 function resetZoomForm() {
     document.getElementById('zoom-form').reset();
@@ -403,11 +380,9 @@ function resetZoomForm() {
     document.getElementById('zoom-form').classList.add('hidden');
 }
 
-// Добавляем обработчик для формы Zoom
-document.getElementById('zoom-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    createZoomMeeting();
-});
+function refreshCalendar() {
+    calendar.refetchEvents();
+}
 
 </script>
 </body>
