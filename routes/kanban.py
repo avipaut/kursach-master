@@ -1,31 +1,10 @@
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from routes.models import db  # Используем уже инициализированный db из app.py
-
-
+from routes.models import PriorityLevel, db, Board, List, Card  # Используем уже инициализированный db из app.py
 kanban_bp = Blueprint('kanban', __name__)
 
 
-class Board(db.Model):
-    __tablename__ = 'boards'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    lists = db.relationship('List', backref='board', cascade="all, delete-orphan", lazy=True)
 
-class List(db.Model):
-    __tablename__ = 'lists'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    board_id = db.Column(db.Integer, db.ForeignKey('boards.id'), nullable=False)
-    cards = db.relationship('Card', backref='list', cascade="all, delete-orphan", lazy=True)
-
-class Card(db.Model):
-    __tablename__ = 'cards'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text, nullable=True)
-    list_id = db.Column(db.Integer, db.ForeignKey('lists.id'), nullable=False)
-    order = db.Column(db.Integer, nullable=False, default=0)  # Новое поле для порядка
 
 @kanban_bp.route('/kanban', endpoint='kanban_board')
 def trello():
@@ -39,21 +18,22 @@ def serialize_board(board):
 @kanban_bp.route('/boards', methods=['GET'])
 @login_required
 def get_boards():
-    boards = Board.query.all()  # Получаем все доски
-    return jsonify([{"id": board.id, "name": board.name} for board in boards])  # Возвращаем JSON
-
+    boards = Board.query.all()
+    return jsonify([board.to_dict() for board in boards])
 
 
 
 @kanban_bp.route('/boards', methods=['POST'])
-@login_required  # Только для авторизованных пользователей
+@login_required
 def create_board():
-    data = request.json
-    new_board = Board(name=data['name'])
+    data = request.get_json()
+    new_board = Board(
+        name=data.get('name'),
+        user_id=current_user.id  # Важно передать ID текущего пользователя
+    )
     db.session.add(new_board)
     db.session.commit()
-    return jsonify({"id": new_board.id, "name": new_board.name}), 201
-
+    return jsonify(new_board.to_dict()), 201
 @kanban_bp.route('/boards/<int:board_id>', methods=['PUT'])
 def update_board(board_id):
     board_obj = Board.query.get(board_id)
@@ -160,33 +140,26 @@ def get_cards(board_id, list_id):
 
     # Получаем карточки
     cards = Card.query.filter_by(list_id=list_id).all()
-    return jsonify([{"id": c.id, "title": c.title, "description": c.description} for c in cards])
+    
+    # Возвращаем карточки в виде списка словарей с дополнительной информацией
+    return jsonify([card.to_dict() for card in cards])
+
 
 
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards', methods=['POST'])
+@login_required
 def create_card(board_id, list_id):
-    # Проверяем, существует ли доска
-    board = Board.query.get(board_id)
-    if not board:
-        return jsonify({"error": "Board not found"}), 404
-
-    # Проверяем, существует ли список и принадлежит ли он доске
-    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
-    if not list_obj:
-        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
-
-    # Проверяем данные запроса
     data = request.json
-    if not data or 'title' not in data or not data['title'].strip():
-        return jsonify({"error": "Field 'title' is required and cannot be empty"}), 400
-
-    # Создаем карточку
-    description = data.get('description', '')
-    new_card = Card(title=data['title'], description=description, list_id=list_id)
+    new_card = Card(
+        title=data['title'],
+        description=data.get('description', ''),
+        list_id=list_id,
+        user_id=current_user.id,  # Добавляем ID текущего пользователя
+        priority=PriorityLevel(data.get('priority', 'low'))  # Устанавливаем приоритет
+    )
     db.session.add(new_card)
     db.session.commit()
-
-    return jsonify({"id": new_card.id, "title": new_card.title, "description": new_card.description}), 201
+    return jsonify(new_card.to_dict()), 201
 
 # Обновить карточку
 @kanban_bp.route('/cards/<int:card_id>', methods=['PUT'])
@@ -299,3 +272,94 @@ def reorder_card(board_id, list_id, card_id):
 
     return jsonify({"id": card.id, "title": card.title, "description": card.description, "order": card.order}), 200
 
+# @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/update_priority', methods=['PUT'])
+# @login_required
+# def update_priority(board_id, list_id, card_id):
+#     # Проверяем существование доски
+#     board = Board.query.get(board_id)
+#     if not board:
+#         return jsonify({"error": "Board not found"}), 404
+
+#     # Проверяем существование списка и принадлежность доске
+#     list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
+#     if not list_obj:
+#         return jsonify({"error": "List not found or does not belong to the specified board"}), 404
+
+#     # Проверяем существование карточки и принадлежность списку
+#     card = Card.query.filter_by(id=card_id, list_id=list_id).first()
+#     if not card:
+#         return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
+
+#     # Получаем данные из запроса
+#     data = request.json
+#     new_priority = data.get('priority')
+
+#     # Проверка на корректность приоритета
+#     if new_priority not in ['low', 'medium', 'high']:
+#         return jsonify({"error": "Invalid priority value. Allowed values are 'low', 'medium', 'high'."}), 400
+
+#     # Обновляем приоритет карточки
+#     card.priority = new_priority
+#     db.session.commit()
+
+#     return jsonify({
+#         'message': 'Priority updated successfully',
+#         'card_id': card.id,
+#         'priority': card.priority
+#     }), 200
+
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/update_priority', methods=['PUT'])
+@login_required
+def update_priority(board_id, list_id, card_id):
+    # Проверяем существование доски
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+
+    # Проверяем существование списка и принадлежность доске
+    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
+    if not list_obj:
+        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
+
+    # Проверяем существование карточки и принадлежность списку
+    card = Card.query.filter_by(id=card_id, list_id=list_id).first()
+    if not card:
+        return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
+
+    # Получаем данные из запроса
+    data = request.json
+    new_priority = data.get('priority')
+
+    # Проверка на корректность приоритета
+    if new_priority not in ['low', 'medium', 'high']:
+        return jsonify({"error": "Invalid priority value. Allowed values are 'low', 'medium', 'high'."}), 400
+
+    # Обновляем приоритет карточки
+    card.priority = new_priority
+    
+    # Сохраняем изменения в базу данных
+    db.session.commit()
+
+    return jsonify({
+        'message': 'Priority updated successfully',
+        'card_id': card.id,
+        'priority': card.priority
+    }), 200
+
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/priority', methods=['PUT'])
+@login_required
+def update_card_priority(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    if 'priority' not in data:
+        return jsonify({"error": "Priority is required"}), 400
+        
+    try:
+        card.priority = PriorityLevel(data['priority'])
+        db.session.commit()
+        return jsonify(card.to_dict())
+    except ValueError:
+        return jsonify({"error": "Invalid priority value"}), 400

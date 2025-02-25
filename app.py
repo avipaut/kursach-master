@@ -17,15 +17,23 @@ from routes.trash import trash_bp
 
 
 
+
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
-socketio.init_app(app, cors_allowed_origins="*")
+socketio = SocketIO()  # Создаем экземпляр
+socketio.init_app(app, cors_allowed_origins="*")  # Теперь init_app() вызовется корректно
 
-# Настройки базы данных
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'
+# В app.py, где вы настраиваете приложение:
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///main.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
+# Добавьте эти настройки
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'connect_args': {'timeout': 15, 'check_same_thread': False}
+}
 
 # Инициализация LoginManager
 login_manager = LoginManager()

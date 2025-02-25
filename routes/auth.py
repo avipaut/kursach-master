@@ -1,100 +1,67 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3
+from routes.models import db, User  # Импортируем User из models.py
+from contextlib import contextmanager
 
 auth_bp = Blueprint('auth', __name__)
-
-# Глобальная переменная login_manager
-login_manager = None
 
 def init_login_manager(manager):
     global login_manager
     login_manager = manager
 
-    # Устанавливаем загрузчик пользователя после инициализации login_manager
     @login_manager.user_loader
     def load_user(user_id):
-        return User.get(user_id)
+        return User.query.get(int(user_id))
 
-# === Инициализация базы данных ===
-def init_db():
-    with sqlite3.connect('users.db') as con:
-        cur = con.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        )''')
-        con.commit()
-
-init_db()
-
-# === Класс пользователя ===
-class User(UserMixin):
-    def __init__(self, id_, username):
-        self.id = id_
-        self.username = username
-
-    @staticmethod
-    def get(user_id):
-        with sqlite3.connect('users.db') as con:
-            cur = con.cursor()
-            cur.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
-            user = cur.fetchone()
-            if user:
-                return User(user[0], user[1])
-        return None
-
-    @staticmethod
-    def get_by_username(username):
-        with sqlite3.connect('users.db') as con:
-            cur = con.cursor()
-            cur.execute("SELECT id, username, password FROM users WHERE username = ?", (username,))
-            user = cur.fetchone()
-            if user:
-                return User(user[0], user[1]), user[2]
-        return None, None
-
-    def get_id(self):
-        return str(self.id)  # Flask-Login требует строковый ID
-
-# === Регистрация ===
+@contextmanager
+def session_scope():
+    try:
+        yield db.session
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        raise e
+    finally:
+        db.session.close()
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        hashed_password = generate_password_hash(password)
-
-        try:
-            with sqlite3.connect('users.db') as con:
-                cur = con.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
-                con.commit()
-                flash('Регистрация прошла успешно! Войдите в систему.', 'success')
-                return redirect(url_for('auth.login'))
-        except sqlite3.IntegrityError:
-            flash('Имя пользователя уже занято!', 'danger')
-
+        
+        with session_scope() as session:
+            if User.query.filter_by(username=username).first():
+                flash('Имя пользователя уже занято!', 'danger')
+                return redirect(url_for('auth.register'))
+                
+            user = User(username=username, password=generate_password_hash(password))
+            session.add(user)
+            
+        flash('Регистрация прошла успешно! Войдите в систему.', 'success')
+        return redirect(url_for('auth.login'))
+        
     return render_template('register.html')
+from routes.models import db, User  # Импортируй свою модель
 
-# === Авторизация ===
+
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-
-        user, stored_password = User.get_by_username(username)
-        if user and check_password_hash(stored_password, password):
-            login_user(user)  # Авторизация пользователя
+        
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user)
             flash('Вы успешно вошли!', 'success')
             next_page = request.args.get('next')
             return redirect(next_page or url_for('auth.protected'))
-        else:
-            flash('Неверное имя пользователя или пароль!', 'danger')
-
+            
+        flash('Неверное имя пользователя или пароль!', 'danger')
+    
     return render_template('login.html')
 
 # === Выход ===
