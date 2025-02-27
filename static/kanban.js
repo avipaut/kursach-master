@@ -142,6 +142,25 @@ function deleteList(boardId, listId) {
         .then(() => loadLists(boardId));
 }
 
+// function loadCards(boardId, listId) {
+//     fetch(`/kanban/boards/${boardId}/lists/${listId}/cards`)
+//         .then(response => response.json())
+//         .then(cards => {
+//             const container = document.getElementById(`cards-container-${listId}`);
+//             container.innerHTML = cards.map(card => `
+//                 <div class="card" 
+//                      draggable="true" 
+//                      ondragstart="dragStart(event)" 
+//                      ondragend="dragEnd(event)"
+//                      data-card-id="${card.id}" 
+//                      data-list-id="${listId}" 
+//                      data-board-id="${boardId}">
+//                     <p>${card.title}</p>
+//                     <button onclick="deleteCard(${boardId}, ${listId}, ${card.id})" class="delete-btn">Удалить</button>
+//                 </div>
+//             `).join('');
+//         });
+// }
 function loadCards(boardId, listId) {
     fetch(`/kanban/boards/${boardId}/lists/${listId}/cards`)
         .then(response => response.json())
@@ -156,12 +175,43 @@ function loadCards(boardId, listId) {
                      data-list-id="${listId}" 
                      data-board-id="${boardId}">
                     <p>${card.title}</p>
+                    <div class="card-description">${card.description}</div>
+                    <div class="card-user">
+                        <strong>Создатель: </strong>${card.createdBy}  <!-- Добавляем имя пользователя -->
+                    </div>
+                    <div class="priority-select">
+                        <label for="priority-${card.id}">Приоритет:</label>
+                        <select id="priority-${card.id}" onchange="updateCardPriority(${boardId}, ${listId}, ${card.id}, this)">
+                            <option value="low" ${card.priority === "low" ? "selected" : ""}>Низкий</option>
+                            <option value="medium" ${card.priority === "medium" ? "selected" : ""}>Средний</option>
+                            <option value="high" ${card.priority === "high" ? "selected" : ""}>Высокий</option>
+                        </select>
+                    </div>
                     <button onclick="deleteCard(${boardId}, ${listId}, ${card.id})" class="delete-btn">Удалить</button>
                 </div>
             `).join('');
         });
 }
 
+function updateCardPriority(boardId, listId, cardId, selectElement) {
+    const priority = selectElement.value;
+    
+    fetch(`/kanban/boards/${boardId}/lists/${listId}/cards/${cardId}/priority`, {
+        method: 'PUT',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority })
+    })
+    .then(response => {
+        if (response.ok) {
+            // Обновляем стиль карточки в зависимости от выбранного приоритета
+            const card = document.querySelector(`.card[data-card-id="${cardId}"]`);
+            card.classList.remove('low', 'medium', 'high');
+            card.classList.add(priority);
+        }
+    });
+}
+
+// kanban.js
 function createCard(boardId, listId) {
     const cardTitle = document.getElementById(`cardTitle-${listId}`).value;
     if (!cardTitle.trim()) {
@@ -172,7 +222,10 @@ function createCard(boardId, listId) {
     fetch(`/kanban/boards/${boardId}/lists/${listId}/cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: cardTitle })
+        body: JSON.stringify({
+            title: cardTitle,
+            priority: 'low' // Устанавливаем начальный приоритет
+        })
     })
     .then(response => response.json())
     .then(() => {
@@ -180,6 +233,7 @@ function createCard(boardId, listId) {
         loadCards(boardId, listId);
     });
 }
+
 
 function deleteCard(boardId, listId, cardId) {
     if (!confirm("Вы уверены, что хотите удалить эту карточку?")) return;
@@ -232,4 +286,21 @@ function dropCard(event) {
             }
         });
     }
+}
+
+function updateCardPriority(boardId, listId, cardId, selectElement) {
+    const priority = selectElement.value;
+    
+    fetch(`/kanban/boards/${boardId}/lists/${listId}/cards/${cardId}/priority`, {
+        method: 'PUT',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority })
+    })
+    .then(response => {
+        if (response.ok) {
+            // Обновляем стиль карточки
+            const card = selectElement.closest('.card');
+            card.className = `card ${priority}`;
+        }
+    });
 }
