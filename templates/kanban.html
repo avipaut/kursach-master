@@ -1,75 +1,309 @@
+
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kanban Доска</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='kanban.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-
 <body>
-    <div class="navbar-container">
-        <nav class="navbar">
-            <button class="menu-trigger" type="button" aria-label="Toggle menu">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
-            <div class="nav-links">
-                <a href="{{ url_for('documents.documents') }}">Documents</a>
-                <a href="{{ url_for('chat.messenger_page') }}">Chat</a>
-                <a href="{{ url_for('reports.view_reports') }}">Reports</a>
-                <a href="{{ url_for('kpi.kpi_constructor') }}">KPI</a>
-                <a href="{{ url_for('zoom.zoom') }}">Zoom</a>
+    <div class="app-container">
+        <!-- Боковая панель с досками -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <img src="https://via.placeholder.com/40" alt="Logo" class="logo">
+                    <h2>KanbanApp</h2>
+                </div>
+                <button id="toggle-sidebar" class="toggle-sidebar-btn"><i class="fas fa-bars"></i></button>
             </div>
-        </nav>
+            
+            <!-- Навигация -->
+            <nav class="sidebar-nav">
+                <ul>
+                    <li><a href="#" class="nav-item"><span class="nav-icon" style="background-color: #f87171;"></span> CRM System</a></li>
+                    <li><a href="#" class="nav-item active"><span class="nav-icon" style="background-color: #ec4899;"></span> Kanban</a></li>
+                    <li><a href="#" class="nav-item"><span class="nav-icon" style="background-color: #60a5fa;"></span> Documents</a></li>
+                    <li><a href="#" class="nav-item"><span class="nav-icon" style="background-color: #4ade80;"></span> Chats</a></li>
+                    <li><a href="#" class="nav-item"><span class="nav-icon" style="background-color: #a78bfa;"></span> Reports</a></li>
+                    <li><a href="#" class="nav-item"><span class="nav-icon" style="background-color: #fbbf24;"></span> KPI</a></li>
+                    <li><a href="#" class="nav-item"><span class="nav-icon" style="background-color: #38bdf8;"></span> Meetings</a></li>
+                </ul>
+            </nav>
+            
+            <div class="boards-section">
+                <h3>Мои доски</h3>
+                <button id="createBoardBtn" class="btn-create"><i class="fas fa-plus"></i> Новая доска</button>
+            </div>
+            <div class="boards-list" id="boardsList">
+                <!-- Список досок будет здесь -->
+                <div class="loading-spinner" id="boardsLoading">
+                    <div class="spinner"></div>
+                    <p>Загрузка досок...</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Основное содержимое -->
+        <main class="main-content">
+            <!-- Верхняя панель -->
+            <header class="main-header">
+                <div class="header-left">
+                    <button id="mobile-sidebar-toggle" class="mobile-toggle-btn">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 id="activeBoardTitle">Kanban Доска</h1>
+                </div>
+                <div class="header-actions" id="boardActions" style="display: none;">
+                    <button id="editBoardBtn" class="btn-edit"><i class="fas fa-edit"></i></button>
+                    <button id="deleteBoardBtn" class="btn-delete"><i class="fas fa-trash"></i></button>
+                </div>
+                <div class="header-right">
+                    <button class="header-icon-btn"><i class="fas fa-search"></i></button>
+                    <button class="header-icon-btn notification-btn">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-dot"></span>
+                    </button>
+                    <button class="header-icon-btn"><i class="fas fa-user"></i></button>
+                    <button class="header-icon-btn"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </header>
+
+            <!-- Канбан доска -->
+            <div class="kanban-container" id="kanbanContainer">
+                <!-- Сообщение о выборе доски будет показано здесь, если нет активной доски -->
+                <div id="selectBoardMessage" class="select-board-message">
+                    <i class="fas fa-arrow-left"></i>
+                    <p>Выберите доску из списка слева или создайте новую</p>
+                </div>
+                
+                <!-- Списки и карточки будут здесь -->
+                <div id="listsContainer" class="lists-container" style="display: none;">
+                    <!-- Списки будут добавлены сюда -->
+                    
+                    <!-- Кнопка добавления нового списка -->
+                    <div class="add-list-container">
+                        <button id="addListBtn" class="btn-add-list">
+                            <i class="fas fa-plus"></i> Добавить список
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            // Убедимся, что элементы загружены
-            setTimeout(function () {
-                const menuTrigger = document.querySelector('.menu-trigger');
-                const sidebar = document.querySelector('.sidebar');
-                const mainContent = document.querySelector('.main-content');
+    <!-- Модальные окна -->
+    <!-- Модальное окно создания доски -->
+    <div id="createBoardModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Создать новую доску</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="createBoardForm">
+                    <div class="form-group">
+                        <label for="boardName">Название доски</label>
+                        <input type="text" id="boardName" name="boardName" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel">Отмена</button>
+                        <button type="submit" class="btn-submit">Создать</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                // Проверка на существование элементов
-                if (!menuTrigger || !sidebar || !mainContent) {
-                    console.error('Один или несколько элементов не найдены!');
-                    return;
-                }
+    <!-- Модальное окно редактирования доски -->
+    <div id="editBoardModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редактировать доску</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editBoardForm">
+                    <div class="form-group">
+                        <label for="editBoardName">Название доски</label>
+                        <input type="text" id="editBoardName" name="editBoardName" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel">Отмена</button>
+                        <button type="submit" class="btn-submit">Сохранить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                let isOpen = false;  // Переменная для отслеживания состояния меню
+    <!-- Модальное окно создания списка -->
+    <div id="createListModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Создать новый список</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="createListForm">
+                    <div class="form-group">
+                        <label for="listName">Название списка</label>
+                        <input type="text" id="listName" name="listName" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel">Отмена</button>
+                        <button type="submit" class="btn-submit">Создать</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                console.log('JavaScript работает!');
+    <!-- Модальное окно редактирования списка -->
+    <div id="editListModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редактировать список</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editListForm">
+                    <div class="form-group">
+                        <label for="editListName">Название списка</label>
+                        <input type="text" id="editListName" name="editListName" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel">Отмена</button>
+                        <button type="submit" class="btn-submit">Сохранить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                // Обработчик клика по кнопке меню
-                menuTrigger.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    console.log('Меню было нажато!');
+    <!-- Модальное окно создания карточки -->
+    <div id="createCardModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Создать новую карточку</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="createCardForm">
+                    <div class="form-group">
+                        <label for="cardTitle">Заголовок</label>
+                        <input type="text" id="cardTitle" name="cardTitle" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardDescription">Описание</label>
+                        <textarea id="cardDescription" name="cardDescription" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardPriority">Приоритет</label>
+                        <select id="cardPriority" name="cardPriority">
+                            <option value="low">Низкий</option>
+                            <option value="medium" selected>Средний</option>
+                            <option value="high">Высокий</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardAssignee">Ответственный</label>
+                        <select id="cardAssignee" name="cardAssignee">
+                            <option value="">Не назначен</option>
+                            <!-- Пользователи будут добавлены динамически -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardDeadline">Срок выполнения</label>
+                        <input type="date" id="cardDeadline" name="cardDeadline">
+                    </div>
+                    <div class="form-group">
+                        <label>Задачи</label>
+                        <div id="todoItems" class="todo-items">
+                            <div class="todo-item">
+                                <input type="text" class="todo-input" placeholder="Добавьте задачу...">
+                                <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                        <button type="button" id="addTodoBtn" class="btn-add-todo">
+                            <i class="fas fa-plus"></i> Добавить задачу
+                        </button>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel">Отмена</button>
+                        <button type="submit" class="btn-submit">Создать</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                    isOpen = !isOpen;  // Переключаем состояние
+    <!-- Модальное окно редактирования карточки -->
+    <div id="editCardModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редактировать карточку</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editCardForm">
+                    <div class="form-group">
+                        <label for="editCardTitle">Заголовок</label>
+                        <input type="text" id="editCardTitle" name="editCardTitle" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCardDescription">Описание</label>
+                        <textarea id="editCardDescription" name="editCardDescription" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCardPriority">Приоритет</label>
+                        <select id="editCardPriority" name="editCardPriority">
+                            <option value="low">Низкий</option>
+                            <option value="medium">Средний</option>
+                            <option value="high">Высокий</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCardAssignee">Ответственный</label>
+                        <select id="editCardAssignee" name="editCardAssignee">
+                            <option value="">Не назначен</option>
+                            <!-- Пользователи будут добавлены динамически -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCardDeadline">Срок выполнения</label>
+                        <input type="date" id="editCardDeadline" name="editCardDeadline">
+                    </div>
+                    <div class="form-group">
+                        <label>Статус</label>
+                        <div class="form-check">
+                            <input type="checkbox" id="editCardCompleted" name="editCardCompleted">
+                            <label for="editCardCompleted">Выполнено</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Задачи</label>
+                        <div id="editTodoItems" class="todo-items">
+                            <!-- Задачи будут добавлены динамически -->
+                        </div>
+                        <button type="button" id="editAddTodoBtn" class="btn-add-todo">
+                            <i class="fas fa-plus"></i> Добавить задачу
+                        </button>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel">Отмена</button>
+                        <button type="submit" class="btn-submit">Сохранить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                    if (isOpen) {
-                        console.log('Открываем меню');
-                        sidebar.classList.add('active');
-                        mainContent.classList.add('shifted');
-                        menuTrigger.classList.add('active');
-                    } else {
-                        console.log('Закрываем меню');
-                        sidebar.classList.remove('active');
-                        mainContent.classList.remove('shifted');
-                        menuTrigger.classList.remove('active');
-                    }
-                });
+    <!-- Уведомления -->
+    <div id="toastContainer" class="toast-container"></div>
 
-            }, 1000); // Задержка 1 секунда
-        });
-    </script>
-
-    <!-- Подключение JS с функциональностью канбан доски -->
     <script defer src="{{ url_for('static', filename='kanban.js') }}"></script>
 </body>
-
 </html>

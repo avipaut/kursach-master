@@ -14,10 +14,11 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(120), nullable=False)
     
-    # Добавим отношения
+    # Указываем конкретный внешний ключ для связи
     boards = db.relationship('Board', backref='user', lazy=True)
-    cards = db.relationship('Card', backref='user', lazy=True)
-
+    cards = db.relationship('Card', foreign_keys='Card.user_id', backref='user', lazy=True)
+    # Связь assigned_cards уже определена через backref в модели Card
+    
     def to_dict(self):
         return {
             'id': self.id,
@@ -74,9 +75,15 @@ class Card(db.Model):
     description = Column(String(1000))
     created_at = Column(DateTime, default=datetime.utcnow)
     list_id = Column(Integer, ForeignKey('list.id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # Добавляем связь с пользователем
-    priority = Column(Enum(PriorityLevel), default=PriorityLevel.LOW)  # Добавляем приоритет
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # Creator of the card
+    priority = Column(Enum(PriorityLevel), default=PriorityLevel.LOW)
+    completed = Column(db.Boolean, default=False)  # New field for completion status
+    assigned_to = Column(Integer, ForeignKey('users.id'), nullable=True)  # New field for assignment
+    deadline = Column(DateTime, nullable=True)  # New field for deadline
     
+    # Relationships
+    todos = db.relationship('Todo', backref='card', cascade="all, delete-orphan", lazy=True)
+    assigned_user = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_cards', lazy=True)    
     def to_dict(self):
         return {
             'id': self.id,
@@ -85,7 +92,26 @@ class Card(db.Model):
             'created_at': self.created_at.isoformat(),
             'list_id': self.list_id,
             'user_id': self.user_id,
-            'createdBy': self.user.username,  # Добавляем имя пользователя
-            'priority': self.priority.value
-            
+            'createdBy': self.user.username,
+            'priority': self.priority.value,
+            'completed': self.completed,
+            'assigned_to': self.assigned_to,
+            'assigned_to_name': self.assigned_user.username if self.assigned_user else None,
+            'deadline': self.deadline.isoformat() if self.deadline else None,
+            'todos': [todo.to_dict() for todo in self.todos]
+        }
+
+# New Todo model for to-do lists within cards
+class Todo(db.Model):
+    id = Column(Integer, primary_key=True)
+    content = Column(String(500), nullable=False)
+    completed = Column(db.Boolean, default=False)
+    card_id = Column(Integer, ForeignKey('card.id'), nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'content': self.content,
+            'completed': self.completed,
+            'card_id': self.card_id
         }

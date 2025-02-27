@@ -1,6 +1,7 @@
+from datetime import datetime
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from routes.models import PriorityLevel, db, Board, List, Card  # Используем уже инициализированный db из app.py
+from routes.models import PriorityLevel, User, db, Board, List, Card, Todo  # Используем уже инициализированный db из app.py
 kanban_bp = Blueprint('kanban', __name__)
 
 
@@ -147,6 +148,20 @@ def get_cards(board_id, list_id):
     
     # Возвращаем карточки в виде списка словарей с дополнительной информацией
     return jsonify([card.to_dict() for card in cards])
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['GET'])
+def get_single_card(board_id, list_id, card_id):
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
+    if not list_obj:
+        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
+    # Проверяем существование карточки
+    card = Card.query.filter_by(id=card_id, list_id=list_id).first()
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+
+    return jsonify(card.to_dict())  # Отправляем JSON с карточкой
 
 
 
@@ -166,7 +181,7 @@ def create_card(board_id, list_id):
     return jsonify(new_card.to_dict()), 201
 
 # Обновить карточку
-@kanban_bp.route('/cards/<int:card_id>', methods=['PUT'])
+@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['PUT'])
 def update_card(board_id, list_id, card_id):
     # Проверяем существование доски
     board = Board.query.get(board_id)
@@ -188,7 +203,7 @@ def update_card(board_id, list_id, card_id):
     db.session.commit()
     return jsonify({"id": card.id, "title": card.title, "description": card.description})
 
-@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['DELETE'])
+@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['DELETE'])
 def delete_card(board_id, list_id, card_id):
     # Проверяем существование доски
     board = Board.query.get(board_id)
@@ -210,7 +225,138 @@ def delete_card(board_id, list_id, card_id):
     db.session.commit()
     return '', 204
 
+# Add these routes to kanban.py
 
+# Get all users for assignments
+@kanban_bp.route('/users', methods=['GET'])
+@login_required
+def get_users():
+    users = User.query.all()
+    return jsonify([user.to_dict() for user in users])
+
+# Toggle card completion status
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/toggle-completion', methods=['PUT'])
+@login_required
+def toggle_card_completion(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    card.completed = not card.completed
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Card completion status updated',
+        'card_id': card.id,
+        'completed': card.completed
+    })
+
+# Assign user to card
+@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/assign', methods=['PUT'])
+@login_required
+def assign_user_to_card(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    user_id = data.get('user_id')
+    
+    # Check if user exists if an ID was provided
+    if user_id:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        card.assigned_to = user_id
+    else:
+        card.assigned_to = None  # Unassign
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Card assignment updated',
+        'card_id': card.id,
+        'assigned_to': card.assigned_to,
+        'assigned_to_name': card.assigned_user.username if card.assigned_user else None
+    })
+
+# Set deadline for card
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/deadline', methods=['PUT'])
+@login_required
+def set_card_deadline(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    deadline_str = data.get('deadline')
+    
+    try:
+        if deadline_str:
+            card.deadline = datetime.fromisoformat(deadline_str)
+        else:
+            card.deadline = None
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Card deadline updated',
+            'card_id': card.id,
+            'deadline': card.deadline.isoformat() if card.deadline else None
+        })
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)"}), 400
+
+# Create todo item
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/todos', methods=['POST'])
+@login_required
+def create_todo(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    content = data.get('content')
+    
+    if not content or not content.strip():
+        return jsonify({"error": "Todo content is required"}), 400
+    
+    todo = Todo(content=content, card_id=card_id)
+    db.session.add(todo)
+    db.session.commit()
+    
+    return jsonify(todo.to_dict()), 201
+
+# Update todo item
+@kanban_bp.route('/todos/<int:todo_id>', methods=['PUT'])
+@login_required
+def update_todo(todo_id):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return jsonify({"error": "Todo not found"}), 404
+    
+    data = request.json
+    if 'content' in data:
+        todo.content = data['content']
+    if 'completed' in data:
+        todo.completed = data['completed']
+    
+    db.session.commit()
+    
+    return jsonify(todo.to_dict())
+
+# Delete todo item
+@kanban_bp.route('/todos/<int:todo_id>', methods=['DELETE'])
+@login_required
+def delete_todo(todo_id):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return jsonify({"error": "Todo not found"}), 404
+    
+    db.session.delete(todo)
+    db.session.commit()
+    
+    return '', 204
 #####
 
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:source_list_id>/cards/<int:card_id>/move/<int:target_list_id>', methods=['PUT'])
