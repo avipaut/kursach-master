@@ -8,8 +8,12 @@ kanban_bp = Blueprint('kanban', __name__)
 
 @kanban_bp.route('/kanban', endpoint='kanban_board')
 def trello():
-    return render_template('kanban.html')  # Указываем, что рендерим kanban.html
+    return render_template('kanban.html', username = current_user.username)  # Указываем, что рендерим kanban.html
 
+@kanban_bp.route('/kanban/api/current_user', methods=['GET'])
+@login_required
+def get_current_user():
+    return jsonify({"username": current_user.username})
 
 # Helper function to generate a consistent JSON response
 def serialize_board(board):
@@ -205,6 +209,7 @@ def delete_card(board_id, list_id, card_id):
     db.session.delete(card)
     db.session.commit()
     return '', 204
+
 
 #####
 

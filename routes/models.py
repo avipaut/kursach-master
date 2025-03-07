@@ -87,4 +87,5 @@ class Card(db.Model):
             'user_id': self.user_id,
             'createdBy': self.user.username,  # Добавляем имя пользователя
             'priority': self.priority.value
+            
         }

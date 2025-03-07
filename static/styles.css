@@ -129,34 +129,3 @@ ul li button {
 ul li button:hover {
     background: #c0392b;
 }
-.card {
-    cursor: grab;
-    user-select: none;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.card.dragging {
-    opacity: 0.5;
-    cursor: grabbing;
-    transform: scale(1.02);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.list {
-    min-height: 100px;
-    transition: background-color 0.2s;
-}
-
-.list.drag-over {
-    background-color: #e3e9ff;
-    border: 2px dashed #0052cc;
-}
-
-/* Card placeholder while dragging */
-.card-placeholder {
-    height: 80px;
-    background-color: #f0f0f0;
-    border: 2px dashed #ccc;
-    border-radius: 6px;
-    margin-bottom: 0.75rem;
-}
