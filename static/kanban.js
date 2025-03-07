@@ -1,12 +1,11 @@
-
-// Глобальные переменные
+// Global variables
 let boards = [];
 let activeBoard = null;
 let lists = [];
 let users = [];
 let apiBaseUrl = '';
 
-// DOM элементы для модальных окон
+// DOM elements for modal windows
 const createBoardModal = document.getElementById('createBoardModal');
 const editBoardModal = document.getElementById('editBoardModal');
 const createListModal = document.getElementById('createListModal');
@@ -14,46 +13,49 @@ const editListModal = document.getElementById('editListModal');
 const createCardModal = document.getElementById('createCardModal');
 const editCardModal = document.getElementById('editCardModal');
 
-// Инициализация
+// Initialization
 document.addEventListener('DOMContentLoaded', () => {
-    // Установка базового URL для API
+    // Set the base URL for API
     apiBaseUrl = window.location.hostname === 'localhost' ? '' : '/kanban';
     console.log('API base URL set to:', apiBaseUrl);
 
-    // Загрузка начальных данных
+    // Load initial data
     fetchAllUsers();
     loadBoards();
 
-    // Обработчики событий для создания досок
+    // Event handlers for creating boards
     document.getElementById('createBoardBtn').addEventListener('click', () => openModal(createBoardModal));
     document.getElementById('createBoardForm').addEventListener('submit', handleCreateBoard);
 
-    // Обработчики событий для редактирования досок
+    // Event handlers for editing boards
     document.getElementById('editBoardBtn').addEventListener('click', () => openEditBoardModal());
     document.getElementById('editBoardForm').addEventListener('submit', handleEditBoard);
     document.getElementById('deleteBoardBtn').addEventListener('click', () => handleDeleteBoard());
 
-    // Обработчики событий для создания списков
-    document.getElementById('addListBtn').addEventListener('click', () => openModal(createListModal));
+    // Event handlers for creating lists
+    document.getElementById('addListBtn')?.addEventListener('click', () => openModal(createListModal));
     document.getElementById('createListForm').addEventListener('submit', handleCreateList);
 
-    // Обработчики событий для создания карточек
+    // Event handlers for creating cards
     document.getElementById('createCardForm').addEventListener('submit', handleCreateCard);
 
-    // Обработчики событий для редактирования карточек
+    // Event handlers for editing cards
     document.getElementById('editCardForm').addEventListener('submit', handleUpdateCard);
 
-    // Обработчики событий для закрытия модальных окон
+    // Event handlers for closing modal windows
     document.querySelectorAll('.close-modal, .btn-cancel').forEach(element => {
         element.addEventListener('click', () => closeAllModals());
     });
 
-    // Обработчик добавления задач в форме создания карточки
+    // Handler for adding tasks in the card creation form
     document.getElementById('addTodoBtn').addEventListener('click', () => addTodoItem('todoItems'));
     document.getElementById('editAddTodoBtn').addEventListener('click', () => addTodoItem('editTodoItems'));
+
+    // Toggle sidebar collapse
+    document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
 });
 
-// Функции загрузки данных
+// Data loading functions
 async function loadBoards() {
     showLoading('boardsLoading');
     try {
@@ -68,9 +70,14 @@ async function loadBoards() {
         console.log('Boards loaded successfully:', boards);
         renderBoards();
         hideLoading('boardsLoading');
+
+        // If there are boards, select the first one
+        if (boards.length > 0) {
+            selectBoard(boards[0]);
+        }
     } catch (error) {
         console.error('Error loading boards:', error);
-        showToast('Ошибка', 'Не удалось загрузить списки досок. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to load boards. Please try again.', 'error');
         hideLoading('boardsLoading');
     }
 }
@@ -89,7 +96,7 @@ async function loadLists(boardId) {
         lists = await response.json();
         console.log('Lists loaded successfully:', lists);
         
-        // Предзагрузка карточек для всех списков
+        // Preload cards for all lists
         for (const list of lists) {
             await loadCards(boardId, list.id);
         }
@@ -97,7 +104,7 @@ async function loadLists(boardId) {
         renderLists();
     } catch (error) {
         console.error('Error loading lists:', error);
-        showToast('Ошибка', 'Не удалось загрузить списки. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to load lists. Please try again.', 'error');
     }
 }
 
@@ -113,7 +120,7 @@ async function loadCards(boardId, listId) {
         const cards = await response.json();
         console.log(`Cards for list ${listId} loaded successfully:`, cards);
         
-        // Обновление списков с их карточками
+        // Update lists with their cards
         const listIndex = lists.findIndex(list => list.id === listId);
         if (listIndex !== -1) {
             lists[listIndex].cards = cards;
@@ -138,15 +145,15 @@ async function fetchAllUsers() {
         users = await response.json();
         console.log('Users loaded successfully:', users);
         
-        // После загрузки пользователей, обновляем выпадающие списки
+        // After loading users, update dropdown lists
         populateUserSelects();
     } catch (error) {
         console.error('Error fetching users:', error);
-        showToast('Ошибка', 'Не удалось загрузить пользователей. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to load users. Please try again.', 'error');
     }
 }
 
-// Функция для обновления всех выпадающих списков пользователей
+// Function to update all user dropdown lists
 function populateUserSelects() {
     const selects = [
         document.getElementById('cardAssignee'),
@@ -158,7 +165,7 @@ function populateUserSelects() {
     });
 }
 
-// Функции управления досками
+// Board management functions
 async function handleCreateBoard(event) {
     event.preventDefault();
     
@@ -185,10 +192,10 @@ async function handleCreateBoard(event) {
         closeAllModals();
         nameInput.value = '';
         
-        showToast('Успешно', 'Доска успешно создана', 'success');
+        showToast('Success', 'Board created successfully', 'success');
     } catch (error) {
         console.error('Error creating board:', error);
-        showToast('Ошибка', 'Не удалось создать доску. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to create board. Please try again.', 'error');
     }
 }
 
@@ -222,10 +229,10 @@ async function handleEditBoard(event) {
         
         await response.json();
         
-        // Обновление имени активной доски
+        // Update name of active board
         activeBoard.name = name;
         
-        // Обновление списка досок
+        // Update board list
         const boardIndex = boards.findIndex(board => board.id === activeBoard.id);
         if (boardIndex !== -1) {
             boards[boardIndex].name = name;
@@ -235,17 +242,17 @@ async function handleEditBoard(event) {
         document.getElementById('activeBoardTitle').textContent = name;
         closeAllModals();
         
-        showToast('Успешно', 'Доска успешно обновлена', 'success');
+        showToast('Success', 'Board updated successfully', 'success');
     } catch (error) {
         console.error('Error updating board:', error);
-        showToast('Ошибка', 'Не удалось обновить доску. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to update board. Please try again.', 'error');
     }
 }
 
 async function handleDeleteBoard() {
     if (!activeBoard) return;
     
-    if (!confirm('Вы уверены, что хотите удалить эту доску?')) return;
+    if (!confirm('Are you sure you want to delete this board?')) return;
     
     try {
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}`, { method: 'DELETE' });
@@ -254,25 +261,31 @@ async function handleDeleteBoard() {
             throw new Error(`Failed to delete board. Status: ${response.status}`);
         }
         
-        // Удаление доски из массива
+        // Remove board from array
         boards = boards.filter(board => board.id !== activeBoard.id);
         
-        // Сброс активной доски
+        // Reset active board
         activeBoard = null;
-        document.getElementById('activeBoardTitle').textContent = 'Kanban Доска';
+        document.getElementById('activeBoardTitle').textContent = 'Kanban Board';
         document.getElementById('boardActions').style.display = 'none';
         document.getElementById('selectBoardMessage').style.display = 'flex';
         document.getElementById('listsContainer').style.display = 'none';
         
         renderBoards();
-        showToast('Успешно', 'Доска успешно удалена', 'success');
+        
+        // If there are other boards, select the first one
+        if (boards.length > 0) {
+            selectBoard(boards[0]);
+        }
+        
+        showToast('Success', 'Board deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting board:', error);
-        showToast('Ошибка', 'Не удалось удалить доску. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to delete board. Please try again.', 'error');
     }
 }
 
-// Функции управления списками
+// List management functions
 async function handleCreateList(event) {
     event.preventDefault();
     
@@ -295,16 +308,16 @@ async function handleCreateList(event) {
         }
         
         const newList = await response.json();
-        newList.cards = []; // Инициализация пустого массива карточек для нового списка
+        newList.cards = []; // Initialize empty array of cards for new list
         lists.push(newList);
         renderLists();
         closeAllModals();
         nameInput.value = '';
         
-        showToast('Успешно', 'Список успешно создан', 'success');
+        showToast('Success', 'List created successfully', 'success');
     } catch (error) {
         console.error('Error creating list:', error);
-        showToast('Ошибка', 'Не удалось создать список. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to create list. Please try again.', 'error');
     }
 }
 
@@ -312,7 +325,7 @@ function openEditListModal(listId) {
     const list = lists.find(list => list.id === listId);
     if (!list) return;
     
-    // Сохраняем ID списка в форме
+    // Save list ID in the form
     document.getElementById('editListForm').dataset.listId = listId;
     document.getElementById('editListName').value = list.name;
     openModal(editListModal);
@@ -342,7 +355,7 @@ async function handleEditList(event) {
         
         await response.json();
         
-        // Обновление имени списка
+        // Update list name
         const listIndex = lists.findIndex(list => list.id === listId);
         if (listIndex !== -1) {
             lists[listIndex].name = name;
@@ -351,17 +364,17 @@ async function handleEditList(event) {
         renderLists();
         closeAllModals();
         
-        showToast('Успешно', 'Список успешно обновлен', 'success');
+        showToast('Success', 'List updated successfully', 'success');
     } catch (error) {
         console.error('Error updating list:', error);
-        showToast('Ошибка', 'Не удалось обновить список. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to update list. Please try again.', 'error');
     }
 }
 
 async function handleDeleteList(listId) {
     if (!activeBoard) return;
     
-    if (!confirm('Вы уверены, что хотите удалить этот список?')) return;
+    if (!confirm('Are you sure you want to delete this list?')) return;
     
     try {
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}`, { method: 'DELETE' });
@@ -370,43 +383,46 @@ async function handleDeleteList(listId) {
             throw new Error(`Failed to delete list. Status: ${response.status}`);
         }
         
-        // Удаление списка из массива
+        // Remove list from array
         lists = lists.filter(list => list.id !== listId);
         renderLists();
         
-        showToast('Успешно', 'Список успешно удален', 'success');
+        showToast('Success', 'List deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting list:', error);
-        showToast('Ошибка', 'Не удалось удалить список. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to delete list. Please try again.', 'error');
     }
 }
 
-// Функции управления карточками
+// Card management functions
 function openCreateCardModal(listId) {
-    // Сохраняем ID списка в форме
+    // Save list ID in the form
     document.getElementById('createCardForm').dataset.listId = listId;
     
-    // Очищаем форму
+    // Clear form
     document.getElementById('cardTitle').value = '';
     document.getElementById('cardDescription').value = '';
     document.getElementById('cardPriority').value = 'medium';
     document.getElementById('cardAssignee').value = '';
     document.getElementById('cardDeadline').value = '';
     
-    // Очистка и сброс списка задач
+    // Clear and reset task list
     const todoItemsContainer = document.getElementById('todoItems');
     todoItemsContainer.innerHTML = `
         <div class="todo-item">
-            <input type="text" class="todo-input" placeholder="Добавьте задачу...">
+            <input type="text" class="todo-input" placeholder="Add a task...">
             <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
         </div>
     `;
     
-    // Добавляем пользователей в выпадающий список
+    // Add users to dropdown
     const assigneeSelect = document.getElementById('cardAssignee');
     populateUserSelect(assigneeSelect);
     
-    // Открываем модальное окно
+    // Add remove button handlers
+    attachRemoveTodoHandlers();
+    
+    // Open modal
     openModal(createCardModal);
 }
 
@@ -427,7 +443,7 @@ async function handleCreateCard(event) {
     if (!title) return;
     
     try {
-        // Создаем базовую карточку
+        // Create basic card
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -445,10 +461,10 @@ async function handleCreateCard(event) {
         const newCard = await response.json();
         const cardId = newCard.id;
         
-        // Массив для дополнительных операций
+        // Array for additional operations
         const operations = [];
         
-        // Добавление задач
+        // Add tasks
         const todoInputs = document.querySelectorAll('#todoItems .todo-input');
         for (const input of todoInputs) {
             const content = input.value.trim();
@@ -463,7 +479,7 @@ async function handleCreateCard(event) {
             }
         }
         
-        // Установка срока выполнения
+        // Set deadline
         if (deadline) {
             operations.push(
                 fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
@@ -474,7 +490,7 @@ async function handleCreateCard(event) {
             );
         }
         
-        // Назначение пользователя
+        // Assign user
         if (assignedTo) {
             operations.push(
                 fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
@@ -485,19 +501,19 @@ async function handleCreateCard(event) {
             );
         }
         
-        // Выполнение всех операций
+        // Execute all operations
         await Promise.all(operations);
         
-        // Перезагрузка карточек для обновленного списка
+        // Reload cards for updated list
         await loadCards(activeBoard.id, listId);
         renderLists();
         
         closeAllModals();
         
-        showToast('Успешно', 'Карточка успешно создана', 'success');
+        showToast('Success', 'Card created successfully', 'success');
     } catch (error) {
         console.error('Error creating card:', error);
-        showToast('Ошибка', 'Не удалось создать карточку. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to create card. Please try again.', 'error');
     }
 }
 
@@ -510,22 +526,22 @@ function openEditCardModal(cardId, listId) {
     const card = list.cards.find(card => card.id === cardId);
     if (!card) return;
     
-    // Сохраняем информацию о карточке в форме
+    // Save card information in the form
     const form = document.getElementById('editCardForm');
     form.dataset.cardId = cardId;
     form.dataset.listId = listId;
     
-    // Заполняем форму данными карточки
+    // Fill form with card data
     document.getElementById('editCardTitle').value = card.title || '';
     document.getElementById('editCardDescription').value = card.description || '';
     document.getElementById('editCardPriority').value = card.priority || 'medium';
     document.getElementById('editCardAssignee').value = card.assigned_to ? card.assigned_to.toString() : '';
     document.getElementById('editCardCompleted').checked = card.completed || false;
     
-    // Установка даты дедлайна
+    // Set deadline date
     const deadlineInput = document.getElementById('editCardDeadline');
     if (card.deadline) {
-        // Форматирование даты для input[type="date"]
+        // Format date for input[type="date"]
         const deadline = new Date(card.deadline);
         const year = deadline.getFullYear();
         const month = String(deadline.getMonth() + 1).padStart(2, '0');
@@ -535,11 +551,11 @@ function openEditCardModal(cardId, listId) {
         deadlineInput.value = '';
     }
     
-    // Добавляем пользователей в выпадающий список
+    // Add users to dropdown
     const assigneeSelect = document.getElementById('editCardAssignee');
     populateUserSelect(assigneeSelect);
     
-    // Заполняем задачи
+    // Fill tasks
     const todoItemsContainer = document.getElementById('editTodoItems');
     todoItemsContainer.innerHTML = '';
     
@@ -552,7 +568,7 @@ function openEditCardModal(cardId, listId) {
             todoItem.innerHTML = `
                 <div class="form-check">
                     <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
-                    <input type="text" class="todo-input" value="${todo.content}" placeholder="Задача...">
+                    <input type="text" class="todo-input" value="${todo.content}" placeholder="Task...">
                 </div>
                 <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
             `;
@@ -561,25 +577,32 @@ function openEditCardModal(cardId, listId) {
         });
     }
     
-    // Добавляем пустую строку для новой задачи
+    // Add empty line for new task
     const emptyTodoItem = document.createElement('div');
     emptyTodoItem.className = 'todo-item';
     emptyTodoItem.innerHTML = `
-        <input type="text" class="todo-input" placeholder="Добавьте новую задачу...">
+        <input type="text" class="todo-input" placeholder="Add new task...">
         <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
     `;
     todoItemsContainer.appendChild(emptyTodoItem);
     
-    // Добавляем обработчики для кнопок удаления задач
-    todoItemsContainer.querySelectorAll('.btn-remove-todo').forEach(button => {
+    // Add handlers for task delete buttons
+    attachRemoveTodoHandlers();
+    
+    // Add event handler for delete card button
+    document.getElementById('deleteCardBtn').onclick = () => handleDeleteCard(cardId, listId);
+    
+    // Open modal
+    openModal(editCardModal);
+}
+
+function attachRemoveTodoHandlers() {
+    document.querySelectorAll('.btn-remove-todo').forEach(button => {
         button.addEventListener('click', (e) => {
             const todoItem = e.target.closest('.todo-item');
             todoItem.remove();
         });
     });
-    
-    // Открываем модальное окно
-    openModal(editCardModal);
 }
 
 async function handleUpdateCard(event) {
@@ -602,7 +625,7 @@ async function handleUpdateCard(event) {
     if (!title) return;
     
     try {
-        // Обновление основной информации карточки
+        // Update main card information
         const operations = [];
         
         operations.push(
@@ -616,7 +639,7 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Обновление приоритета
+        // Update priority
         operations.push(
             fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/priority`, {
                 method: 'PUT',
@@ -625,7 +648,7 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Обновление статуса завершения
+        // Update completion status
         operations.push(
             fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/toggle-completion`, {
                 method: 'PUT',
@@ -634,7 +657,7 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Обновление срока выполнения
+        // Update deadline
         operations.push(
             fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
                 method: 'PUT',
@@ -645,7 +668,7 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Обновление назначения
+        // Update assignment
         operations.push(
             fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
                 method: 'PUT',
@@ -654,7 +677,7 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Обработка задач
+        // Process tasks
         const todoItems = document.querySelectorAll('#editTodoItems .todo-item');
         for (const todoItem of todoItems) {
             const todoId = todoItem.dataset.todoId;
@@ -667,7 +690,7 @@ async function handleUpdateCard(event) {
             if (!content) continue;
             
             if (todoId) {
-                // Обновление существующей задачи
+                // Update existing task
                 operations.push(
                     fetch(`${apiBaseUrl}/todos/${todoId}`, {
                         method: 'PUT',
@@ -679,7 +702,7 @@ async function handleUpdateCard(event) {
                     })
                 );
             } else {
-                // Создание новой задачи
+                // Create new task
                 operations.push(
                     fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/todos`, {
                         method: 'POST',
@@ -690,26 +713,26 @@ async function handleUpdateCard(event) {
             }
         }
         
-        // Выполнение всех операций
+        // Execute all operations
         await Promise.all(operations);
         
-        // Перезагрузка карточек
+        // Reload cards
         await loadCards(activeBoard.id, listId);
         renderLists();
         
         closeAllModals();
         
-        showToast('Успешно', 'Карточка успешно обновлена', 'success');
+        showToast('Success', 'Card updated successfully', 'success');
     } catch (error) {
         console.error('Error updating card:', error);
-        showToast('Ошибка', 'Не удалось обновить карточку. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to update card. Please try again.', 'error');
     }
 }
 
 async function handleDeleteCard(cardId, listId) {
     if (!activeBoard) return;
     
-    if (!confirm('Вы уверены, что хотите удалить эту карточку?')) return;
+    if (!confirm('Are you sure you want to delete this card?')) return;
     
     try {
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, { 
@@ -720,18 +743,19 @@ async function handleDeleteCard(cardId, listId) {
             throw new Error(`Failed to delete card. Status: ${response.status}`);
         }
         
-        // Обновление карточек в списке
+        // Update cards in list
         const listIndex = lists.findIndex(list => list.id === listId);
         if (listIndex !== -1 && lists[listIndex].cards) {
             lists[listIndex].cards = lists[listIndex].cards.filter(card => card.id !== cardId);
         }
         
         renderLists();
+        closeAllModals();
         
-        showToast('Успешно', 'Карточка успешно удалена', 'success');
+        showToast('Success', 'Card deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting card:', error);
-        showToast('Ошибка', 'Не удалось удалить карточку. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to delete card. Please try again.', 'error');
     }
 }
 
@@ -749,7 +773,7 @@ async function handleToggleCardCompletion(cardId, listId, currentStatus) {
             throw new Error(`Failed to toggle card completion. Status: ${response.status}`);
         }
         
-        // Обновление статуса карточки в списке
+        // Update card status in list
         const listIndex = lists.findIndex(list => list.id === listId);
         if (listIndex !== -1 && lists[listIndex].cards) {
             const cardIndex = lists[listIndex].cards.findIndex(card => card.id === cardId);
@@ -761,7 +785,7 @@ async function handleToggleCardCompletion(cardId, listId, currentStatus) {
         renderLists();
     } catch (error) {
         console.error('Error toggling card completion:', error);
-        showToast('Ошибка', 'Не удалось обновить статус карточки. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to update card status. Please try again.', 'error');
     }
 }
 
@@ -777,20 +801,20 @@ async function handleCardMove(cardId, sourceListId, targetListId) {
             throw new Error(`Failed to move card. Status: ${response.status}`);
         }
         
-        // Перезагрузка карточек в исходном и целевом списках
+        // Reload cards in source and target lists
         await loadCards(activeBoard.id, sourceListId);
         await loadCards(activeBoard.id, targetListId);
         
         renderLists();
         
-        showToast('Успешно', 'Карточка успешно перемещена', 'success');
+        showToast('Success', 'Card moved successfully', 'success');
     } catch (error) {
         console.error('Error moving card:', error);
-        showToast('Ошибка', 'Не удалось переместить карточку. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to move card. Please try again.', 'error');
     }
 }
 
-// Функции для работы с задачами
+// Task management functions
 async function handleUpdateTodoStatus(todoId, completed) {
     try {
         const response = await fetch(`${apiBaseUrl}/todos/${todoId}`, {
@@ -803,7 +827,7 @@ async function handleUpdateTodoStatus(todoId, completed) {
             throw new Error(`Failed to update todo status. Status: ${response.status}`);
         }
         
-        // Перезагрузка всех карточек - в реальном приложении было бы более целенаправленно
+        // Reload all cards - in a real application, this would be more targeted
         if (activeBoard) {
             for (const list of lists) {
                 await loadCards(activeBoard.id, list.id);
@@ -812,12 +836,12 @@ async function handleUpdateTodoStatus(todoId, completed) {
         }
     } catch (error) {
         console.error('Error updating todo status:', error);
-        showToast('Ошибка', 'Не удалось обновить статус задачи. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to update task status. Please try again.', 'error');
     }
 }
 
 async function handleDeleteTodo(todoId) {
-    if (!confirm('Вы уверены, что хотите удалить эту задачу?')) return;
+    if (!confirm('Are you sure you want to delete this task?')) return;
     
     try {
         const response = await fetch(`${apiBaseUrl}/todos/${todoId}`, { method: 'DELETE' });
@@ -826,7 +850,7 @@ async function handleDeleteTodo(todoId) {
             throw new Error(`Failed to delete todo. Status: ${response.status}`);
         }
         
-        // Перезагрузка всех карточек
+        // Reload all cards
         if (activeBoard) {
             for (const list of lists) {
                 await loadCards(activeBoard.id, list.id);
@@ -834,49 +858,49 @@ async function handleDeleteTodo(todoId) {
             renderLists();
         }
         
-        showToast('Успешно', 'Задача успешно удалена', 'success');
+        showToast('Success', 'Task deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting todo:', error);
-        showToast('Ошибка', 'Не удалось удалить задачу. Пожалуйста, попробуйте снова.', 'error');
+        showToast('Error', 'Failed to delete task. Please try again.', 'error');
     }
 }
 
-// Функции рендеринга
+// Rendering functions
 function renderBoards() {
     const boardsList = document.getElementById('boardsList');
     
-    // Удаляем все элементы досок, кроме спиннера загрузки
+    // Remove all board elements except loading spinner
     const loadingSpinner = document.getElementById('boardsLoading');
     const boardItems = boardsList.querySelectorAll('.board-item');
     boardItems.forEach(item => item.remove());
     
-    // Проверяем, есть ли доски
+    // Check if there are boards
     if (boards.length === 0) {
         const emptyMessage = document.createElement('div');
         emptyMessage.className = 'empty-message';
-        emptyMessage.textContent = 'У вас еще нет досок. Создайте новую доску.';
+        emptyMessage.textContent = 'You don\'t have any boards yet. Create a new board.';
         boardsList.appendChild(emptyMessage);
         return;
     }
     
-    // Сортируем доски по имени
+    // Sort boards by name
     const sortedBoards = [...boards].sort((a, b) => a.name.localeCompare(b.name));
     
-    // Создаем элементы для каждой доски
+    // Create elements for each board
     sortedBoards.forEach(board => {
         const boardItem = document.createElement('div');
         boardItem.className = `board-item ${activeBoard && activeBoard.id === board.id ? 'active' : ''}`;
         boardItem.dataset.boardId = board.id;
         
         boardItem.innerHTML = `
-            <span class="board-name">${board.name}</span>
+            <div class="board-name"><span>${board.name}</span></div>
             <div class="board-actions">
-                <button class="btn-edit-board" title="Редактировать"><i class="fas fa-edit"></i></button>
-                <button class="btn-delete-board" title="Удалить"><i class="fas fa-trash"></i></button>
+                <button class="btn-edit-board" title="Edit"><i class="fas fa-edit"></i></button>
+                <button class="btn-delete-board" title="Delete"><i class="fas fa-trash"></i></button>
             </div>
         `;
         
-        // Добавляем обработчики событий
+        // Add event handlers
         boardItem.addEventListener('click', (e) => {
             if (!e.target.closest('.board-actions')) {
                 selectBoard(board);
@@ -900,40 +924,39 @@ function renderBoards() {
 function renderLists() {
     const listsContainer = document.getElementById('listsContainer');
     
-    // Удаляем все списки, кроме кнопки добавления
-    const addListBtn = document.querySelector('.add-list-container');
+    // Clear container
     listsContainer.innerHTML = '';
     
-    // Добавляем списки
+    // Add lists
     lists.forEach(list => {
         const listElement = document.createElement('div');
         listElement.className = 'list';
         listElement.dataset.listId = list.id;
         
-        // Создаем заголовок списка
+        // Create list header
         const listHeader = document.createElement('div');
         listHeader.className = 'list-header';
         listHeader.innerHTML = `
-            <h3 class="list-title">${list.name}</h3>
+            <h3 class="list-title">${list.name} <span>${list.cards ? list.cards.length : 0}</span></h3>
             <div class="list-actions">
-                <button class="btn-edit" title="Редактировать список"><i class="fas fa-edit"></i></button>
-                <button class="btn-delete" title="Удалить список"><i class="fas fa-trash"></i></button>
+                <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
+                <button class="btn-delete" title="Delete list"><i class="fas fa-trash"></i></button>
             </div>
         `;
         
-        // Добавляем обработчики для кнопок списка
+        // Add handlers for list buttons
         listHeader.querySelector('.btn-edit').addEventListener('click', () => openEditListModal(list.id));
         listHeader.querySelector('.btn-delete').addEventListener('click', () => handleDeleteList(list.id));
         
-        // Создаем контейнер для карточек
+        // Create container for cards
         const listCards = document.createElement('div');
         listCards.className = 'list-cards';
         listCards.dataset.listId = list.id;
         
-        // Включаем возможность перетаскивания
+        // Enable drag and drop
         setupDropZone(listCards);
         
-        // Добавляем карточки в список
+        // Add cards to list
         if (list.cards && list.cards.length > 0) {
             list.cards.forEach(card => {
                 const cardElement = createCardElement(card, list.id);
@@ -941,13 +964,13 @@ function renderLists() {
             });
         }
         
-        // Создаем кнопку добавления карточки
+        // Create add card button
         const addCardBtn = document.createElement('button');
         addCardBtn.className = 'btn-add-card';
-        addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Добавить карточку';
+        addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Add Card';
         addCardBtn.addEventListener('click', () => openCreateCardModal(list.id));
         
-        // Собираем все вместе
+        // Put everything together
         listElement.appendChild(listHeader);
         listElement.appendChild(listCards);
         listElement.appendChild(addCardBtn);
@@ -955,16 +978,16 @@ function renderLists() {
         listsContainer.appendChild(listElement);
     });
     
-    // Добавляем контейнер для кнопки добавления списка
+    // Add container for add list button
     const addListContainer = document.createElement('div');
     addListContainer.className = 'add-list-container';
     addListContainer.innerHTML = `
         <button id="addListBtn" class="btn-add-list">
-            <i class="fas fa-plus"></i> Добавить список
+            <i class="fas fa-plus"></i> Add List
         </button>
     `;
     
-    // Добавляем обработчик для кнопки добавления списка
+    // Add handler for add list button
     addListContainer.querySelector('#addListBtn').addEventListener('click', () => openModal(createListModal));
     
     listsContainer.appendChild(addListContainer);
@@ -976,33 +999,33 @@ function createCardElement(card, listId) {
     cardElement.dataset.cardId = card.id;
     cardElement.dataset.listId = listId;
     
-    // Делаем карточку перетаскиваемой
+    // Make card draggable
     cardElement.draggable = true;
     setupDraggable(cardElement);
     
-    // Готовим информацию о приоритете
+    // Prepare priority information
     let priorityClass = '';
     let priorityText = '';
     
     switch (card.priority) {
         case 'low':
             priorityClass = 'priority-low';
-            priorityText = 'Низкий';
+            priorityText = 'Low';
             break;
         case 'medium':
             priorityClass = 'priority-medium';
-            priorityText = 'Средний';
+            priorityText = 'Medium';
             break;
         case 'high':
             priorityClass = 'priority-high';
-            priorityText = 'Высокий';
+            priorityText = 'High';
             break;
         default:
             priorityClass = 'priority-medium';
-            priorityText = 'Средний';
+            priorityText = 'Medium';
     }
     
-    // Получаем информацию о пользователе, если карточка назначена
+    // Get user information if card is assigned
     let assigneeHtml = '';
     if (card.assigned_to) {
         const assignedUser = users.find(user => user.id === parseInt(card.assigned_to));
@@ -1017,7 +1040,7 @@ function createCardElement(card, listId) {
         }
     }
     
-    // Готовим информацию о сроке выполнения
+    // Prepare deadline information
     let deadlineHtml = '';
     if (card.deadline) {
         const deadline = new Date(card.deadline);
@@ -1032,7 +1055,7 @@ function createCardElement(card, listId) {
         `;
     }
     
-    // Готовим информацию о задачах
+    // Prepare task information
     let todosHtml = '';
     let todoProgress = 0;
     
@@ -1048,13 +1071,13 @@ function createCardElement(card, listId) {
                     <div class="todo-progress-bar" style="width: ${todoProgress}%"></div>
                 </div>
                 <div class="todo-summary">
-                    ${completedTodos}/${totalTodos} задач выполнено
+                    ${completedTodos}/${totalTodos} tasks completed
                 </div>
             </div>
         `;
     }
     
-    // Собираем HTML для карточки
+    // Build HTML for card
     cardElement.innerHTML = `
         <div class="card-header">
             <h4 class="card-title">${card.title}</h4>
@@ -1067,39 +1090,39 @@ function createCardElement(card, listId) {
             ${todosHtml}
         </div>
         <div class="card-actions">
-            <button class="btn-toggle-completion" title="${card.completed ? 'Отметить как незавершенное' : 'Отметить как завершенное'}">
+            <button class="btn-toggle-completion" title="${card.completed ? 'Mark as incomplete' : 'Mark as complete'}">
                 <i class="fas ${card.completed ? 'fa-check-square' : 'fa-square'}"></i>
             </button>
-            <button class="btn-edit-card" title="Редактировать карточку">
+            <button class="btn-edit-card" title="Edit card">
                 <i class="fas fa-edit"></i>
             </button>
-            <button class="btn-delete-card" title="Удалить карточку">
+            <button class="btn-delete-card" title="Delete card">
                 <i class="fas fa-trash"></i>
             </button>
         </div>
     `;
     
-    // Добавляем обработчики событий
+    // Add event handlers
     cardElement.addEventListener('click', (e) => {
-        // Открываем редактирование карточки только если не кликнули на кнопки
+        // Open card editing only if not clicked on buttons
         if (!e.target.closest('.card-actions')) {
             openEditCardModal(card.id, listId);
         }
     });
     
-    // Обработчик переключения статуса завершения
+    // Handler for toggling completion status
     cardElement.querySelector('.btn-toggle-completion').addEventListener('click', (e) => {
         e.stopPropagation();
         handleToggleCardCompletion(card.id, listId, card.completed);
     });
     
-    // Обработчик редактирования карточки
+    // Handler for editing card
     cardElement.querySelector('.btn-edit-card').addEventListener('click', (e) => {
         e.stopPropagation();
         openEditCardModal(card.id, listId);
     });
     
-    // Обработчик удаления карточки
+    // Handler for deleting card
     cardElement.querySelector('.btn-delete-card').addEventListener('click', (e) => {
         e.stopPropagation();
         handleDeleteCard(card.id, listId);
@@ -1108,15 +1131,15 @@ function createCardElement(card, listId) {
     return cardElement;
 }
 
-// Функции для работы с модальными окнами
+// Modal functions
 function openModal(modal) {
-    // Закрываем все открытые модальные окна
+    // Close all open modals
     closeAllModals();
     
-    // Открываем выбранное модальное окно
+    // Open selected modal
     modal.classList.add('active');
     
-    // Добавляем обработчик для закрытия модального окна по клику вне него
+    // Add handler to close modal when clicking outside
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             closeAllModals();
@@ -1130,24 +1153,24 @@ function closeAllModals() {
     });
 }
 
-// Вспомогательные функции
+// Helper functions
 function selectBoard(board) {
     activeBoard = board;
     
-    // Обновляем активную доску в UI
+    // Update active board in UI
     document.querySelectorAll('.board-item').forEach(item => {
         item.classList.toggle('active', parseInt(item.dataset.boardId) === board.id);
     });
     
-    // Обновляем заголовок и действия с доской
+    // Update title and board actions
     document.getElementById('activeBoardTitle').textContent = board.name;
     document.getElementById('boardActions').style.display = 'flex';
     
-    // Скрываем сообщение о выборе доски и показываем контейнер списков
+    // Hide select board message and show lists container
     document.getElementById('selectBoardMessage').style.display = 'none';
     document.getElementById('listsContainer').style.display = 'flex';
     
-    // Загружаем списки для выбранной доски
+    // Load lists for selected board
     loadLists(board.id);
 }
 
@@ -1169,7 +1192,7 @@ function showToast(title, message, type = 'success') {
     
     toastContainer.appendChild(toast);
     
-    // Удаляем уведомление через 3 секунды
+    // Remove toast after 3 seconds
     setTimeout(() => {
         toast.remove();
     }, 3000);
@@ -1224,11 +1247,11 @@ function addTodoItem(containerId) {
     todoItem.className = 'todo-item';
     
     todoItem.innerHTML = `
-        <input type="text" class="todo-input" placeholder="Добавьте задачу...">
+        <input type="text" class="todo-input" placeholder="Add a task...">
         <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
     `;
     
-    // Добавляем обработчик удаления
+    // Add remove handler
     todoItem.querySelector('.btn-remove-todo').addEventListener('click', () => {
         todoItem.remove();
     });
@@ -1237,12 +1260,12 @@ function addTodoItem(containerId) {
 }
 
 function populateUserSelect(selectElement) {
-    // Очищаем список пользователей, оставляя только первую опцию "Не назначен"
+    // Clear user list, keeping only first option "Not assigned"
     while (selectElement.options.length > 1) {
         selectElement.remove(1);
     }
     
-    // Добавляем пользователей в выпадающий список
+    // Add users to dropdown
     users.forEach(user => {
         const option = document.createElement('option');
         option.value = user.id;
@@ -1251,7 +1274,7 @@ function populateUserSelect(selectElement) {
     });
 }
 
-// Функции для drag-and-drop
+// Drag and drop functions
 function setupDraggable(element) {
     element.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/plain', e.target.dataset.cardId);
@@ -1292,3 +1315,12 @@ function setupDropZone(element) {
         }
     });
 }
+
+// Toggle sidebar collapsed state
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+}
+
+// Initialize edit list form handler
+document.getElementById('editListForm').addEventListener('submit', handleEditList);
