@@ -1,15 +1,16 @@
 # app.py
 
-from flask import Flask, redirect, url_for, request
+from flask import Flask, redirect, url_for, request, session
 from flask_socketio import SocketIO
 from flask_cors import CORS
 from flask_login import LoginManager, current_user
 import os
 from flask_migrate import Migrate
-from flask_security import Security, SQLAlchemyUserDatastore
+from datetime import timedelta  # Для установки времени жизни сессии
 from functools import wraps
 from routes.models import Role, User
 from werkzeug.security import generate_password_hash
+
 
 from routes.documents import documents_bp
 from routes.chat import chat_bp, socketio
@@ -39,23 +40,31 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 
 # Настройка Flask-Security
 app.config['SECRET_KEY'] = 'your_secret_key_here'
-app.config['SECURITY_PASSWORD_SALT'] = 'your_security_salt'
-app.config['SECURITY_UNAUTHORIZED_VIEW'] = 'auth.login'
+
+# Настройка сессии для Flask-Login
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=14)  # Устанавливаем длительное время жизни cookie
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
 
 # Инициализация LoginManager
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
+login_manager.session_protection = "strong"  # Усиленная защита сессии
+
+# Пользовательская функция загрузки пользователя
+@login_manager.user_loader
+def load_user(user_id):
+    print(f"Loading user with ID: {user_id}")
+    user = User.query.get(int(user_id))
+    print(f"Loaded user: {user}")
+    return user
 
 # Инициализация базы данных
 db.init_app(app)
 migrate = Migrate(app, db)
 # Передаём login_manager в auth.py
 init_login_manager(login_manager)
-
-# Настройка Flask-Security
-user_datastore = SQLAlchemyUserDatastore(db, User, Role)
-security = Security(app, user_datastore)
 
 # Функция для создания начальных ролей и админа
 def create_initial_roles_and_admin():
@@ -109,8 +118,8 @@ app.register_blueprint(chat_bp, url_prefix='/chat')
 app.register_blueprint(zoom_bp, url_prefix='/zoom')
 app.register_blueprint(reports_bp, url_prefix='/reports')
 app.register_blueprint(kpi_bp, url_prefix='/kpi')
-app.register_blueprint(auth_bp, url_prefix='/auth')
-app.register_blueprint(kanban_bp, url_prefix='/kanban')  # Регистрируем его
+app.register_blueprint(auth_bp, url_prefix='/auth')  # Без url_prefix
+app.register_blueprint(kanban_bp, url_prefix='/kanban')  # Без url_prefix
 app.register_blueprint(trash_bp, url_prefix='/trash')
 
 
@@ -119,46 +128,58 @@ app.register_blueprint(trash_bp, url_prefix='/trash')
 def index():
     return redirect(url_for('auth.login'))
 
+# Тестовый маршрут для проверки сессии
+@app.route('/test-session')
+def test_session():
+    return f"""
+    <h1>Информация о сессии</h1>
+    <p>Пользователь аутентифицирован: {current_user.is_authenticated}</p>
+    <p>ID пользователя: {current_user.id if current_user.is_authenticated else 'None'}</p>
+    <p>Имя пользователя: {current_user.username if current_user.is_authenticated else 'None'}</p>
+    <p>Session: {session}</p>
+    <a href="/login">Войти</a> | <a href="/logout">Выйти</a> | <a href="/kanban">Канбан</a>
+    """
+
 # Глобальная защита маршрутов
 @app.before_request
 def check_login():
-    open_routes = [
-        'auth.login', 
-        'auth.register', 
-        'static',  # Разрешить доступ к статическим файлам
+    # Список путей, доступных без аутентификации
+    open_paths = [
+        '/login',
+        '/register',
+        '/auth/login',
+        '/auth/register',
+        '/static',
+        '/',
+        '/test-session'
     ]
-    if not current_user.is_authenticated and request.endpoint not in open_routes:
-        return redirect(url_for('auth.login'))
-
-# Функция для создания начальных данных
-def create_initial_data():
-    db.create_all()
     
-    # Создание ролей
-    if not user_datastore.find_role("admin"):
-        user_datastore.create_role(name="admin", description="Администратор с полным доступом")
-
-    if not user_datastore.find_role("user"):
-        user_datastore.create_role(name="user", description="Обычный пользователь")
-
-    # Создание пользователя-администратора, если он не существует
-    if not user_datastore.find_user(username="admin"):
-        admin_user = user_datastore.create_user(
-            username="admin",
-            email="admin@example.com",
-            password="123",  # В реальном проекте используйте хешированный пароль
-            # fs_uniquifier=os.urandom(16).hex()  # Добавляем fs_uniquifier
-        )
-        user_datastore.add_role_to_user(admin_user, "admin")
+    # Печать для отладки
+    print(f"Processing request: {request.path}")
+    print(f"Current user: {current_user}, authenticated: {current_user.is_authenticated}")
+    
+    # Разрешаем доступ к статическим файлам
+    if request.path.startswith('/static/'):
+        return None
         
-    db.session.commit()
+    # Разрешаем доступ к открытым путям
+    for path in open_paths:
+        if request.path.startswith(path):
+            return None
+        
+    # Если пользователь не аутентифицирован, перенаправляем на логин
+    if not current_user.is_authenticated:
+        print(f"Redirecting unauthenticated user from {request.path} to login")
+        return redirect('/login')
+
+# Вызываем функции инициализации в контексте приложения
+with app.app_context():
+    db.create_all()
+    create_initial_roles_and_admin()
 
 UPLOAD_FOLDER = "uploaded_documents"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.before_request
-def before_request():
-    db.create_all()
 with app.app_context():
     admin = User.query.filter_by(username='admin').first()
     if admin:
@@ -171,10 +192,6 @@ with app.app_context():
         print(f"Пользователь {admin.username} теперь администратор: {getattr(admin, 'is_admin', False)}")
     else:
         print("Пользователь admin не найден")
-
-# Вызываем функции инициализации в контексте приложения
-with app.app_context():
-    create_initial_roles_and_admin()
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000)

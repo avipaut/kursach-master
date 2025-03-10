@@ -1,3 +1,5 @@
+# auth.py
+
 import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -91,32 +93,47 @@ def register():
     return render_template('register.html')
 
 
-from routes.models import db, User  # Импортируй свою модель
-
-
+# from models import db, User  # Импортируй свою модель
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    print("Login route accessed. Method:", request.method)
     if request.method == 'POST':
-        username_or_email = request.form['username']  # Поле может содержать имя пользователя или email
+        username_or_email = request.form['username']
         password = request.form['password']
         
-        # Ищем пользователя по имени или email
+        print(f"Attempting login for user: {username_or_email}")
+        
         user = User.query.filter((User.username == username_or_email) | (User.email == username_or_email)).first()
         
-        if user and check_password_hash(user.password, password):
-            login_user(user)
-            flash('Вы успешно вошли!', 'success')
-            next_page = request.args.get('next')
+        if user:
+            print(f"User found: {user.username}")
+            password_check = check_password_hash(user.password, password)
+            print(f"Password check: {password_check}")
             
-            # Перенаправляем на разные страницы в зависимости от роли
-            if check_role('admin'):
-                return redirect(next_page or url_for('auth.admin_panel'))
-            return redirect(next_page or url_for('kanban.kanban_board'))
+            if password_check:
+                # Важно включить remember=True
+                login_user(user, remember=True)
+                
+                from flask import session
+                session.permanent = True  # Сделать сессию постоянной
+                
+                print(f"User {user.username} logged in successfully")
+                print(f"Is authenticated after login: {current_user.is_authenticated}")
+                print(f"Current user ID: {current_user.id}")
+                print(f"Session data: {session}")
+                
+                # Простое перенаправление без url_for
+                if hasattr(user, 'is_admin') and user.is_admin:
+                    return redirect(url_for('auth.admin_panel'))           
+                else:
+                    return redirect(url_for('kanban.kanban_board'))        
+                
+        else:
+            print("User not found")
             
         flash('Неверное имя пользователя/email или пароль!', 'danger')
     
     return render_template('login.html')
-
 # === Выход ===
 @auth_bp.route('/logout')
 @login_required
@@ -143,7 +160,7 @@ def admin_panel():
     return render_template('admin_panel.html', users=users, roles=roles, now=datetime.now())
 
 # === Получение всех пользователей (JSON, только для админов) ===
-@auth_bp.route('/kanban/users')
+@auth_bp.route('/users')
 @role_required('admin')  # This now includes login_required
 def get_users():
     users = User.query.all()
@@ -151,7 +168,7 @@ def get_users():
     return jsonify(user_list)
 
 # === Изменение ролей пользователя (только для админов) ===
-@auth_bp.route('/kanban/users/<int:user_id>/roles', methods=['POST'])
+@auth_bp.route('/users/<int:user_id>/roles', methods=['POST'])
 @role_required('admin')  # This now includes login_required
 def update_user_roles(user_id):
     user = User.query.get_or_404(user_id)
@@ -172,7 +189,7 @@ def update_user_roles(user_id):
     return redirect(url_for('auth.admin_panel'))
 
 # === Создание новой роли (только для админов) ===
-@auth_bp.route('/kanban/roles', methods=['POST'])
+@auth_bp.route('/roles', methods=['POST'])
 @role_required('admin')  # This now includes login_required
 def create_role():
     name = request.form.get('name')
