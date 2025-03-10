@@ -4,6 +4,10 @@ let activeBoard = null;
 let lists = [];
 let users = [];
 let apiBaseUrl = '';
+let useFullColorPriority = true;
+let isAdmin = false;
+let currentUserName = '';
+
 
 // DOM elements for modal windows
 const createBoardModal = document.getElementById('createBoardModal');
@@ -22,6 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
     fetchAllUsers();
     loadBoards();
+    initializeSearch();
+    fetchCurrentUser();
+    addAdminStyles();
+
 
     // Event handlers for creating boards
     document.getElementById('createBoardBtn').addEventListener('click', () => openModal(createBoardModal));
@@ -53,7 +61,75 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Toggle sidebar collapse
     document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
+     // Add toggle for priority color style
+     const togglePriorityStyleBtn = document.createElement('button');
+     togglePriorityStyleBtn.className = 'btn btn-sm btn-light';
+     togglePriorityStyleBtn.innerHTML = '<i class="fas fa-palette"></i> Toggle Priority Style';
+     togglePriorityStyleBtn.addEventListener('click', togglePriorityStyle);
+     
+     // Add to board controls
+     const boardControls = document.querySelector('.board-controls');
+     if (boardControls) {
+         boardControls.appendChild(togglePriorityStyleBtn);
+     }
 });
+// Fetch current user details
+async function fetchCurrentUser() {
+    try {
+        const response = await fetch(`${apiBaseUrl}/kanban/api/current_user`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch user info. Status: ${response.status}`);
+        }
+        
+        const userData = await response.json();
+        currentUserName = userData.username;
+        isAdmin = userData.is_admin;
+        
+        console.log('Current user:', currentUserName, 'Admin status:', isAdmin);
+        
+        // Update UI based on permissions
+        updateUIBasedOnPermissions();
+    } catch (error) {
+        console.error('Error fetching current user:', error);
+    }
+}
+
+// Update UI elements based on user permissions
+function updateUIBasedOnPermissions() {
+    // Hide create/edit/delete buttons for non-admins
+    if (!isAdmin) {
+        // Hide board management buttons
+        document.getElementById('createBoardBtn')?.classList.add('hidden');
+        document.querySelectorAll('.btn-edit-board, .btn-delete-board').forEach(btn => {
+            btn.classList.add('hidden');
+        });
+        
+        // Hide list management buttons
+        document.querySelectorAll('.btn-add-list').forEach(btn => {
+            btn.classList.add('hidden');
+        });
+        
+        // We'll keep the toggle completion button visible for non-admins
+        // but hide other card management buttons
+        document.querySelectorAll('.btn-add-card').forEach(btn => {
+            btn.classList.add('hidden');
+        });
+    }
+    
+    // Show admin indicator in UI if admin
+    if (isAdmin) {
+        const userInfo = document.createElement('div');
+        userInfo.className = 'admin-badge';
+        userInfo.innerHTML = '<i class="fas fa-shield-alt"></i> Admin';
+        
+        // Add it to the navbar if possible
+        const navbar = document.querySelector('.navbar-right');
+        if (navbar) {
+            navbar.insertBefore(userInfo, navbar.firstChild);
+        }
+    }
+}
+
 
 // Data loading functions
 async function loadBoards() {
@@ -153,24 +229,180 @@ async function fetchAllUsers() {
     }
 }
 
-// Function to update all user dropdown lists
-function populateUserSelects() {
-    const selects = [
-        document.getElementById('cardAssignee'),
-        document.getElementById('editCardAssignee')
-    ];
+function populateUserSelect(selectElement) {
+    // Clear user list, keeping only first option "Not assigned"
+    while (selectElement.options.length > 1) {
+        selectElement.remove(1);
+    }
     
-    selects.forEach(select => {
-        if (select) populateUserSelect(select);
+    // Add users to dropdown
+    users.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.username || user.name || `User ${user.id}`;
+        selectElement.appendChild(option);
+    });
+}
+// Initialize search functionality
+function initializeSearch() {
+    const searchInput = document.getElementById('searchInput');
+    if (!searchInput) return;
+    
+    // Create search results container
+    const searchResults = document.createElement('div');
+    searchResults.className = 'search-results';
+    searchInput.parentNode.appendChild(searchResults);
+    
+    searchInput.addEventListener('input', handleSearch);
+    searchInput.addEventListener('focus', () => {
+        if (searchInput.value.trim() !== '') {
+            searchResults.classList.add('active');
+        }
+    });
+    
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.classList.remove('active');
+        }
     });
 }
 
-// Board management functions
+// Handle search input
+function handleSearch(e) {
+    const searchTerm = e.target.value.trim().toLowerCase();
+    const searchResults = document.querySelector('.search-results');
+    
+    if (searchTerm === '') {
+        searchResults.classList.remove('active');
+        return;
+    }
+    
+    // Collect search results
+    const results = [];
+    
+    // Search boards
+    boards.forEach(board => {
+        if (board.name.toLowerCase().includes(searchTerm)) {
+            results.push({
+                type: 'board',
+                id: board.id,
+                title: board.name,
+                subtitle: 'Board'
+            });
+        }
+    });
+    
+    // Search lists
+    lists.forEach(list => {
+        if (list.name.toLowerCase().includes(searchTerm)) {
+            results.push({
+                type: 'list',
+                id: list.id,
+                title: list.name,
+                subtitle: 'List',
+                boardId: activeBoard ? activeBoard.id : null
+            });
+        }
+        
+        // Search cards in this list
+        if (list.cards && list.cards.length > 0) {
+            list.cards.forEach(card => {
+                if (card.title.toLowerCase().includes(searchTerm) || 
+                   (card.description && card.description.toLowerCase().includes(searchTerm))) {
+                    results.push({
+                        type: 'card',
+                        id: card.id,
+                        listId: list.id,
+                        title: card.title,
+                        subtitle: `Card in ${list.name}`,
+                        boardId: activeBoard ? activeBoard.id : null
+                    });
+                }
+            });
+        }
+    });
+    
+    // Display results
+    if (results.length > 0) {
+        searchResults.innerHTML = '';
+        results.forEach(result => {
+            const resultItem = document.createElement('div');
+            resultItem.className = 'search-result-item';
+            resultItem.innerHTML = `
+                <div class="result-title">${result.title}</div>
+                <div class="result-subtitle">${result.subtitle}</div>
+            `;
+            
+            resultItem.addEventListener('click', () => {
+                handleSearchResultClick(result);
+                searchResults.classList.remove('active');
+            });
+            
+            searchResults.appendChild(resultItem);
+        });
+        searchResults.classList.add('active');
+    } else {
+        searchResults.innerHTML = '<div class="search-result-item">No results found</div>';
+        searchResults.classList.add('active');
+    }
+}
+
+// Handle click on search result
+function handleSearchResultClick(result) {
+    switch (result.type) {
+        case 'board':
+            const board = boards.find(b => b.id === result.id);
+            if (board) {
+                selectBoard(board);
+            }
+            break;
+        case 'list':
+            // First select the board if needed
+            if (activeBoard && activeBoard.id !== result.boardId) {
+                const board = boards.find(b => b.id === result.boardId);
+                if (board) {
+                    selectBoard(board);
+                }
+            }
+            
+            // Then scroll to list
+            setTimeout(() => {
+                const listElement = document.querySelector(`.list[data-list-id="${result.id}"]`);
+                if (listElement) {
+                    listElement.scrollIntoView({ behavior: 'smooth' });
+                    listElement.classList.add('highlight');
+                    setTimeout(() => {
+                        listElement.classList.remove('highlight');
+                    }, 2000);
+                }
+            }, 500);
+            break;
+        case 'card':
+            // First select the board if needed
+            if (activeBoard && activeBoard.id !== result.boardId) {
+                const board = boards.find(b => b.id === result.boardId);
+                if (board) {
+                    selectBoard(board);
+                }
+            }
+            
+            // Then open the card
+            setTimeout(() => {
+                openEditCardModal(result.id, result.listId);
+            }, 500);
+            break;
+    }
+}
+// Override board creation to support admin-only option
 async function handleCreateBoard(event) {
     event.preventDefault();
     
     const nameInput = document.getElementById('boardName');
     const name = nameInput.value.trim();
+    
+    // Get admin-only checkbox value if it exists
+    const adminOnlyInput = document.getElementById('boardAdminOnly');
+    const adminOnly = adminOnlyInput ? adminOnlyInput.checked : false;
     
     if (!name) return;
     
@@ -178,10 +410,17 @@ async function handleCreateBoard(event) {
         const response = await fetch(`${apiBaseUrl}/boards`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
+            body: JSON.stringify({ 
+                name,
+                admin_only: adminOnly 
+            }),
         });
         
         if (!response.ok) {
+            if (response.status === 403) {
+                showToast('Error', 'You need administrator privileges to create boards', 'error');
+                return;
+            }
             throw new Error(`Failed to create board. Status: ${response.status}`);
         }
         
@@ -199,13 +438,58 @@ async function handleCreateBoard(event) {
     }
 }
 
+// Modify the create board modal to include admin-only option
+function openCreateBoardModal() {
+    const modal = document.getElementById('createBoardModal');
+    
+    // Check if we've already added the admin-only checkbox
+    if (isAdmin && !document.getElementById('boardAdminOnly')) {
+        const formGroup = document.createElement('div');
+        formGroup.className = 'form-group checkbox-group mt-3';
+        formGroup.innerHTML = `
+            <input type="checkbox" id="boardAdminOnly" class="form-check-input">
+            <label for="boardAdminOnly">Admin-only board</label>
+        `;
+        
+        // Add it before the form actions
+        const formActions = modal.querySelector('.form-actions');
+        formActions.parentNode.insertBefore(formGroup, formActions);
+    }
+    
+    openModal(modal);
+}
+
+// Modify board editing to include admin-only option
 function openEditBoardModal() {
     if (!activeBoard) return;
     
     document.getElementById('editBoardName').value = activeBoard.name;
-    openModal(editBoardModal);
+    
+    // Check if we've already added the admin-only checkbox
+    if (isAdmin && !document.getElementById('editBoardAdminOnly')) {
+        const formGroup = document.createElement('div');
+        formGroup.className = 'form-group checkbox-group mt-3';
+        formGroup.innerHTML = `
+            <input type="checkbox" id="editBoardAdminOnly" class="form-check-input">
+            <label for="editBoardAdminOnly">Admin-only board</label>
+        `;
+        
+        // Add it before the form actions
+        const modal = document.getElementById('editBoardModal');
+        const formActions = modal.querySelector('.form-actions');
+        formActions.parentNode.insertBefore(formGroup, formActions);
+    }
+    
+    // Set the admin-only checkbox value if it exists
+    const adminOnlyInput = document.getElementById('editBoardAdminOnly');
+    if (adminOnlyInput) {
+        adminOnlyInput.checked = activeBoard.admin_only || false;
+    }
+    
+    openModal(document.getElementById('editBoardModal'));
 }
 
+// Override board editing to support admin-only option
 async function handleEditBoard(event) {
     event.preventDefault();
     
@@ -214,28 +498,41 @@ async function handleEditBoard(event) {
     const nameInput = document.getElementById('editBoardName');
     const name = nameInput.value.trim();
     
+    // Get admin-only checkbox value if it exists
+    const adminOnlyInput = document.getElementById('editBoardAdminOnly');
+    const adminOnly = adminOnlyInput ? adminOnlyInput.checked : false;
+    
     if (!name) return;
     
     try {
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
+            body: JSON.stringify({ 
+                name,
+                admin_only: adminOnly 
+            }),
         });
         
         if (!response.ok) {
+            if (response.status === 403) {
+                showToast('Error', 'You need administrator privileges to edit boards', 'error');
+                return;
+            }
             throw new Error(`Failed to update board. Status: ${response.status}`);
         }
         
-        await response.json();
+        const updatedBoard = await response.json();
         
-        // Update name of active board
+        // Update name and admin_only status of active board
         activeBoard.name = name;
+        activeBoard.admin_only = adminOnly;
         
         // Update board list
         const boardIndex = boards.findIndex(board => board.id === activeBoard.id);
         if (boardIndex !== -1) {
             boards[boardIndex].name = name;
+            boards[boardIndex].admin_only = adminOnly;
         }
         
         renderBoards();
@@ -248,6 +545,73 @@ async function handleEditBoard(event) {
         showToast('Error', 'Failed to update board. Please try again.', 'error');
     }
 }
+
+// Override rendering to show admin-only indicators
+function renderBoards() {
+    const boardsList = document.getElementById('boardsList');
+    
+    // Remove all board elements except loading spinner
+    const loadingSpinner = document.getElementById('boardsLoading');
+    const boardItems = boardsList.querySelectorAll('.board-item');
+    boardItems.forEach(item => item.remove());
+    
+    // Check if there are boards
+    if (boards.length === 0) {
+        const emptyMessage = document.createElement('div');
+        emptyMessage.className = 'empty-message';
+        emptyMessage.textContent = 'You don\'t have any boards yet. Create a new board.';
+        boardsList.appendChild(emptyMessage);
+        return;
+    }
+    
+    // Sort boards by name
+    const sortedBoards = [...boards].sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Create elements for each board
+    sortedBoards.forEach(board => {
+        const boardItem = document.createElement('div');
+        boardItem.className = `board-item ${activeBoard && activeBoard.id === board.id ? 'active' : ''}`;
+        if (board.admin_only) {
+            boardItem.classList.add('admin-only');
+        }
+        boardItem.dataset.boardId = board.id;
+        
+        boardItem.innerHTML = `
+            <div class="board-name">
+                <span>${board.name}</span>
+                ${board.admin_only ? '<span class="admin-badge"><i class="fas fa-lock"></i></span>' : ''}
+            </div>
+            <div class="board-actions">
+                ${isAdmin ? `
+                    <button class="btn-edit-board" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button class="btn-delete-board" title="Delete"><i class="fas fa-trash"></i></button>
+                ` : ''}
+            </div>
+        `;
+        
+        // Add event handlers
+        boardItem.addEventListener('click', (e) => {
+            if (!e.target.closest('.board-actions')) {
+                selectBoard(board);
+            }
+        });
+        
+        if (isAdmin) {
+            boardItem.querySelector('.btn-edit-board')?.addEventListener('click', () => {
+                selectBoard(board);
+                openEditBoardModal();
+            });
+            
+            boardItem.querySelector('.btn-delete-board')?.addEventListener('click', () => {
+                selectBoard(board);
+                handleDeleteBoard();
+            });
+        }
+        
+        boardsList.appendChild(boardItem);
+    });
+}
+
 
 async function handleDeleteBoard() {
     if (!activeBoard) return;
@@ -425,7 +789,20 @@ function openCreateCardModal(listId) {
     // Open modal
     openModal(createCardModal);
 }
-
+// Helper function to get priority color
+function getPriorityColor(priority) {
+    switch (priority) {
+        case 'low':
+            return '#10b981';  // Green
+        case 'medium':
+            return '#f59e0b';  // Amber
+        case 'high':
+            return '#ef4444';  // Red
+        default:
+            return '#3788d8';  // Blue
+    }
+}
+// Update card creation to sync with calendar
 async function handleCreateCard(event) {
     event.preventDefault();
     
@@ -437,12 +814,15 @@ async function handleCreateCard(event) {
     const title = document.getElementById('cardTitle').value.trim();
     const description = document.getElementById('cardDescription').value.trim();
     const priority = document.getElementById('cardPriority').value;
-    const assignedTo = document.getElementById('cardAssignee').value;
+    const assignedToElement = document.getElementById('cardAssignee');
+    const assignedTo = assignedToElement ? assignedToElement.value : '';
     const deadline = document.getElementById('cardDeadline').value;
     
     if (!title) return;
     
     try {
+        console.log('Creating card with assigned user:', assignedTo);
+        
         // Create basic card
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards`, {
             method: 'POST',
@@ -451,6 +831,7 @@ async function handleCreateCard(event) {
                 title,
                 description,
                 priority,
+                completed: false
             }),
         });
         
@@ -459,6 +840,7 @@ async function handleCreateCard(event) {
         }
         
         const newCard = await response.json();
+        console.log('Card created successfully:', newCard);
         const cardId = newCard.id;
         
         // Array for additional operations
@@ -473,27 +855,49 @@ async function handleCreateCard(event) {
                     fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/todos`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ content }),
+                        body: JSON.stringify({ content, completed: false }),
                     })
                 );
             }
         }
         
-        // Set deadline
+        // Set deadline and create calendar event
         if (deadline) {
+            const deadlineDate = new Date(deadline);
+            
             operations.push(
                 fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deadline: new Date(deadline).toISOString() }),
+                    body: JSON.stringify({ deadline: deadlineDate.toISOString() }),
+                })
+            );
+            
+            // Add to Zoom calendar
+            const endDate = new Date(deadlineDate);
+            endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
+            
+            operations.push(
+                fetch('/zoom/create_task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: title,
+                        start: deadlineDate.toISOString(),
+                        end: endDate.toISOString(),
+                        description: description,
+                        color: getPriorityColor(priority),
+                        allDay: false,
+                        kanban_card_id: cardId // Link to the original card
+                    }),
                 })
             );
         }
         
-        // Assign user
+        // User assignment - use the correct route with /kanban prefix
         if (assignedTo) {
             operations.push(
-                fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
+                fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ user_id: assignedTo }),
@@ -502,7 +906,7 @@ async function handleCreateCard(event) {
         }
         
         // Execute all operations
-        await Promise.all(operations);
+        await Promise.allSettled(operations);
         
         // Reload cards for updated list
         await loadCards(activeBoard.id, listId);
@@ -516,7 +920,82 @@ async function handleCreateCard(event) {
         showToast('Error', 'Failed to create card. Please try again.', 'error');
     }
 }
+// Sync existing cards with deadlines to the calendar
+async function syncCardsToCalendar() {
+    if (!activeBoard) return;
+    
+    let allCards = [];
+    
+    // Collect all cards with deadlines from all lists
+    for (const list of lists) {
+        if (list.cards && list.cards.length > 0) {
+            const cardsWithDeadlines = list.cards.filter(card => card.deadline);
+            allCards = [...allCards, ...cardsWithDeadlines];
+        }
+    }
+    
+    if (allCards.length === 0) {
+        console.log('No cards with deadlines to sync to calendar');
+        return;
+    }
+    
+    console.log(`Found ${allCards.length} cards with deadlines to sync to calendar`);
+    
+    // Create calendar events for each card with a deadline
+    for (const card of allCards) {
+        const deadlineDate = new Date(card.deadline);
+        const endDate = new Date(deadlineDate);
+        endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
+        
+        try {
+            await fetch('/zoom/create_task', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: card.title,
+                    start: deadlineDate.toISOString(),
+                    end: endDate.toISOString(),
+                    description: card.description || '',
+                    color: getPriorityColor(card.priority),
+                    allDay: false,
+                    kanban_card_id: card.id
+                }),
+            });
+        } catch (error) {
+            console.error(`Error syncing card ${card.id} to calendar:`, error);
+        }
+    }
+    
+    console.log('Calendar sync completed');
+}
 
+// Add a calendar sync button to the UI
+function addCalendarSyncButton() {
+    const boardControls = document.querySelector('.board-controls');
+    if (!boardControls) return;
+    
+    const syncButton = document.createElement('button');
+    syncButton.className = 'btn btn-light';
+    syncButton.innerHTML = '<i class="fas fa-sync"></i> Sync to Calendar';
+    syncButton.addEventListener('click', syncCardsToCalendar);
+    
+    boardControls.appendChild(syncButton);
+}
+
+// Add initialization after DOM content is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Add existing initialization code here
+    
+    // Add calendar sync button
+    addCalendarSyncButton();
+    
+    // Add event handler for completion checkbox
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'editCardCompleted') {
+            console.log('Completion checkbox changed to:', e.target.checked);
+        }
+    });
+});
 function openEditCardModal(cardId, listId) {
     if (!activeBoard) return;
     
@@ -618,23 +1097,26 @@ async function handleUpdateCard(event) {
     const title = document.getElementById('editCardTitle').value.trim();
     const description = document.getElementById('editCardDescription').value.trim();
     const priority = document.getElementById('editCardPriority').value;
-    const assignedTo = document.getElementById('editCardAssignee').value;
+    const assignedToElement = document.getElementById('editCardAssignee');
+    const assignedTo = assignedToElement ? assignedToElement.value : '';
     const deadline = document.getElementById('editCardDeadline').value;
     const completed = document.getElementById('editCardCompleted').checked;
     
     if (!title) return;
     
     try {
-        // Update main card information
+        console.log('Updating card with completion status:', completed);
+        
+        // Main card update - only update title and description here
         const operations = [];
         
         operations.push(
-            fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, {
+            fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title,
-                    description,
+                    description
                 }),
             })
         );
@@ -648,7 +1130,7 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Update completion status
+        // Explicitly set completion status - fix for auto-completion bug
         operations.push(
             fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/toggle-completion`, {
                 method: 'PUT',
@@ -658,24 +1140,51 @@ async function handleUpdateCard(event) {
         );
         
         // Update deadline
-        operations.push(
-            fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    deadline: deadline ? new Date(deadline).toISOString() : null 
-                }),
-            })
-        );
+        if (deadline) {
+            const deadlineDate = new Date(deadline);
+            
+            operations.push(
+                fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        deadline: deadlineDate.toISOString() 
+                    }),
+                })
+            );
+            
+            // Sync with Zoom calendar - update or create task event
+            const endDate = new Date(deadlineDate);
+            endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
+            
+            // First, create or update the event in the Zoom calendar
+            operations.push(
+                fetch('/zoom/create_task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: title,
+                        start: deadlineDate.toISOString(),
+                        end: endDate.toISOString(),
+                        description: description,
+                        color: getPriorityColor(priority),
+                        allDay: false,
+                        kanban_card_id: cardId // Link to the original card
+                    }),
+                })
+            );
+        }
         
-        // Update assignment
-        operations.push(
-            fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: assignedTo }),
-            })
-        );
+        // User assignment - use the correct route with /kanban prefix
+        if (assignedTo) {
+            operations.push(
+                fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: assignedTo }),
+                })
+            );
+        }
         
         // Process tasks
         const todoItems = document.querySelectorAll('#editTodoItems .todo-item');
@@ -714,7 +1223,7 @@ async function handleUpdateCard(event) {
         }
         
         // Execute all operations
-        await Promise.all(operations);
+        await Promise.allSettled(operations);
         
         // Reload cards
         await loadCards(activeBoard.id, listId);
@@ -729,14 +1238,22 @@ async function handleUpdateCard(event) {
     }
 }
 
+// ==== 1. Fix for card deletion ====
+// Fixed card deletion function to match your API route
 async function handleDeleteCard(cardId, listId) {
     if (!activeBoard) return;
     
     if (!confirm('Are you sure you want to delete this card?')) return;
     
     try {
-        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, { 
-            method: 'DELETE' 
+        console.log(`Deleting card: ${cardId} from list: ${listId}`);
+        
+        // Use the correct route with /kanban prefix as shown in the error logs
+        const response = await fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, { 
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         
         if (!response.ok) {
@@ -756,6 +1273,14 @@ async function handleDeleteCard(cardId, listId) {
     } catch (error) {
         console.error('Error deleting card:', error);
         showToast('Error', 'Failed to delete card. Please try again.', 'error');
+        
+        // Fallback: Update UI even if API failed
+        const listIndex = lists.findIndex(list => list.id === listId);
+        if (listIndex !== -1 && lists[listIndex].cards) {
+            lists[listIndex].cards = lists[listIndex].cards.filter(card => card.id !== cardId);
+            renderLists();
+            closeAllModals();
+        }
     }
 }
 
@@ -788,7 +1313,19 @@ async function handleToggleCardCompletion(cardId, listId, currentStatus) {
         showToast('Error', 'Failed to update card status. Please try again.', 'error');
     }
 }
-
+// Helper function to get assignee information
+function getAssigneeInfo(card) {
+    if (!card.assigned_to) return null;
+    
+    const assignedUser = users.find(user => user.id === parseInt(card.assigned_to));
+    if (!assignedUser) return null;
+    
+    return {
+        id: assignedUser.id,
+        name: assignedUser.username || assignedUser.name || `User ${assignedUser.id}`,
+        initials: getInitials(assignedUser.username || assignedUser.name || '')
+    };
+}
 async function handleCardMove(cardId, sourceListId, targetListId) {
     if (!activeBoard) return;
     
@@ -921,6 +1458,7 @@ function renderBoards() {
     });
 }
 
+// Override renderLists to respect admin permissions
 function renderLists() {
     const listsContainer = document.getElementById('listsContainer');
     
@@ -938,23 +1476,29 @@ function renderLists() {
         listHeader.className = 'list-header';
         listHeader.innerHTML = `
             <h3 class="list-title">${list.name} <span>${list.cards ? list.cards.length : 0}</span></h3>
-            <div class="list-actions">
-                <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
-                <button class="btn-delete" title="Delete list"><i class="fas fa-trash"></i></button>
-            </div>
+            ${isAdmin ? `
+                <div class="list-actions">
+                    <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
+                    <button class="btn-delete" title="Delete list"><i class="fas fa-trash"></i></button>
+                </div>
+            ` : ''}
         `;
         
-        // Add handlers for list buttons
-        listHeader.querySelector('.btn-edit').addEventListener('click', () => openEditListModal(list.id));
-        listHeader.querySelector('.btn-delete').addEventListener('click', () => handleDeleteList(list.id));
+        // Add handlers for list buttons if admin
+        if (isAdmin) {
+            listHeader.querySelector('.btn-edit')?.addEventListener('click', () => openEditListModal(list.id));
+            listHeader.querySelector('.btn-delete')?.addEventListener('click', () => handleDeleteList(list.id));
+        }
         
         // Create container for cards
         const listCards = document.createElement('div');
         listCards.className = 'list-cards';
         listCards.dataset.listId = list.id;
         
-        // Enable drag and drop
-        setupDropZone(listCards);
+        // Enable drag and drop if admin
+        if (isAdmin) {
+            setupDropZone(listCards);
+        }
         
         // Add cards to list
         if (list.cards && list.cards.length > 0) {
@@ -964,44 +1508,55 @@ function renderLists() {
             });
         }
         
-        // Create add card button
-        const addCardBtn = document.createElement('button');
-        addCardBtn.className = 'btn-add-card';
-        addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Add Card';
-        addCardBtn.addEventListener('click', () => openCreateCardModal(list.id));
-        
-        // Put everything together
-        listElement.appendChild(listHeader);
-        listElement.appendChild(listCards);
-        listElement.appendChild(addCardBtn);
+        // Create add card button (only for admins)
+        if (isAdmin) {
+            const addCardBtn = document.createElement('button');
+            addCardBtn.className = 'btn-add-card';
+            addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Add Card';
+            addCardBtn.addEventListener('click', () => openCreateCardModal(list.id));
+            
+            // Put everything together
+            listElement.appendChild(listHeader);
+            listElement.appendChild(listCards);
+            listElement.appendChild(addCardBtn);
+        } else {
+            // For non-admins, just show the header and cards
+            listElement.appendChild(listHeader);
+            listElement.appendChild(listCards);
+        }
         
         listsContainer.appendChild(listElement);
     });
     
-    // Add container for add list button
-    const addListContainer = document.createElement('div');
-    addListContainer.className = 'add-list-container';
-    addListContainer.innerHTML = `
-        <button id="addListBtn" class="btn-add-list">
-            <i class="fas fa-plus"></i> Add List
-        </button>
-    `;
-    
-    // Add handler for add list button
-    addListContainer.querySelector('#addListBtn').addEventListener('click', () => openModal(createListModal));
-    
-    listsContainer.appendChild(addListContainer);
+    // Add container for add list button (only for admins)
+    if (isAdmin) {
+        const addListContainer = document.createElement('div');
+        addListContainer.className = 'add-list-container';
+        addListContainer.innerHTML = `
+            <button id="addListBtn" class="btn-add-list">
+                <i class="fas fa-plus"></i> Add List
+            </button>
+        `;
+        
+        // Add handler for add list button
+        addListContainer.querySelector('#addListBtn')?.addEventListener('click', () => openModal(createListModal));
+        
+        listsContainer.appendChild(addListContainer);
+    }
 }
-
+// Override createCardElement to respect admin permissions
 function createCardElement(card, listId) {
     const cardElement = document.createElement('div');
     cardElement.className = `card ${card.completed ? 'completed' : ''}`;
     cardElement.dataset.cardId = card.id;
     cardElement.dataset.listId = listId;
+    cardElement.dataset.priority = card.priority || 'medium';
     
-    // Make card draggable
-    cardElement.draggable = true;
-    setupDraggable(cardElement);
+    // Make card draggable only for admins
+    if (isAdmin) {
+        cardElement.draggable = true;
+        setupDraggable(cardElement);
+    }
     
     // Prepare priority information
     let priorityClass = '';
@@ -1023,6 +1578,13 @@ function createCardElement(card, listId) {
         default:
             priorityClass = 'priority-medium';
             priorityText = 'Medium';
+    }
+    
+    // Apply full color style if enabled
+    if (useFullColorPriority) {
+        cardElement.classList.add(`full-color-priority-${card.priority || 'medium'}`);
+    } else {
+        cardElement.classList.add(`priority-${card.priority || 'medium'}`);
     }
     
     // Get user information if card is assigned
@@ -1093,43 +1655,85 @@ function createCardElement(card, listId) {
             <button class="btn-toggle-completion" title="${card.completed ? 'Mark as incomplete' : 'Mark as complete'}">
                 <i class="fas ${card.completed ? 'fa-check-square' : 'fa-square'}"></i>
             </button>
-            <button class="btn-edit-card" title="Edit card">
-                <i class="fas fa-edit"></i>
-            </button>
-            <button class="btn-delete-card" title="Delete card">
-                <i class="fas fa-trash"></i>
-            </button>
+            ${isAdmin ? `
+                <button class="btn-edit-card" title="Edit card">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-delete-card" title="Delete card">
+                    <i class="fas fa-trash"></i>
+                </button>
+            ` : ''}
         </div>
     `;
     
     // Add event handlers
     cardElement.addEventListener('click', (e) => {
-        // Open card editing only if not clicked on buttons
-        if (!e.target.closest('.card-actions')) {
+        // Open card editing only if admin or if clicked on completion button
+        if (isAdmin && !e.target.closest('.card-actions')) {
             openEditCardModal(card.id, listId);
         }
     });
     
-    // Handler for toggling completion status
+    // Handler for toggling completion status (available to all users)
     cardElement.querySelector('.btn-toggle-completion').addEventListener('click', (e) => {
         e.stopPropagation();
         handleToggleCardCompletion(card.id, listId, card.completed);
     });
     
-    // Handler for editing card
-    cardElement.querySelector('.btn-edit-card').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openEditCardModal(card.id, listId);
-    });
-    
-    // Handler for deleting card
-    cardElement.querySelector('.btn-delete-card').addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleDeleteCard(card.id, listId);
-    });
+    if (isAdmin) {
+        // Handler for editing card (admin only)
+        cardElement.querySelector('.btn-edit-card')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditCardModal(card.id, listId);
+        });
+        
+        // Handler for deleting card (admin only)
+        cardElement.querySelector('.btn-delete-card')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            handleDeleteCard(card.id, listId);
+        });
+    }
     
     return cardElement;
 }
+
+// Add CSS for admin indicators
+function addAdminStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .admin-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            background-color: #4338ca;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 9999px;
+            padding: 2px 8px;
+            margin-left: 8px;
+        }
+        
+        .board-item.admin-only {
+            border-left: 3px solid #4338ca;
+        }
+        
+        .board-name .admin-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+            background-color: #4338ca;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+
+    
 
 // Modal functions
 function openModal(modal) {

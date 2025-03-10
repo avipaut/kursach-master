@@ -1,7 +1,7 @@
-/* Base Styles with Bootstrap integration */
+/* Base Styles */
 :root {
-  /* Keep your custom variables for compatibility */
-  --primary-color: #4f46e5;
+  /* Color variables */
+  --primary-color: #C71320;
   --primary-hover: #4338ca;
   --danger-color: #ef4444;
   --danger-hover: #dc2626;
@@ -13,12 +13,18 @@
   --text-primary: #111827;
   --text-secondary: #4b5563;
   --text-muted: #6b7280;
+  
+  /* Shadow variables */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  
+  /* Brand colors */
   --pink-600: #C71320;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  
+  /* Priority colors */
   --priority-low-bg: #d1fae5;
   --priority-low-text: #065f46;
   --priority-medium-bg: #fef3c7;
@@ -27,7 +33,7 @@
   --priority-high-text: #b91c1c;
 }
 
-/* Base styling - modified to avoid conflicts with Bootstrap */
+/* Base styling */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -50,14 +56,14 @@ a {
   color: inherit;
 }
 
-/* Layout - with Bootstrap classes */
+/* Layout */
 .app-container {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* Navbar - converted to use Bootstrap classes */
+/* Updated Navbar Styles */
 .navbar {
   display: flex;
   justify-content: space-between;
@@ -73,29 +79,37 @@ a {
   align-items: center;
 }
 
+.navbar-center {
+  display: flex;
+  justify-content: center;
+  flex: 1;
+}
+
 .logo-group {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 8px;
 }
 
 .app-logo {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--pink-600);
+  color: var(--primary-color);
   font-weight: 500;
+  font-size: 18px;
 }
 
 .divider {
   height: 24px;
   width: 1px;
   background-color: var(--border-color);
+  margin: 0 12px;
 }
 
 .main-nav {
   display: flex;
-  gap: 16px;
+  gap: 24px;
 }
 
 .nav-link {
@@ -103,14 +117,39 @@ a {
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  transition: color 0.2s;
+  transition: all 0.2s;
+  padding: 6px 0;
+  position: relative;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background-color: var(--primary-color);
+  transition: width 0.2s;
 }
 
 .nav-link:hover {
   color: var(--text-primary);
 }
 
-/* Search box - modified to use Bootstrap form control styles */
+.nav-link:hover::after {
+  width: 100%;
+}
+
+.nav-link.active {
+  color: var(--primary-color);
+}
+
+.nav-link.active::after {
+  width: 100%;
+}
+
+/* Enhanced Search box */
 .search-box {
   position: relative;
   margin-right: 16px;
@@ -121,13 +160,15 @@ a {
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 220px;
+  transition: all 0.3s;
 }
 
 .search-box input:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+  width: 280px;
 }
 
 .search-box i {
@@ -139,7 +180,45 @@ a {
   pointer-events: none;
 }
 
-/* Sidebar - adapted to use Bootstrap utilities */
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+  max-height: 300px;
+  overflow-y: auto;
+  display: none;
+}
+
+.search-results.active {
+  display: block;
+}
+
+.search-result-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.search-result-item:hover {
+  background-color: var(--bg-color);
+}
+
+.search-result-item .result-title {
+  font-weight: 500;
+}
+
+.search-result-item .result-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Sidebar */
 .sidebar {
   width: 250px;
   background: white;
@@ -188,7 +267,7 @@ a {
   flex: 1;
 }
 
-/* Button styles - adapted to match Bootstrap btn classes */
+/* Button styles */
 .create-board-btn {
   display: flex;
   align-items: center;
@@ -222,7 +301,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 10px 16px;
   margin-bottom: 4px;
   border-radius: 6px;
   cursor: pointer;
@@ -235,7 +314,7 @@ a {
 
 .board-item.active {
   background-color: #f5f3ff;
-  color: var(--pink-600);
+  color: var(--primary-color);
   font-weight: 500;
 }
 
@@ -273,7 +352,7 @@ a {
 
 .btn-edit-board:hover {
   background-color: #f5f3ff;
-  color: var(--pink-600);
+  color: var(--primary-color);
 }
 
 .btn-delete-board:hover {
@@ -285,7 +364,7 @@ a {
   display: none;
 }
 
-/* Main Content - adapted to use Bootstrap container and spacing */
+/* Main Content */
 .main-content {
   flex: 1;
   padding: 16px;
@@ -306,7 +385,7 @@ a {
   gap: 8px;
 }
 
-/* Bootstrap-compatible button styles */
+/* Button styles */
 .btn {
   padding: 8px 16px;
   border-radius: 6px;
@@ -361,6 +440,22 @@ a {
   background-color: var(--bg-color);
 }
 
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-light {
+  background-color: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  color: var(--text-secondary);
+}
+
+.btn-light:hover {
+  background-color: #e2e6ea;
+  color: var(--text-primary);
+}
+
 .select-board-message {
   display: flex;
   flex-direction: column;
@@ -371,49 +466,61 @@ a {
   text-align: center;
 }
 
-/* Lists Container - adapted to Bootstrap row/col logic */
+/* Enhanced Lists Container */
 .lists-container {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   overflow-x: auto;
   height: 100%;
   padding-bottom: 16px;
 }
 
+/* Enhanced List Styling */
 .list {
-  background-color: var(--bg-color);
+  background-color: #f0f2f5;
   border-radius: 8px;
-  width: 280px;
-  min-width: 280px;
+  width: 300px;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
   max-height: 100%;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border-color);
+}
+
+.list.highlight {
+  animation: highlight-pulse 2s;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% { box-shadow: var(--shadow); }
+  50% { box-shadow: 0 0 0 3px var(--primary-color); }
 }
 
 .list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
+  padding: 14px;
   background-color: white;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
 }
 
 .list-title {
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
   display: flex;
   align-items: center;
 }
 
 .list-title span {
-  background-color: #f3f4f6;
-  color: var(--text-secondary);
+  background-color: var(--primary-color);
+  color: white;
   font-size: 12px;
+  font-weight: 500;
   padding: 2px 8px;
   border-radius: 9999px;
   margin-left: 8px;
@@ -436,7 +543,7 @@ a {
 
 .btn-edit:hover {
   background-color: #f5f3ff;
-  color: var(--pink-600);
+  color: var(--primary-color);
 }
 
 .btn-delete:hover {
@@ -445,29 +552,64 @@ a {
 }
 
 .list-cards {
-  padding: 8px;
+  padding: 12px;
   overflow-y: auto;
   flex: 1;
+  background-color: #f0f2f5;
 }
 
-/* Card components - adapted to Bootstrap card styles */
+/* Enhanced Card Styling with Priority Colors */
 .card {
   background-color: white;
   border-radius: 6px;
   border: 1px solid var(--border-color);
   padding: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: box-shadow 0.2s;
+  transition: all 0.2s;
 }
 
 .card:hover {
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .card.completed {
-  opacity: 0.6;
+  opacity: 0.7;
+  border-left: 4px solid var(--success-color);
+}
+
+/* Priority-based card styling */
+.card.priority-low {
+  border-left: 4px solid var(--priority-low-text);
+  background-color: rgba(209, 250, 229, 0.3);
+}
+
+.card.priority-medium {
+  border-left: 4px solid var(--priority-medium-text);
+  background-color: rgba(254, 243, 199, 0.3);
+}
+
+.card.priority-high {
+  border-left: 4px solid var(--priority-high-text);
+  background-color: rgba(254, 226, 226, 0.3);
+}
+
+/* Full colored priority card styling */
+.card.full-color-priority-low {
+  background-color: var(--priority-low-bg);
+  border: 1px solid var(--priority-low-text);
+}
+
+.card.full-color-priority-medium {
+  background-color: var(--priority-medium-bg);
+  border: 1px solid var(--priority-medium-text);
+}
+
+.card.full-color-priority-high {
+  background-color: var(--priority-high-bg);
+  border: 1px solid var(--priority-high-text);
 }
 
 .card-header {
@@ -483,7 +625,7 @@ a {
   color: var(--text-primary);
 }
 
-/* Badge styling - compatible with Bootstrap badges */
+/* Badge styling */
 .badge {
   font-size: 12px;
   padding: 2px 8px;
@@ -491,19 +633,22 @@ a {
   font-weight: 500;
 }
 
-.priority-low {
+.badge.priority-low {
   background-color: var(--priority-low-bg);
   color: var(--priority-low-text);
+  font-weight: 600;
 }
 
-.priority-medium {
+.badge.priority-medium {
   background-color: var(--priority-medium-bg);
   color: var(--priority-medium-text);
+  font-weight: 600;
 }
 
-.priority-high {
+.badge.priority-high {
   background-color: var(--priority-high-bg);
   color: var(--priority-high-text);
+  font-weight: 600;
 }
 
 .card-description {
@@ -525,36 +670,46 @@ a {
   color: var(--text-muted);
 }
 
-.deadline, .todo-summary {
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #f5f7fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+}
+
+.user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deadline {
+  background-color: #f5f7fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
 .deadline.overdue {
-  color: var(--danger-color);
-}
-
-.user-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.user-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 9999px;
-  background-color: #4b5563;
   color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
+  background-color: rgba(239, 68, 68, 0.9);
+  border-color: var(--danger-color);
 }
 
-/* Progress bar - adapted to Bootstrap progress styles */
+/* Progress bar */
 .todo-progress {
   width: 100%;
   height: 4px;
@@ -567,6 +722,11 @@ a {
   height: 100%;
   background-color: var(--success-color);
   transition: width 0.3s;
+}
+
+.todo-summary {
+  margin-top: 4px;
+  font-size: 11px;
 }
 
 .card-actions {
@@ -593,7 +753,7 @@ a {
 
 .btn-edit-card:hover {
   background-color: #f5f3ff;
-  color: var(--pink-600);
+  color: var(--primary-color);
 }
 
 .btn-delete-card:hover {
@@ -603,9 +763,9 @@ a {
 
 .btn-add-card {
   width: 100%;
-  padding: 8px;
+  padding: 10px;
   text-align: center;
-  background: none;
+  background: white;
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
@@ -616,23 +776,23 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .btn-add-card:hover {
-  background-color: white;
-  color: var(--text-primary);
+  background-color: #f5f5f5;
+  color: var(--primary-color);
 }
 
 .add-list-container {
-  min-width: 280px;
+  min-width: 300px;
   display: flex;
   align-items: flex-start;
 }
 
 .btn-add-list {
   width: 100%;
-  padding: 12px;
+  padding: 14px;
   background: none;
   border: 2px dashed var(--border-color);
   border-radius: 8px;
@@ -647,11 +807,11 @@ a {
 }
 
 .btn-add-list:hover {
-  border-color: var(--text-secondary);
-  color: var(--text-primary);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
-/* Modals - replaced with Bootstrap modal structure */
+/* Modals */
 .modal {
   display: none;
   position: fixed;
@@ -669,6 +829,7 @@ a {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  animation: modalFadeIn 0.2s;
 }
 
 .modal-content {
@@ -678,7 +839,6 @@ a {
   max-width: 600px;
   margin: 32px auto;
   box-shadow: var(--shadow-lg);
-  animation: modalFadeIn 0.3s;
 }
 
 @keyframes modalFadeIn {
@@ -700,6 +860,11 @@ a {
   border-bottom: 1px solid var(--border-color);
 }
 
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
 .close-modal {
   background: none;
   border: none;
@@ -713,7 +878,7 @@ a {
   color: var(--text-primary);
 }
 
-/* Form styling - adapted to Bootstrap form components */
+/* Form styling */
 form {
   padding: 16px;
 }
@@ -746,7 +911,7 @@ input[type="date"],
 textarea,
 select {
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
@@ -806,12 +971,23 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .todo-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.todo-item:last-child {
+  border-bottom: none;
 }
 
 .todo-item .btn-remove-todo {
@@ -836,7 +1012,28 @@ select:focus {
   gap: 8px;
 }
 
-/* Toast Messages - Bootstrap compatible toast classes */
+.todo-input {
+  flex: 1;
+  border: 1px solid transparent;
+  background-color: transparent;
+  padding: 4px 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.todo-input:focus {
+  border-color: var(--border-color);
+  background-color: white;
+  outline: none;
+}
+
+.todo-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Toast Messages */
 .toast-container {
   position: fixed;
   top: 16px;
@@ -915,7 +1112,7 @@ select:focus {
   }
 }
 
-/* Loading Spinner - Bootstrap compatible spinner */
+/* Loading Spinner */
 .loading-spinner {
   display: flex;
   justify-content: center;
@@ -923,6 +1120,15 @@ select:focus {
   padding: 16px;
   font-size: 18px;
   color: var(--text-muted);
+}
+
+.loading-spinner i {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Drag and Drop Styles */
@@ -935,6 +1141,7 @@ select:focus {
 .dragging {
   opacity: 0.5;
   box-shadow: var(--shadow-md);
+  transform: rotate(2deg);
 }
 
 /* Empty Message */
@@ -943,6 +1150,10 @@ select:focus {
   padding: 16px;
   color: var(--text-secondary);
   font-size: 14px;
+  background-color: #f9fafb;
+  border-radius: 6px;
+  border: 1px dashed var(--border-color);
+  margin: 20px 0;
 }
 
 /* Bootstrap utility classes compatibility */
@@ -1001,82 +1212,201 @@ select:focus {
 .w-100 { width: 100%; }
 .h-100 { height: 100%; }
 
-/* Bootstrap button classes */
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  border-radius: 0.2rem;
+/* Calendar specific styles */
+.calendar-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.btn-lg {
-  padding: 0.5rem 1rem;
-  font-size: 1.25rem;
-  border-radius: 0.3rem;
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
-.btn-light {
-  background-color: #f8f9fa;
-  border-color: #f8f9fa;
-  color: #212529;
+.calendar-title {
+  font-size: 24px;
+  font-weight: 600;
 }
 
-.btn-light:hover {
-  background-color: #e2e6ea;
-  border-color: #dae0e5;
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.btn-success {
-  background-color: var(--success-color);
-  border-color: var(--success-color);
-  color: white;
+.calendar-nav-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s;
 }
 
-.btn-success:hover {
-  background-color: var(--success-hover);
-  border-color: var(--success-hover);
+.calendar-nav-btn:hover {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
 }
 
-.btn-danger {
-  background-color: var(--danger-color);
-  border-color: var(--danger-color);
-  color: white;
-}
-
-.btn-danger:hover {
-  background-color: var(--danger-hover);
-  border-color: var(--danger-hover);
-}
-
-.btn-outline-primary {
-  background-color: transparent;
+.calendar-nav-btn.active {
+  background-color: var(--primary-color);
   border-color: var(--primary-color);
+  color: white;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.calendar-day {
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  min-height: 120px;
+  padding: 8px;
+  background-color: white;
+  position: relative;
+}
+
+.calendar-day:nth-child(7n) {
+  border-right: none;
+}
+
+.calendar-day.today {
+  background-color: #f0f9ff;
+}
+
+.calendar-day.other-month {
+  background-color: #f8fafc;
+  color: var(--text-muted);
+}
+
+.calendar-day-header {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.calendar-day-number {
+  font-weight: 600;
+}
+
+.calendar-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calendar-event {
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.calendar-event.task {
+  background-color: var(--primary-color);
+}
+
+.calendar-event.zoom {
+  background-color: #2196F3;
+}
+
+/* Calendar Day View */
+.day-schedule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  height: calc(100vh - 170px);
+}
+
+.time-slot {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  min-height: 60px;
+}
+
+.time-label {
+  width: 80px;
+  padding: 8px;
+  background-color: #f8fafc;
+  border-right: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.time-events {
+  flex: 1;
+  position: relative;
+  padding: 4px;
+}
+
+.time-event {
+  position: absolute;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: white;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* New task/meeting buttons */
+.calendar-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.btn-new-task, .btn-new-meeting {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-new-task {
+  background-color: white;
+  border: 1px solid var(--primary-color);
   color: var(--primary-color);
 }
 
-.btn-outline-primary:hover {
+.btn-new-task:hover {
   background-color: var(--primary-color);
   color: white;
 }
 
-.btn-outline-success {
-  background-color: transparent;
-  border-color: var(--success-color);
-  color: var(--success-color);
+.btn-new-meeting {
+  background-color: white;
+  border: 1px solid #2196F3;
+  color: #2196F3;
 }
 
-.btn-outline-success:hover {
-  background-color: var(--success-color);
+.btn-new-meeting:hover {
+  background-color: #2196F3;
   color: white;
 }
-
-.btn-outline-danger {
-  background-color: transparent;
-  border-color: var(--danger-color);
-  color: var(--danger-color);
-}
-
-.btn-outline-danger:hover {
-  background-color: var(--danger-color);
-  color: white;
-}
-

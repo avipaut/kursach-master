@@ -25,7 +25,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=True)  # Добавлено поле email
     active = db.Column(db.Boolean(), default=True)  # Добавлено поле active для Flask-Security
     fs_uniquifier = db.Column(db.String(255), unique=True)
-
+    is_admin = db.Column(db.Boolean, default=False)
     # Связь с ролями
     roles = db.relationship('Role', secondary=roles_users, 
                          backref=db.backref('users', lazy='dynamic'))
@@ -40,7 +40,9 @@ class User(UserMixin, db.Model):
             'id': self.id,
             'username': self.username,
             'email': self.email,
-            'roles': [role.name for role in self.roles]
+            'roles': [role.name for role in self.roles],
+            'is_admin': self.is_admin  # Include admin status in API responses
+
         }
     
     # Методы для Flask-Security
@@ -69,7 +71,7 @@ class Board(db.Model):
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     user_id = Column(Integer, db.ForeignKey('users.id'), nullable=False)
-    
+    admin_only = db.Column(db.Boolean, default=False)
     # Добавляем отношения с List
     lists = db.relationship('List', backref='board', cascade="all, delete-orphan", lazy=True)
     
@@ -78,7 +80,9 @@ class Board(db.Model):
             'id': self.id,
             'name': self.name,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'user_id': self.user_id
+            'user_id': self.user_id,
+            'admin_only': self.admin_only  # Include admin_only status in API responses
+
         }
 
 class List(db.Model):

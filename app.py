@@ -144,8 +144,8 @@ def create_initial_data():
         admin_user = user_datastore.create_user(
             username="admin",
             email="admin@example.com",
-            password="admin_password",  # В реальном проекте используйте хешированный пароль
-            fs_uniquifier=os.urandom(16).hex()  # Добавляем fs_uniquifier
+            password="123",  # В реальном проекте используйте хешированный пароль
+            # fs_uniquifier=os.urandom(16).hex()  # Добавляем fs_uniquifier
         )
         user_datastore.add_role_to_user(admin_user, "admin")
         
@@ -157,10 +157,21 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 @app.before_request
 def create_tables():
     db.create_all()
+with app.app_context():
+    admin = User.query.filter_by(username='admin').first()
+    if admin:
+        # Сбросить пароль на '123'
+        admin.password = generate_password_hash('123')
+        # Также убедимся, что пользователь - администратор
+        admin.is_admin = True
+        db.session.commit()
+        print(f"Пароль для пользователя {admin.username} сброшен на: 123")
+        print(f"Пользователь {admin.username} теперь администратор: {getattr(admin, 'is_admin', False)}")
+    else:
+        print("Пользователь admin не найден")
 
 # Вызываем функции инициализации в контексте приложения
 with app.app_context():
-    create_initial_data()
     create_initial_roles_and_admin()
 
 if __name__ == '__main__':

@@ -20,11 +20,37 @@ class EventStore:
     def __init__(self):
         self.events = []
         self.next_id = 1
+        self.card_event_map = {}  # Maps kanban card IDs to event IDs
 
     def add_event(self, event):
+        # Check if this is a kanban card event
+        kanban_card_id = event.get('kanban_card_id')
+        
+        if kanban_card_id:
+            # If we already have an event for this card, update it instead
+            existing_event_id = self.card_event_map.get(str(kanban_card_id))
+            if existing_event_id:
+                for i, e in enumerate(self.events):
+                    if e.get('id') == existing_event_id:
+                        # Update the existing event
+                        e.update({
+                            'title': event['title'],
+                            'start': event['start'],
+                            'end': event.get('end', event['start']),
+                            'description': event.get('description', ''),
+                            'color': event.get('color', '#3788d8')
+                        })
+                        return e
+        
+        # If no existing event or not a kanban card, create new event
         event['id'] = str(self.next_id)
         self.next_id += 1
         self.events.append(event)
+        
+        # If this is a kanban card, store the mapping
+        if kanban_card_id:
+            self.card_event_map[str(kanban_card_id)] = event['id']
+            
         return event
 
     def get_events(self):
@@ -38,9 +64,24 @@ class EventStore:
         return None
 
     def delete_event(self, event_id):
-        self.events = [e for e in self.events if e['id'] != event_id]
+        # Find and remove the event
+        event_to_remove = None
+        for event in self.events:
+            if event['id'] == event_id:
+                event_to_remove = event
+                break
+                
+        if event_to_remove:
+            self.events.remove(event_to_remove)
+            
+            # If this was a kanban card event, remove from map
+            for card_id, mapped_event_id in list(self.card_event_map.items()):
+                if mapped_event_id == event_id:
+                    del self.card_event_map[card_id]
+                    break
 
 event_store = EventStore()
+
 
 @zoom_bp.route('/')
 def zoom():
@@ -78,8 +119,13 @@ def create_task():
             'color': data.get('color', '#3788d8'),
             'allDay': data.get('allDay', False)
         }
+        
+        # Add kanban card ID if provided (for tracking)
+        if 'kanban_card_id' in data:
+            new_task['kanban_card_id'] = data['kanban_card_id']
 
         event = event_store.add_event(new_task)
+        logger.info(f"Created/updated task: {event}")
         return jsonify(event)
 
     except Exception as e:
