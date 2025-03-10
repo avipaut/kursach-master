@@ -1,3 +1,5 @@
+# app.py
+
 from flask import Flask, redirect, url_for, request
 from flask_socketio import SocketIO
 from flask_cors import CORS
@@ -20,13 +22,13 @@ from routes.kanban import kanban_bp  # Импортируем Kanban Blueprint
 from routes.trash import trash_bp
 
 
+
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
-socketio = SocketIO()  # Создаем экземпляр
 socketio.init_app(app, cors_allowed_origins="*")  # Теперь init_app() вызовется корректно
 
-# Настройка приложения
+# # Настройка приложения
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///main.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -155,7 +157,7 @@ UPLOAD_FOLDER = "uploaded_documents"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @app.before_request
-def create_tables():
+def before_request():
     db.create_all()
 with app.app_context():
     admin = User.query.filter_by(username='admin').first()
@@ -175,4 +177,4 @@ with app.app_context():
     create_initial_roles_and_admin()
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000)
