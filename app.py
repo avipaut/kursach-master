@@ -1,3 +1,5 @@
+# app.py
+
 from flask import Flask, redirect, url_for, request
 from flask_socketio import SocketIO
 from flask_cors import CORS
@@ -18,13 +20,13 @@ from routes.trash import trash_bp
 
 
 
+
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
-socketio = SocketIO()  # Создаем экземпляр
 socketio.init_app(app, cors_allowed_origins="*")  # Теперь init_app() вызовется корректно
 
-# В app.py, где вы настраиваете приложение:
+# # В app.py, где вы настраиваете приложение:
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///main.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -34,6 +36,7 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_recycle': 300,
     'connect_args': {'timeout': 15, 'check_same_thread': False}
 }
+
 
 # Инициализация LoginManager
 login_manager = LoginManager()
@@ -79,7 +82,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app.secret_key = 'your_secret_key_here'
 @app.before_request
-def create_tables():
+def before_request():
     db.create_all()
+
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000)
