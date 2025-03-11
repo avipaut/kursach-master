@@ -13,7 +13,6 @@ unicodedata2
 fpdf
 pandas
 requests
-base64
 shutil
 logging
 enum34
