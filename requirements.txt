@@ -17,3 +17,6 @@ pytest-shutil
 logging
 enum34
 gunicorn
+eventlet
+gevent
+gevent-websocket
