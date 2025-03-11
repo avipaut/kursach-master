@@ -16,3 +16,4 @@ requests
 pytest-shutil
 logging
 enum34
+gunicorn
