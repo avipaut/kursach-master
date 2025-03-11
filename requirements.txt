@@ -13,6 +13,6 @@ unicodedata2
 fpdf
 pandas
 requests
-shutil
+pytest-shutil
 logging
 enum34
