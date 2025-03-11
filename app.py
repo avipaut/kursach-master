@@ -27,7 +27,7 @@ from routes.trash import trash_bp
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
-socketio.init_app(app, cors_allowed_origins="*")  # Теперь init_app() вызовется корректно
+socketio.init_app(app, async_mode="eventlet", cors_allowed_origins="*")  # Теперь init_app() вызовется корректно
 
 # # Настройка приложения
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///main.db'
