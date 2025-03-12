@@ -48,6 +48,8 @@ class User(UserMixin, db.Model):
     messages = db.relationship('Message', backref='sender', lazy=True, cascade="all, delete-orphan")
     lobbies = db.relationship('Lobby', secondary=user_lobby, back_populates='users')
     created_lobbies = db.relationship('Lobby', backref='creator', lazy=True, foreign_keys='Lobby.created_by')
+    assigned_cards = db.relationship('Card', foreign_keys='Card.assigned_to', backref='assigned_user', lazy=True)
+
 
 
     def to_dict(self):
