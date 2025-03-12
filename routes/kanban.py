@@ -1,3 +1,5 @@
+# kanban.py
+
 from datetime import datetime
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash, abort
 from flask_login import login_required, current_user
@@ -23,14 +25,14 @@ def admin_required(f):
     return decorated_function
 
 # ===== BOARD ROUTES =====
-
+# Убедитесь, что маршрут определен именно так
 @kanban_bp.route('/kanban', endpoint='kanban_board')
-def trello():
+@login_required
+def kanban_board():
     is_admin = False
     if hasattr(current_user, 'is_admin'):
         is_admin = current_user.is_admin
     return render_template('kanban.html', username=current_user.username, is_admin=is_admin)
-
 @kanban_bp.route('/kanban/api/current_user', methods=['GET'])
 @login_required
 def get_current_user():

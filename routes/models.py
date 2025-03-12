@@ -44,10 +44,12 @@ class User(UserMixin, db.Model):
                          backref=db.backref('users', lazy='dynamic'))
     
     boards = db.relationship('Board', backref='user', lazy=True)
-    cards = db.relationship('Card', backref='user', lazy=True)
+    cards = db.relationship('Card', foreign_keys='Card.user_id', backref='creator', lazy=True)
     messages = db.relationship('Message', backref='sender', lazy=True, cascade="all, delete-orphan")
     lobbies = db.relationship('Lobby', secondary=user_lobby, back_populates='users')
     created_lobbies = db.relationship('Lobby', backref='creator', lazy=True, foreign_keys='Lobby.created_by')
+    assigned_cards = db.relationship('Card', foreign_keys='Card.assigned_to', backref='assigned_user', lazy=True)
+
 
 
     def to_dict(self):
@@ -223,7 +225,6 @@ class Card(db.Model):
     
     # Relationships
     todos = db.relationship('Todo', backref='card', cascade="all, delete-orphan", lazy=True)
-    assigned_user = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_cards', lazy=True)    
     list_id = Column(Integer, ForeignKey('list.id', ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     priority = Column(Enum(PriorityLevel), default=PriorityLevel.LOW)
