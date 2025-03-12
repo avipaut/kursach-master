@@ -33,7 +33,7 @@ def kanban_board():
     if hasattr(current_user, 'is_admin'):
         is_admin = current_user.is_admin
     return render_template('kanban.html', username=current_user.username, is_admin=is_admin)
-@kanban_bp.route('/kanban/api/current_user', methods=['GET'])
+@kanban_bp.route('kanban/api/current_user', methods=['GET'])
 @login_required
 def get_current_user():
     is_admin = False
@@ -405,7 +405,44 @@ def update_card_priority(board_id, list_id, card_id):
         return jsonify({"error": "Invalid priority value"}), 400
 
 # ===== TODO ROUTES =====
+# Add this route to your kanban.py file
 
+@kanban_bp.route('/cards/<int:card_id>/todos', methods=['GET'])
+@login_required
+def get_card_todos(card_id):
+    """Get all todos for a specific card"""
+    try:
+        # Find the card
+        card = Card.query.get(card_id)
+        if not card:
+            return jsonify({'success': False, 'message': 'Card not found'}), 404
+            
+        # Anyone can view todos, but we'll check if the board is admin-only
+        list_obj = List.query.get(card.list_id)
+        if not list_obj:
+            return jsonify({'success': False, 'message': 'List not found'}), 404
+            
+        board = Board.query.get(list_obj.board_id)
+        if not board:
+            return jsonify({'success': False, 'message': 'Board not found'}), 404
+            
+        # Check if user has access to this board
+        is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+        has_admin_only = hasattr(board, 'admin_only') and board.admin_only
+        
+        if has_admin_only and not is_admin:
+            return jsonify({'success': False, 'message': 'You do not have permission to view these todos'}), 403
+            
+        # Get all todos for this card
+        todos = Todo.query.filter_by(card_id=card_id).all()
+        
+        return jsonify({
+            'success': True,
+            'todos': [todo.to_dict() for todo in todos]
+        })
+    except Exception as e:
+        print(f"Error getting todos: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/todos', methods=['POST'])
 @login_required
 @admin_required  # Only admins can create todos
@@ -426,19 +463,22 @@ def create_todo(board_id, list_id, card_id):
     
     return jsonify(todo.to_dict()), 201
 
+# Replace your existing update_todo route with this one
+
 @kanban_bp.route('/todos/<int:todo_id>', methods=['PUT'])
 @login_required
 def update_todo(todo_id):
+    """Update a todo - regular users can update completion status only"""
     todo = Todo.query.get(todo_id)
     if not todo:
-        return jsonify({"error": "Todo not found"}), 404
+        return jsonify({"success": False, "message": "Todo not found"}), 404
     
     data = request.json
     is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
     
     # For content updates, user must be an admin
     if 'content' in data and not is_admin:
-        return jsonify({"error": "Only administrators can update todo content"}), 403
+        return jsonify({"success": False, "message": "Only administrators can update todo content"}), 403
     
     # For completion status, any user can update
     if 'content' in data and is_admin:
@@ -449,20 +489,45 @@ def update_todo(todo_id):
     
     db.session.commit()
     
-    return jsonify(todo.to_dict())
+    return jsonify({
+        "success": True,
+        "message": "Todo updated successfully",
+        "todo": todo.to_dict()
+    })
+
+# Update your delete todo route handler in the backend to ensure valid JSON is returned
 
 @kanban_bp.route('/todos/<int:todo_id>', methods=['DELETE'])
+@admin_required
 @login_required
-@admin_required  # Only admins can delete todos
 def delete_todo(todo_id):
-    todo = Todo.query.get(todo_id)
-    if not todo:
-        return jsonify({"error": "Todo not found"}), 404
-    
-    db.session.delete(todo)
-    db.session.commit()
-    
-    return '', 204
+    try:
+        print(f"Attempting to delete todo with ID: {todo_id}")
+        
+        todo = Todo.query.get(todo_id)
+        if not todo:
+            print(f"Todo not found with ID: {todo_id}")
+            return jsonify({'success': False, 'message': 'Todo not found'}), 404
+            
+        # Store card_id before deleting the todo to return in the response
+        card_id = todo.card_id
+        
+        # Delete the todo
+        db.session.delete(todo)
+        db.session.commit()
+        
+        print(f"Todo deleted successfully: {todo_id}")
+        # Ensure we're returning a proper JSON response
+        return jsonify({
+            'success': True, 
+            'message': 'Todo deleted successfully',
+            'todo_id': todo_id,
+            'card_id': card_id
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting todo: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # ===== CARD MOVEMENT ROUTES =====
 

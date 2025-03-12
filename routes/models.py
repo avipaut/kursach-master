@@ -50,8 +50,6 @@ class User(UserMixin, db.Model):
     created_lobbies = db.relationship('Lobby', backref='creator', lazy=True, foreign_keys='Lobby.created_by')
     assigned_cards = db.relationship('Card', foreign_keys='Card.assigned_to', backref='assigned_user', lazy=True)
 
-
-
     def to_dict(self):
         return {
             'id': self.id,
@@ -171,10 +169,8 @@ class Board(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(Integer, db.ForeignKey('users.id'), nullable=False)
-    admin_only = db.Column(db.Boolean, default=False)
-    # Добавляем отношения с List
     user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    admin_only = db.Column(db.Boolean, default=False)
     
     lists = db.relationship('List', backref='board', cascade="all, delete-orphan", lazy=True)
 
@@ -185,9 +181,7 @@ class Board(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'user_id': self.user_id,
             'admin_only': self.admin_only  # Include admin_only status in API responses
-
         }
-
 
     def __repr__(self):
         return f"<Board {self.name}>"
@@ -216,8 +210,8 @@ class Card(db.Model):
     title = Column(String(100), nullable=False)
     description = Column(String(1000))
     created_at = Column(DateTime, default=datetime.utcnow)
-    list_id = Column(Integer, ForeignKey('list.id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # Creator of the card
+    list_id = Column(Integer, ForeignKey('list.id', ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)  # Creator of the card
     priority = Column(Enum(PriorityLevel), default=PriorityLevel.LOW)
     completed = Column(db.Boolean, default=False)  # New field for completion status
     assigned_to = Column(Integer, ForeignKey('users.id'), nullable=True)  # New field for assignment
@@ -225,10 +219,11 @@ class Card(db.Model):
     
     # Relationships
     todos = db.relationship('Todo', backref='card', cascade="all, delete-orphan", lazy=True)
-    assigned_user = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_cards', lazy=True)
-    list_id = Column(Integer, ForeignKey('list.id', ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
-    priority = Column(Enum(PriorityLevel), default=PriorityLevel.LOW)
+    
+    # REMOVED the duplicate relationship that was causing the error
+    # This line was causing the conflict:
+    # assigned_user = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_cards', lazy=True)
+    # It's already defined in the User model with assigned_cards relationship
 
     def to_dict(self):
         return {
@@ -238,8 +233,17 @@ class Card(db.Model):
             'created_at': self.created_at.isoformat(),
             'list_id': self.list_id,
             'user_id': self.user_id,
-            'priority': self.priority.value
+            'priority': self.priority.value,
+            'completed': self.completed,
+            'assigned_to': self.assigned_to,
+            'deadline': self.deadline.isoformat() if self.deadline else None,
+            'todos': [todo.to_dict() for todo in self.todos]  # Include todos in the card data
+
         }
+
+    def __repr__(self):
+        return f"<Card {self.title} (Priority: {self.priority.name})>"
+
 # New Todo model for to-do lists within cards
 class Todo(db.Model):
     id = Column(Integer, primary_key=True)
@@ -256,4 +260,4 @@ class Todo(db.Model):
         }
 
     def __repr__(self):
-        return f"<Card {self.title} (Priority: {self.priority.name})>"
+        return f"<Todo {self.id}: {self.content[:20]}{'...' if len(self.content) > 20 else ''}>"

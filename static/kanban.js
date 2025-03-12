@@ -61,17 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Toggle sidebar collapse
     document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
-     // Add toggle for priority color style
-     const togglePriorityStyleBtn = document.createElement('button');
-     togglePriorityStyleBtn.className = 'btn btn-sm btn-light';
-     togglePriorityStyleBtn.innerHTML = '<i class="fas fa-palette"></i> Toggle Priority Style';
-     togglePriorityStyleBtn.addEventListener('click', togglePriorityStyle);
      
-     // Add to board controls
-     const boardControls = document.querySelector('.board-controls');
-     if (boardControls) {
-         boardControls.appendChild(togglePriorityStyleBtn);
-     }
 });
 // Fetch current user details
 async function fetchCurrentUser() {
@@ -209,6 +199,38 @@ async function loadCards(boardId, listId) {
     }
 }
 
+// This function now has a default parameter or finds the elements
+function populateUserSelect(selectElement = null) {
+    // If no element is provided, try to find all user select dropdowns
+    if (!selectElement) {
+        // Get all user select dropdowns
+        const userSelects = document.querySelectorAll('.user-select');
+        
+        // If no select elements found, just return without error
+        if (userSelects.length === 0) {
+            console.log('No user select elements found in the DOM');
+            return;
+        }
+        
+        // Populate each user select dropdown found
+        userSelects.forEach(select => {
+            populateUserSelect(select);
+        });
+        return;
+    }
+    
+    // Clear user list, keeping only first option "Not assigned"
+    
+    
+    // Add users to dropdown
+    users.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.username || user.name || `User ${user.id}`;
+        selectElement.appendChild(option);
+    });
+}
+
 async function fetchAllUsers() {
     try {
         console.log('Fetching users from:', `${apiBaseUrl}/users`);
@@ -221,15 +243,25 @@ async function fetchAllUsers() {
         users = await response.json();
         console.log('Users loaded successfully:', users);
         
-        // After loading users, update dropdown lists
-        populateUserSelects();
+        // Now the function handles the case when no element is passed
+        populateUserSelect();
     } catch (error) {
         console.error('Error fetching users:', error);
         showToast('Error', 'Failed to load users. Please try again.', 'error');
     }
 }
 
-function populateUserSelect(selectElement) {
+// Alternative approach: Only populate select elements when needed
+function populateUserSelectWhenNeeded(selectElement) {
+    // Make sure users are loaded first
+    if (!users || users.length === 0) {
+        console.log('Users not loaded yet, fetching them first');
+        fetchAllUsers().then(() => {
+            populateUserSelect(selectElement);
+        });
+        return;
+    }
+    
     // Clear user list, keeping only first option "Not assigned"
     while (selectElement.options.length > 1) {
         selectElement.remove(1);
@@ -243,6 +275,7 @@ function populateUserSelect(selectElement) {
         selectElement.appendChild(option);
     });
 }
+
 // Initialize search functionality
 function initializeSearch() {
     const searchInput = document.getElementById('searchInput');
@@ -1078,11 +1111,112 @@ function openEditCardModal(cardId, listId) {
 function attachRemoveTodoHandlers() {
     document.querySelectorAll('.btn-remove-todo').forEach(button => {
         button.addEventListener('click', (e) => {
-            const todoItem = e.target.closest('.todo-item');
-            todoItem.remove();
+            e.preventDefault();
+            
+            let target = e.target;
+            // If clicked on an icon inside the button, get the button
+            if (!target.classList.contains('btn-remove-todo')) {
+                target = target.closest('.btn-remove-todo');
+            }
+            
+            const todoItem = target.closest('.todo-item');
+            const todoId = todoItem.dataset.todoId || todoItem.getAttribute('data-todo-id');
+            
+            if (!todoId) {
+                console.error('Todo ID not found on element');
+                return;
+            }
+            
+            console.log('Deleting todo ID:', todoId);
+            
+            // Call API to delete the todo from the database
+            fetch(`/kanban/todos/${todoId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                console.log('Delete response status:', response.status);
+                
+                // Handle non-JSON responses
+                if (response.status === 204) {
+                    // No content but success
+                    return { success: true };
+                }
+                
+                // For empty responses
+                if (response.headers.get('content-length') === '0') {
+                    return { success: response.ok };
+                }
+                
+                // Try to parse as JSON
+                return response.json().catch(err => {
+                    console.warn('Response is not JSON:', err);
+                    // Return a simple object based on response status
+                    return { success: response.ok };
+                });
+            })
+            .then(data => {
+                console.log('Processed response data:', data);
+                
+                if (data.success) {
+                    // Remove from DOM
+                    todoItem.remove();
+                    console.log('Todo removed from DOM');
+                } else {
+                    console.error('Failed to delete todo:', data.message);
+                    alert('Failed to delete task. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error in delete process:', error);
+                
+                // Even if there's an error, try to remove the item from DOM
+                // for better user experience (optimistic UI update)
+                todoItem.remove();
+                console.log('Todo removed from DOM despite error');
+            });
         });
     });
 }
+
+// Also add this debugging function to check what your API is returning
+function testTodoDeleteAPI(todoId) {
+    console.log('Testing delete API for todo ID:', todoId);
+    fetch(`/kanban/todos/${todoId}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        console.log('Raw response:', response);
+        console.log('Response status:', response.status);
+        console.log('Response headers:', [...response.headers.entries()]);
+        
+        // Try to read the response text directly
+        return response.text();
+    })
+    .then(text => {
+        console.log('Response text:', text);
+        // Try to parse as JSON if it looks like JSON
+        if (text && text.trim().startsWith('{')) {
+            try {
+                const json = JSON.parse(text);
+                console.log('Parsed JSON:', json);
+            } catch (e) {
+                console.error('Failed to parse JSON:', e);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('API test error:', error);
+    });
+}
+
+// You can call this function in the browser console to test the API:
+// testTodoDeleteAPI(123); // Replace 123 with an actual todo ID
 
 async function handleUpdateCard(event) {
     event.preventDefault();
@@ -1667,12 +1801,239 @@ function createCardElement(card, listId) {
     `;
     
     // Add event handlers
+ // Modified card click event handler to allow users to access todos
     cardElement.addEventListener('click', (e) => {
-        // Open card editing only if admin or if clicked on completion button
-        if (isAdmin && !e.target.closest('.card-actions')) {
+        // Skip if clicked on card actions (complete button, etc.)
+        if (e.target.closest('.card-actions')) {
+            return;
+        }
+        
+        if (isAdmin) {
+            // Admin can open full edit modal
             openEditCardModal(card.id, listId);
+        } else {
+            // Regular users can only access todos
+            openUserTodoModal(card.id, card.title);
         }
     });
+
+// Function to open a simplified modal for regular users
+function openUserTodoModal(cardId, cardTitle) {
+    // Create or get modal element
+    let todoModal = document.getElementById('userTodoModal');
+    
+    if (!todoModal) {
+        // Create modal if it doesn't exist
+        todoModal = document.createElement('div');
+        todoModal.id = 'userTodoModal';
+        todoModal.className = 'modal fade';
+        todoModal.setAttribute('tabindex', '-1');
+        todoModal.setAttribute('aria-hidden', 'true');
+        
+        // Set up modal HTML structure with higher z-index to ensure it's on top
+        todoModal.innerHTML = `
+            <div class="modal-dialog" style="z-index: 1060;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Tasks for: <span id="todoModalCardTitle"></span></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="todo-list-container"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(todoModal);
+        
+        // Add additional styles to ensure the modal is interactive
+        const modalStyles = document.createElement('style');
+        modalStyles.textContent = `
+            .modal-backdrop {
+                z-index: 1050 !important;
+            }
+            #userTodoModal {
+                z-index: 1055 !important;
+            }
+            .todo-item input[type="checkbox"] {
+                pointer-events: auto !important;
+                opacity: 1 !important;
+                cursor: pointer !important;
+            }
+            .todo-item {
+                cursor: pointer;
+            }
+        `;
+        document.head.appendChild(modalStyles);
+    }
+    
+    // Update modal title
+    document.getElementById('todoModalCardTitle').textContent = cardTitle;
+    
+    // Initialize the modal
+    const bsModal = new bootstrap.Modal(todoModal);
+    
+    // Show the modal
+    bsModal.show();
+    
+    // Fetch todos when modal is shown
+    todoModal.addEventListener('shown.bs.modal', function() {
+        fetchAndDisplayTodos(cardId);
+    }, { once: true });
+}// Function to fetch and display todos
+function fetchAndDisplayTodos(cardId) {
+    const todoContainer = document.querySelector('#userTodoModal .todo-list-container');
+    todoContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+    
+    // Fetch todos from the server
+    fetch(`${apiBaseUrl}/cards/${cardId}/todos`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Display todos
+                displayUserTodos(data.todos, todoContainer, cardId);
+            } else {
+                todoContainer.innerHTML = `<div class="alert alert-danger">Error: ${data.message || 'Could not load tasks'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching todos:', error);
+            todoContainer.innerHTML = '<div class="alert alert-danger">Failed to load tasks. Please try again.</div>';
+        });
+}
+// Updated displayUserTodos function to use your existing handleUpdateTodoStatus
+function displayUserTodos(todos, container, cardId) {
+    container.innerHTML = '';
+    
+    if (!todos || todos.length === 0) {
+        container.innerHTML = '<div class="no-todos p-3 text-muted">No tasks for this card</div>';
+        return;
+    }
+    
+    const todoList = document.createElement('div');
+    todoList.className = 'todo-list';
+    
+    todos.forEach(todo => {
+        const todoItem = document.createElement('div');
+        todoItem.className = 'todo-item d-flex align-items-center p-2 border-bottom';
+        todoItem.dataset.todoId = todo.id;
+        
+        // Create checkbox for completion status
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'form-check-input me-3';
+        checkbox.checked = todo.completed;
+        checkbox.disabled = false; // Explicitly enable the checkbox
+        
+        // Add event listener to the checkbox using your existing function
+        checkbox.addEventListener('click', function(e) {
+            // Stop event propagation to prevent modal issues
+            e.stopPropagation();
+        });
+        
+        checkbox.addEventListener('change', function(e) {
+            e.stopPropagation();
+            // Use your existing function
+            handleUpdateTodoStatus(todo.id, this.checked);
+            
+            // Update UI immediately (optimistic update)
+            const todoContent = this.closest('.todo-item').querySelector('.todo-content');
+            if (this.checked) {
+                todoContent.classList.add('text-decoration-line-through', 'text-muted');
+            } else {
+                todoContent.classList.remove('text-decoration-line-through', 'text-muted');
+            }
+        });
+        
+        // Create todo content
+        const todoContent = document.createElement('span');
+        todoContent.className = todo.completed ? 'todo-content text-decoration-line-through text-muted' : 'todo-content';
+        todoContent.textContent = todo.content;
+        
+        // Add elements to todo item
+        todoItem.appendChild(checkbox);
+        todoItem.appendChild(todoContent);
+        
+        // Prevent todoItem click from interfering with checkbox
+        todoItem.addEventListener('click', function(e) {
+            // If clicking directly on the todoItem (not the checkbox)
+            if (e.target === this || e.target === todoContent) {
+                const checkboxEl = this.querySelector('input[type="checkbox"]');
+                checkboxEl.checked = !checkboxEl.checked;
+                
+                // Trigger the change event manually
+                const changeEvent = new Event('change');
+                checkboxEl.dispatchEvent(changeEvent);
+            }
+        });
+        
+        // Add todo item to list
+        todoList.appendChild(todoItem);
+    });
+    
+    container.appendChild(todoList);
+}
+
+// Function to update todo status
+function updateTodoStatus(todoId, completed, cardId) {
+    // Find the todo item in the DOM
+    const todoItem = document.querySelector(`.todo-item[data-todo-id="${todoId}"]`);
+    const todoContent = todoItem.querySelector('.todo-content');
+    
+    // Optimistic UI update
+    if (completed) {
+        todoContent.classList.add('text-decoration-line-through', 'text-muted');
+    } else {
+        todoContent.classList.remove('text-decoration-line-through', 'text-muted');
+    }
+    
+    // Send update to server
+    fetch(`/kanban/todos/${todoId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ completed: completed }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Server responded with status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (!data.success) {
+            console.error('Failed to update todo status:', data.message);
+            // Revert UI if update failed
+            todoItem.querySelector('input[type="checkbox"]').checked = !completed;
+            if (completed) {
+                todoContent.classList.remove('text-decoration-line-through', 'text-muted');
+            } else {
+                todoContent.classList.add('text-decoration-line-through', 'text-muted');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error updating todo status:', error);
+        // Revert UI on error
+        todoItem.querySelector('input[type="checkbox"]').checked = !completed;
+        if (completed) {
+            todoContent.classList.remove('text-decoration-line-through', 'text-muted');
+        } else {
+            todoContent.classList.add('text-decoration-line-through', 'text-muted');
+        }
+        alert('Failed to update task status. Please try again.');
+    });
+}
     
     // Handler for toggling completion status (available to all users)
     cardElement.querySelector('.btn-toggle-completion').addEventListener('click', (e) => {
@@ -1863,20 +2224,7 @@ function addTodoItem(containerId) {
     container.appendChild(todoItem);
 }
 
-function populateUserSelect(selectElement) {
-    // Clear user list, keeping only first option "Not assigned"
-    while (selectElement.options.length > 1) {
-        selectElement.remove(1);
-    }
-    
-    // Add users to dropdown
-    users.forEach(user => {
-        const option = document.createElement('option');
-        option.value = user.id;
-        option.textContent = user.username || user.name || `User ${user.id}`;
-        selectElement.appendChild(option);
-    });
-}
+
 
 // Drag and drop functions
 function setupDraggable(element) {
