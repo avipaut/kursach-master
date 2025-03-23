@@ -252,6 +252,7 @@ def create_card(board_id, list_id):
     db.session.add(new_card)
     db.session.commit()
     return jsonify(new_card.to_dict()), 201
+    return jsonify(new_card.to_dict()), 201
 
 @kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['PUT'])
 @login_required

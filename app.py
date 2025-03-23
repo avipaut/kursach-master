@@ -24,6 +24,7 @@ from routes.trash import trash_bp
 from routes.notifications import notifications_bp, add_notification
 
 
+
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
