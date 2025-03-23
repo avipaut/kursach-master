@@ -1,102 +1,139 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+# auth.py
+
+import uuid
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3
+from flask_security import roles_required, roles_accepted
+from routes.models import db, User, Role  # Добавил импорт Role
+from contextlib import contextmanager
+from functools import wraps  # Important import for preserving function names
 
 auth_bp = Blueprint('auth', __name__)
-
-# Глобальная переменная login_manager
 login_manager = None
 
 def init_login_manager(manager):
     global login_manager
     login_manager = manager
 
-    # Устанавливаем загрузчик пользователя после инициализации login_manager
     @login_manager.user_loader
     def load_user(user_id):
-        return User.get(user_id)
+        return User.query.get(int(user_id))
 
-# === Инициализация базы данных ===
-def init_db():
-    with sqlite3.connect('users.db') as con:
-        cur = con.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        )''')
-        con.commit()
+@contextmanager
+def session_scope():
+    try:
+        yield db.session
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        raise e
+    finally:
+        db.session.close()
+        
+# Вспомогательная функция для проверки ролей
+def check_role(role_name):
+    """Проверяет, имеет ли текущий пользователь указанную роль"""
+    if not current_user.is_authenticated:
+        return False
+    return role_name in [role.name for role in current_user.roles]
 
-init_db()
+# Декоратор для проверки роли
+def role_required(role_name):
+    def decorator(f):
+        @wraps(f)  # This preserves the original function name and metadata
+        @login_required
+        def decorated_function(*args, **kwargs):
+            if not check_role(role_name):
+                flash(f'Доступ запрещен. Требуется роль: {role_name}', 'danger')
+                return redirect(url_for('auth.login'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
-# === Класс пользователя ===
-class User(UserMixin):
-    def __init__(self, id_, username):
-        self.id = id_
-        self.username = username
-
-    @staticmethod
-    def get(user_id):
-        with sqlite3.connect('users.db') as con:
-            cur = con.cursor()
-            cur.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
-            user = cur.fetchone()
-            if user:
-                return User(user[0], user[1])
-        return None
-
-    @staticmethod
-    def get_by_username(username):
-        with sqlite3.connect('users.db') as con:
-            cur = con.cursor()
-            cur.execute("SELECT id, username, password FROM users WHERE username = ?", (username,))
-            user = cur.fetchone()
-            if user:
-                return User(user[0], user[1]), user[2]
-        return None, None
-
-    def get_id(self):
-        return str(self.id)  # Flask-Login требует строковый ID
-
-# === Регистрация ===
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         username = request.form['username']
+        email = request.form['email']  # Получаем email из формы
         password = request.form['password']
-        hashed_password = generate_password_hash(password)
-
-        try:
-            with sqlite3.connect('users.db') as con:
-                cur = con.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
-                con.commit()
-                flash('Регистрация прошла успешно! Войдите в систему.', 'success')
-                return redirect(url_for('auth.login'))
-        except sqlite3.IntegrityError:
-            flash('Имя пользователя уже занято!', 'danger')
-
+        
+        with session_scope() as session:
+            # Проверяем, существует ли пользователь с таким именем или email
+            if User.query.filter_by(username=username).first():
+                flash('Имя пользователя уже занято!', 'danger')
+                return redirect(url_for('auth.register'))
+                
+            # Создаем пользователя
+            user = User(
+                username=username, 
+                password=generate_password_hash(password),
+                email=request.form.get('email', ''),  # Опциональное поле
+                active=True,
+                fs_uniquifier=uuid.uuid4().hex  # Безопаснее
+  # Add fs_uniquifier here
+            )
+            
+            # Добавляем роль "user" по умолчанию
+            user_role = Role.query.filter_by(name='user').first()
+            if user_role:
+                user.roles.append(user_role)
+            else:
+                # Если роли еще не созданы, создаем их
+                default_role = Role(name='user', description='Обычный пользователь')
+                db.session.add(default_role)
+                db.session.commit()  # Коммит перед использованием
+                user.roles.append(default_role)
+                
+            session.add(user)
+            
+        flash('Регистрация прошла успешно! Войдите в систему.', 'success')
+        return redirect(url_for('auth.login'))
+        
     return render_template('register.html')
 
-# === Авторизация ===
+
+# from models import db, User  # Импортируй свою модель
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    print("Login route accessed. Method:", request.method)
     if request.method == 'POST':
-        username = request.form['username']
+        username_or_email = request.form['username']
         password = request.form['password']
-
-        user, stored_password = User.get_by_username(username)
-        if user and check_password_hash(stored_password, password):
-            login_user(user)  # Авторизация пользователя
-            flash('Вы успешно вошли!', 'success')
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('auth.protected'))
+        
+        print(f"Attempting login for user: {username_or_email}")
+        
+        user = User.query.filter((User.username == username_or_email) | (User.email == username_or_email)).first()
+        
+        if user:
+            print(f"User found: {user.username}")
+            password_check = check_password_hash(user.password, password)
+            print(f"Password check: {password_check}")
+            
+            if password_check:
+                # Важно включить remember=True
+                login_user(user, remember=True)
+                
+                from flask import session
+                session.permanent = True  # Сделать сессию постоянной
+                
+                print(f"User {user.username} logged in successfully")
+                print(f"Is authenticated after login: {current_user.is_authenticated}")
+                print(f"Current user ID: {current_user.id}")
+                print(f"Session data: {session}")
+                
+                # Простое перенаправление без url_for
+                if hasattr(user, 'is_admin') and user.is_admin:
+                    return redirect(url_for('auth.admin_panel'))           
+                else:
+                    return redirect(url_for('kanban.kanban_board'))        
+                
         else:
-            flash('Неверное имя пользователя или пароль!', 'danger')
-
+            print("User not found")
+            
+        flash('Неверное имя пользователя/email или пароль!', 'danger')
+    
     return render_template('login.html')
-
 # === Выход ===
 @auth_bp.route('/logout')
 @login_required
@@ -110,3 +147,64 @@ def logout():
 @login_required
 def protected():
     return render_template('chat.html', username=current_user.username)
+
+# === Админ-панель (только для администраторов) ===
+from datetime import datetime
+
+@auth_bp.route('/admin')
+@role_required('admin')
+def admin_panel():
+    users = User.query.all()
+    roles = Role.query.all()
+    # Добавляем текущую дату и время
+    return render_template('admin_panel.html', users=users, roles=roles, now=datetime.now())
+
+# === Получение всех пользователей (JSON, только для админов) ===
+@auth_bp.route('/users')
+@role_required('admin')  # This now includes login_required
+def get_users():
+    users = User.query.all()
+    user_list = [user.to_dict() for user in users]
+    return jsonify(user_list)
+
+# === Изменение ролей пользователя (только для админов) ===
+@auth_bp.route('/users/<int:user_id>/roles', methods=['POST'])
+@role_required('admin')  # This now includes login_required
+def update_user_roles(user_id):
+    user = User.query.get_or_404(user_id)
+    role_ids = request.form.getlist('roles[]')
+    
+    # Очистить текущие роли пользователя
+    user.roles = []
+
+    # Добавить выбранные роли
+    for role_id in role_ids:
+        role = Role.query.get(int(role_id))
+        if role:
+            user.roles.append(role)
+    
+    db.session.commit()  # Добавляем коммит!
+
+    flash(f'Роли пользователя {user.username} обновлены', 'success')
+    return redirect(url_for('auth.admin_panel'))
+
+# === Создание новой роли (только для админов) ===
+@auth_bp.route('/roles', methods=['POST'])
+@role_required('admin')  # This now includes login_required
+def create_role():
+    name = request.form.get('name')
+    description = request.form.get('description')
+    
+    if not name:
+        flash('Название роли не может быть пустым', 'danger')
+        return redirect(url_for('auth.admin_panel'))
+        
+    with session_scope() as session:
+        if Role.query.filter_by(name=name).first():
+            flash('Роль с таким названием уже существует', 'danger')
+        else:
+            new_role = Role(name=name, description=description)
+            session.add(new_role)
+            flash('Роль успешно создана', 'success')
+    
+    return redirect(url_for('auth.admin_panel'))

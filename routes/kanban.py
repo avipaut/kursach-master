@@ -1,95 +1,146 @@
-from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash
-from flask_login import login_required, current_user
-from routes.models import db  # Используем уже инициализированный db из app.py
+# kanban.py
 
+from datetime import datetime
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, flash, abort
+from flask_login import login_required, current_user
+from routes.models import PriorityLevel, User, db, Board, List, Card, Todo  # Make sure this import works with your project structure
+from functools import wraps
 
 kanban_bp = Blueprint('kanban', __name__)
 
+# ===== PERMISSION DECORATORS =====
 
-class Board(db.Model):
-    __tablename__ = 'boards'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    lists = db.relationship('List', backref='board', cascade="all, delete-orphan", lazy=True)
+def admin_required(f):
+    """Decorator to restrict access to admin users only"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not hasattr(current_user, 'is_admin') or not current_user.is_admin:
+            # Return 403 Forbidden for API endpoints
+            if request.path.startswith('/api/') or request.is_json:
+                return jsonify({"error": "Administrator privileges required"}), 403
+            # Flash a message and redirect for regular routes
+            flash('This action requires administrator privileges.', 'error')
+            return redirect(url_for('kanban.kanban_board'))
+        return f(*args, **kwargs)
+    return decorated_function
 
-class List(db.Model):
-    __tablename__ = 'lists'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    board_id = db.Column(db.Integer, db.ForeignKey('boards.id'), nullable=False)
-    cards = db.relationship('Card', backref='list', cascade="all, delete-orphan", lazy=True)
-
-class Card(db.Model):
-    __tablename__ = 'cards'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text, nullable=True)
-    list_id = db.Column(db.Integer, db.ForeignKey('lists.id'), nullable=False)
-    order = db.Column(db.Integer, nullable=False, default=0)  # Новое поле для порядка
-
+# ===== BOARD ROUTES =====
+# Убедитесь, что маршрут определен именно так
 @kanban_bp.route('/kanban', endpoint='kanban_board')
-def trello():
-    return render_template('kanban.html')  # Указываем, что рендерим kanban.html
-
-
-# Helper function to generate a consistent JSON response
-def serialize_board(board):
-    return {"id": board.id, "name": board.name}
+@login_required
+def kanban_board():
+    is_admin = False
+    if hasattr(current_user, 'is_admin'):
+        is_admin = current_user.is_admin
+    return render_template('kanban.html', username=current_user.username, is_admin=is_admin)
+@kanban_bp.route('kanban/api/current_user', methods=['GET'])
+@login_required
+def get_current_user():
+    is_admin = False
+    if hasattr(current_user, 'is_admin'):
+        is_admin = current_user.is_admin
+    return jsonify({
+        "username": current_user.username,
+        "is_admin": is_admin
+    })
 
 @kanban_bp.route('/boards', methods=['GET'])
 @login_required
 def get_boards():
-    boards = Board.query.all()  # Получаем все доски
-    return jsonify([{"id": board.id, "name": board.name} for board in boards])  # Возвращаем JSON
-
-
-
+    # Check if is_admin attribute exists
+    is_admin = False
+    if hasattr(current_user, 'is_admin'):
+        is_admin = current_user.is_admin
+        
+    # Admins see all boards
+    if is_admin:
+        boards = Board.query.all()
+    else:
+        # Non-admins see only public boards and their own boards
+        if hasattr(Board, 'admin_only'):
+            boards = Board.query.filter(
+                (Board.user_id == current_user.id) | (Board.admin_only == False)
+            ).all()
+        else:
+            # If admin_only field doesn't exist yet, show all boards
+            boards = Board.query.all()
+    
+    return jsonify([board.to_dict() for board in boards])
 
 @kanban_bp.route('/boards', methods=['POST'])
-@login_required  # Только для авторизованных пользователей
+@login_required
+@admin_required  # Only admins can create boards
 def create_board():
-    data = request.json
-    new_board = Board(name=data['name'])
+    data = request.get_json()
+    
+    # Check if admin_only field exists in Board model
+    board_kwargs = {
+        'name': data.get('name'),
+        'user_id': current_user.id
+    }
+    
+    if hasattr(Board, 'admin_only'):
+        board_kwargs['admin_only'] = data.get('admin_only', False)  # Default to public board
+    
+    new_board = Board(**board_kwargs)
+    
     db.session.add(new_board)
     db.session.commit()
-    return jsonify({"id": new_board.id, "name": new_board.name}), 201
+    
+    return jsonify(new_board.to_dict()), 201
 
 @kanban_bp.route('/boards/<int:board_id>', methods=['PUT'])
+@login_required
+@admin_required  # Only admins can update boards
 def update_board(board_id):
     board_obj = Board.query.get(board_id)
     if not board_obj:
         return jsonify({"error": "Board not found"}), 404
+    
     data = request.json
     board_obj.name = data.get('name', board_obj.name)
+    
+    # Allow updating admin_only status if the field exists
+    if hasattr(Board, 'admin_only') and 'admin_only' in data:
+        board_obj.admin_only = data['admin_only']
+    
     db.session.commit()
-    return jsonify({"id": board_obj.id, "name": board_obj.name})
-
+    return jsonify(board_obj.to_dict())
 
 @kanban_bp.route('/boards/<int:board_id>', methods=['DELETE'])
+@login_required
+@admin_required  # Only admins can delete boards
 def delete_board(board_id):
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
+    
     db.session.delete(board)
     db.session.commit()
     return '', 204
 
-###########
+# ===== LIST ROUTES =====
 
-# Получить все списки для конкретной доски
-# Пример защищенного маршрута для работы с карточками (списки)
 @kanban_bp.route('/boards/<int:board_id>/lists', methods=['GET'])
-@login_required  # Защищаем маршрут
+@login_required
 def get_lists(board_id):
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
+    
+    # Check if user has access to this board
+    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+    has_admin_only = hasattr(board, 'admin_only') and board.admin_only
+    
+    if has_admin_only and not is_admin:
+        return jsonify({"error": "You don't have permission to view this board's lists"}), 403
+    
     lists = List.query.filter_by(board_id=board_id).all()
     return jsonify([{"id": l.id, "name": l.name} for l in lists])
 
-# Создать новый список в доске
 @kanban_bp.route('/boards/<int:board_id>/lists', methods=['POST'])
 @login_required
+@admin_required  # Only admins can create lists
 def create_list(board_id):
     board = Board.query.get(board_id)
     if not board:
@@ -102,21 +153,18 @@ def create_list(board_id):
     
     return jsonify({"id": new_list.id, "name": new_list.name}), 201
 
-
-# Обновить список
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>', methods=['PUT'])
+@login_required
+@admin_required  # Only admins can update lists
 def update_list(board_id, list_id):
-    # Проверяем существование доски
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
 
-    # Проверяем существование списка и принадлежность доске
     list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
     if not list_obj:
         return jsonify({"error": "List not found or does not belong to the specified board"}), 404
 
-    # Обновляем список
     data = request.json
     if not data or 'name' not in data or not data['name'].strip():
         return jsonify({"error": "Field 'name' is required for update"}), 400
@@ -126,81 +174,97 @@ def update_list(board_id, list_id):
 
     return jsonify({"id": list_obj.id, "name": list_obj.name})
 
-
-# Удалить список
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>', methods=['DELETE'])
+@login_required
+@admin_required  # Only admins can delete lists
 def delete_list(board_id, list_id):
-    # Проверяем существование доски
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
 
-    # Проверяем существование списка и принадлежность доске
     list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
     if not list_obj:
         return jsonify({"error": "List not found or does not belong to the specified board"}), 404
 
-    # Удаляем список
     db.session.delete(list_obj)
     db.session.commit()
     return '', 204
 
-#####
+# ===== CARD ROUTES =====
+
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards', methods=['GET'])
+@login_required
 def get_cards(board_id, list_id):
-    # Проверяем существование доски
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
+    
+    # Check if user has access to this board
+    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+    has_admin_only = hasattr(board, 'admin_only') and board.admin_only
+    
+    if has_admin_only and not is_admin:
+        return jsonify({"error": "You don't have permission to view this board's cards"}), 403
 
-    # Проверяем существование списка и принадлежность доске
     list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
     if not list_obj:
         return jsonify({"error": "List not found or does not belong to the specified board"}), 404
 
-    # Получаем карточки
     cards = Card.query.filter_by(list_id=list_id).all()
-    return jsonify([{"id": c.id, "title": c.title, "description": c.description} for c in cards])
+    return jsonify([card.to_dict() for card in cards])
 
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['GET'])
+@login_required
+def get_single_card(board_id, list_id, card_id):
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    
+    # Check if user has access to this board
+    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+    has_admin_only = hasattr(board, 'admin_only') and board.admin_only
+    
+    if has_admin_only and not is_admin:
+        return jsonify({"error": "You don't have permission to view this card"}), 403
+    
+    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
+    if not list_obj:
+        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
+    
+    card = Card.query.filter_by(id=card_id, list_id=list_id).first()
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+
+    return jsonify(card.to_dict())
 
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards', methods=['POST'])
+@login_required
+@admin_required  # Only admins can create cards
 def create_card(board_id, list_id):
-    # Проверяем, существует ли доска
-    board = Board.query.get(board_id)
-    if not board:
-        return jsonify({"error": "Board not found"}), 404
-
-    # Проверяем, существует ли список и принадлежит ли он доске
-    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
-    if not list_obj:
-        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
-
-    # Проверяем данные запроса
     data = request.json
-    if not data or 'title' not in data or not data['title'].strip():
-        return jsonify({"error": "Field 'title' is required and cannot be empty"}), 400
-
-    # Создаем карточку
-    description = data.get('description', '')
-    new_card = Card(title=data['title'], description=description, list_id=list_id)
+    new_card = Card(
+        title=data['title'],
+        description=data.get('description', ''),
+        list_id=list_id,
+        user_id=current_user.id,
+        priority=PriorityLevel(data.get('priority', 'low'))
+    )
     db.session.add(new_card)
     db.session.commit()
+    return jsonify(new_card.to_dict()), 201
 
-    return jsonify({"id": new_card.id, "title": new_card.title, "description": new_card.description}), 201
-
-# Обновить карточку
-@kanban_bp.route('/cards/<int:card_id>', methods=['PUT'])
+@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['PUT'])
+@login_required
+@admin_required  # Only admins can update card details
 def update_card(board_id, list_id, card_id):
-    # Проверяем существование доски
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
-    # Проверяем существование списка и принадлежность доске
+    
     list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
     if not list_obj:
         return jsonify({"error": "List not found or does not belong to the specified board"}), 404
 
-     # Проверяем существование карточки и принадлежность списку
     card = Card.query.filter_by(id=card_id, list_id=list_id).first()
     if not card:
         return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
@@ -211,91 +275,283 @@ def update_card(board_id, list_id, card_id):
     db.session.commit()
     return jsonify({"id": card.id, "title": card.title, "description": card.description})
 
-@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['DELETE'])
+@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['DELETE'])
+@login_required
+@admin_required  # Only admins can delete cards
 def delete_card(board_id, list_id, card_id):
-    # Проверяем существование доски
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
 
-    # Проверяем существование списка и принадлежность доске
     list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
     if not list_obj:
         return jsonify({"error": "List not found or does not belong to the specified board"}), 404
 
-    # Проверяем существование карточки и принадлежность списку
     card = Card.query.filter_by(id=card_id, list_id=list_id).first()
     if not card:
         return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
 
-    # Удаляем карточку
     db.session.delete(card)
     db.session.commit()
     return '', 204
 
-#####
+# ===== USER ROUTES =====
+
+@kanban_bp.route('/users', methods=['GET'])
+@login_required
+def get_users():
+    users = User.query.all()
+    return jsonify([user.to_dict() for user in users])
+
+# ===== CARD STATUS ROUTES =====
+
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/toggle-completion', methods=['PUT'])
+@login_required
+def toggle_card_completion(board_id, list_id, card_id):
+    # Any user can toggle card completion status
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    # Get the completion status from the request
+    data = request.json
+    if 'completed' in data:
+        card.completed = data['completed']
+    else:
+        # Toggle if not specified
+        card.completed = not card.completed
+        
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Card completion status updated',
+        'card_id': card.id,
+        'completed': card.completed
+    })
+
+@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/assign', methods=['PUT'])
+@login_required
+@admin_required  # Only admins can assign users to cards
+def assign_user_to_card(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    user_id = data.get('user_id')
+    
+    # Check if user exists if an ID was provided
+    if user_id:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        card.assigned_to = user_id
+    else:
+        card.assigned_to = None  # Unassign
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Card assignment updated',
+        'card_id': card.id,
+        'assigned_to': card.assigned_to,
+        'assigned_to_name': card.assigned_user.username if card.assigned_user else None
+    })
+
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/deadline', methods=['PUT'])
+@login_required
+@admin_required  # Only admins can set deadlines
+def set_card_deadline(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    deadline_str = data.get('deadline')
+    
+    try:
+        if deadline_str:
+            card.deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+        else:
+            card.deadline = None
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Card deadline updated',
+            'card_id': card.id,
+            'deadline': card.deadline.isoformat() if card.deadline else None
+        })
+    except ValueError as e:
+        return jsonify({"error": f"Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS): {str(e)}"}), 400
+
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/priority', methods=['PUT'])
+@login_required
+@admin_required  # Only admins can update card priority
+def update_card_priority(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    if 'priority' not in data:
+        return jsonify({"error": "Priority is required"}), 400
+        
+    try:
+        card.priority = PriorityLevel(data['priority'])
+        db.session.commit()
+        return jsonify(card.to_dict())
+    except ValueError:
+        return jsonify({"error": "Invalid priority value"}), 400
+
+# ===== TODO ROUTES =====
+# Add this route to your kanban.py file
+
+@kanban_bp.route('/cards/<int:card_id>/todos', methods=['GET'])
+@login_required
+def get_card_todos(card_id):
+    """Get all todos for a specific card"""
+    try:
+        # Find the card
+        card = Card.query.get(card_id)
+        if not card:
+            return jsonify({'success': False, 'message': 'Card not found'}), 404
+            
+        # Anyone can view todos, but we'll check if the board is admin-only
+        list_obj = List.query.get(card.list_id)
+        if not list_obj:
+            return jsonify({'success': False, 'message': 'List not found'}), 404
+            
+        board = Board.query.get(list_obj.board_id)
+        if not board:
+            return jsonify({'success': False, 'message': 'Board not found'}), 404
+            
+        # Check if user has access to this board
+        is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+        has_admin_only = hasattr(board, 'admin_only') and board.admin_only
+        
+        if has_admin_only and not is_admin:
+            return jsonify({'success': False, 'message': 'You do not have permission to view these todos'}), 403
+            
+        # Get all todos for this card
+        todos = Todo.query.filter_by(card_id=card_id).all()
+        
+        return jsonify({
+            'success': True,
+            'todos': [todo.to_dict() for todo in todos]
+        })
+    except Exception as e:
+        print(f"Error getting todos: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/todos', methods=['POST'])
+@login_required
+@admin_required  # Only admins can create todos
+def create_todo(board_id, list_id, card_id):
+    card = Card.query.get(card_id)
+    if not card:
+        return jsonify({"error": "Card not found"}), 404
+    
+    data = request.json
+    content = data.get('content')
+    
+    if not content or not content.strip():
+        return jsonify({"error": "Todo content is required"}), 400
+    
+    todo = Todo(content=content, card_id=card_id)
+    db.session.add(todo)
+    db.session.commit()
+    
+    return jsonify(todo.to_dict()), 201
+
+# Replace your existing update_todo route with this one
+
+@kanban_bp.route('/todos/<int:todo_id>', methods=['PUT'])
+@login_required
+def update_todo(todo_id):
+    """Update a todo - regular users can update completion status only"""
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return jsonify({"success": False, "message": "Todo not found"}), 404
+    
+    data = request.json
+    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+    
+    # For content updates, user must be an admin
+    if 'content' in data and not is_admin:
+        return jsonify({"success": False, "message": "Only administrators can update todo content"}), 403
+    
+    # For completion status, any user can update
+    if 'content' in data and is_admin:
+        todo.content = data['content']
+        
+    if 'completed' in data:
+        todo.completed = data['completed']
+    
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "message": "Todo updated successfully",
+        "todo": todo.to_dict()
+    })
+
+# Update your delete todo route handler in the backend to ensure valid JSON is returned
+
+@kanban_bp.route('/todos/<int:todo_id>', methods=['DELETE'])
+@admin_required
+@login_required
+def delete_todo(todo_id):
+    try:
+        print(f"Attempting to delete todo with ID: {todo_id}")
+        
+        todo = Todo.query.get(todo_id)
+        if not todo:
+            print(f"Todo not found with ID: {todo_id}")
+            return jsonify({'success': False, 'message': 'Todo not found'}), 404
+            
+        # Store card_id before deleting the todo to return in the response
+        card_id = todo.card_id
+        
+        # Delete the todo
+        db.session.delete(todo)
+        db.session.commit()
+        
+        print(f"Todo deleted successfully: {todo_id}")
+        # Ensure we're returning a proper JSON response
+        return jsonify({
+            'success': True, 
+            'message': 'Todo deleted successfully',
+            'todo_id': todo_id,
+            'card_id': card_id
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting todo: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ===== CARD MOVEMENT ROUTES =====
 
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:source_list_id>/cards/<int:card_id>/move/<int:target_list_id>', methods=['PUT'])
+@login_required
+@admin_required  # Only admins can move cards
 def move_card(board_id, source_list_id, card_id, target_list_id):
-    # Проверяем существование доски
     board = Board.query.get(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
 
-    # Проверяем существование исходного списка и принадлежность доске
     source_list = List.query.filter_by(id=source_list_id, board_id=board_id).first()
     if not source_list:
         return jsonify({"error": "Source list not found or does not belong to the specified board"}), 404
 
-    # Проверяем существование целевого списка и принадлежность доске
     target_list = List.query.filter_by(id=target_list_id, board_id=board_id).first()
     if not target_list:
         return jsonify({"error": "Target list not found or does not belong to the specified board"}), 404
 
-    # Проверяем существование карточки и принадлежность исходному списку
     card = Card.query.filter_by(id=card_id, list_id=source_list_id).first()
     if not card:
         return jsonify({"error": "Card not found or does not belong to the source list"}), 404
 
-    # Обновляем список карточки
     card.list_id = target_list_id
     db.session.commit()
 
     return jsonify({"id": card.id, "title": card.title, "description": card.description, "list_id": card.list_id}), 200
-
-
-@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/reorder', methods=['PUT'])
-def reorder_card(board_id, list_id, card_id):
-    # Проверяем существование доски
-    board = Board.query.get(board_id)
-    if not board:
-        return jsonify({"error": "Board not found"}), 404
-
-    # Проверяем существование списка и принадлежность доске
-    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
-    if not list_obj:
-        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
-
-    # Проверяем существование карточки
-    card = Card.query.filter_by(id=card_id, list_id=list_id).first()
-    if not card:
-        return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
-
-    # Обновляем порядок карточки
-    data = request.json
-    new_order = data.get('order')
-    if new_order is None or not isinstance(new_order, int):
-        return jsonify({"error": "Field 'order' is required and must be an integer"}), 400
-
-    # Сдвигаем другие карточки
-    cards = Card.query.filter_by(list_id=list_id).order_by(Card.order).all()
-    for index, existing_card in enumerate(cards):
-        if existing_card.id == card_id:
-            continue
-        existing_card.order = index if index < new_order else index + 1
-
-    card.order = new_order
-    db.session.commit()
-
-    return jsonify({"id": card.id, "title": card.title, "description": card.description, "order": card.order}), 200
-

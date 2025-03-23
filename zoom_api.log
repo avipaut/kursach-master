@@ -1,0 +1,51 @@
+2025-02-25 23:52:39,026 - routes.zoom - INFO - Events file not found, starting with empty events
+2025-02-25 23:52:42,769 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.108:5000
+2025-02-25 23:52:42,769 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-02-25 23:52:42,770 - werkzeug - INFO -  * Restarting with stat
+2025-02-25 23:52:45,157 - routes.zoom - INFO - Events file not found, starting with empty events
+2025-02-25 23:52:46,075 - werkzeug - WARNING -  * Debugger is active!
+2025-02-25 23:52:46,078 - werkzeug - INFO -  * Debugger PIN: 411-971-751
+2025-02-25 23:52:48,452 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:48] "[32mGET / HTTP/1.1[0m" 302 -
+2025-02-25 23:52:48,584 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:48] "GET /auth/login HTTP/1.1" 200 -
+2025-02-25 23:52:51,259 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:51] "[32mPOST /auth/login HTTP/1.1[0m" 302 -
+2025-02-25 23:52:51,429 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:51] "GET /auth/protected HTTP/1.1" 200 -
+2025-02-25 23:52:51,576 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:51] "[36mGET /static/styles.css HTTP/1.1[0m" 304 -
+2025-02-25 23:52:51,579 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:51] "[36mGET /static/default-avatar.png HTTP/1.1[0m" 304 -
+2025-02-25 23:52:51,634 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:51] "GET /socket.io/?EIO=4&transport=polling&t=PK-FNki HTTP/1.1" 200 -
+2025-02-25 23:52:51,657 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:51] "POST /socket.io/?EIO=4&transport=polling&t=PK-FNkx&sid=6z33My22Ra5dEbvZAAAA HTTP/1.1" 200 -
+2025-02-25 23:52:51,658 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:51] "GET /socket.io/?EIO=4&transport=polling&t=PK-FNkz&sid=6z33My22Ra5dEbvZAAAA HTTP/1.1" 200 -
+2025-02-25 23:52:53,065 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:53] "GET /socket.io/?EIO=4&transport=websocket&sid=6z33My22Ra5dEbvZAAAA HTTP/1.1" 200 -
+2025-02-25 23:52:53,509 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:53] "GET /zoom/ HTTP/1.1" 200 -
+2025-02-25 23:52:58,717 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:52:58] "[33mGET /get_events HTTP/1.1[0m" 404 -
+2025-02-25 23:53:38,194 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:53:38] "[33mPOST /create_task HTTP/1.1[0m" 404 -
+2025-02-25 23:53:39,607 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:53:39] "[33mPOST /create_task HTTP/1.1[0m" 404 -
+2025-02-25 23:53:39,796 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:53:39] "[33mPOST /create_task HTTP/1.1[0m" 404 -
+2025-02-25 23:53:39,966 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:53:39] "[33mPOST /create_task HTTP/1.1[0m" 404 -
+2025-02-25 23:54:10,813 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:54:10] "[33mPOST /create_task HTTP/1.1[0m" 404 -
+2025-02-25 23:54:30,614 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:54:30] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:54:54,169 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:54:54] "[33mGET /get_events HTTP/1.1[0m" 404 -
+2025-02-25 23:55:01,515 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:01] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:02,130 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:02] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:02,378 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:02] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:02,578 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:02] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:02,760 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:02] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:02,944 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:02] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:03,132 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:03] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:03,326 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:03] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:03,509 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:03] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:03,700 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:03] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:55:03,883 - werkzeug - INFO - 127.0.0.1 - - [25/Feb/2025 23:55:03] "[33mPOST /create_zoom_meeting HTTP/1.1[0m" 404 -
+2025-02-25 23:59:19,289 - werkzeug - INFO -  * Detected change in 'd:\\ÂÊÐ\\kursach-master\\routes\\zoom.py', reloading
+2025-02-25 23:59:19,848 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 00:01:31,509 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 00:13:07,300 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 01:05:44,717 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 01:06:12,186 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 01:06:20,589 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 01:06:39,419 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 01:06:51,555 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 01:09:45,194 - werkzeug - INFO -  * Restarting with stat
+2025-02-26 01:09:52,234 - werkzeug - INFO -  * Restarting with stat
