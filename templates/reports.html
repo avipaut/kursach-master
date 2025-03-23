@@ -242,57 +242,8 @@
     </style>
 </head>
 <body>
-    <!-- Modified Navbar - same as in other pages -->
-    <header class="navbar">
-        <div class="navbar-left">
-            <div class="logo-group">
-                <div class="app-logo">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>CRM System</span>
-                </div>
-            </div>
-            
-            <!-- Navigation moved to left, right after logo -->
-            <nav class="main-nav">
-                <a href="{{ url_for('kanban.kanban_board') }}" class="nav-link" id="kanban-link">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>Kanban</span>
-                </a>
-                <a href="{{ url_for('documents.documents') }}" class="nav-link">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Documents</span>
-                </a>
-                <a href="{{ url_for('chat.messenger_page') }}" class="nav-link">
-                    <i class="fas fa-comment"></i>
-                    <span>Chats</span>
-                </a>
-                <a href="{{ url_for('reports.view_reports') }}" class="nav-link active">
-                    <i class="fas fa-chart-bar"></i>
-                    <span>Reports</span>
-                </a>
-                <a href="{{ url_for('kpi.kpi_constructor') }}" class="nav-link">
-                    <i class="fas fa-chart-line"></i>
-                    <span>KPI</span>
-                </a>
-                <a href="{{ url_for('zoom.zoom') }}" class="nav-link">
-                    <i class="fas fa-video"></i>
-                    <span>Zoom</span>
-                </a>
-            </nav>
-        </div>
-        
-        <div class="navbar-right">
-            <!-- Search box added back -->
-            <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="search" id="navSearchInput" placeholder="Search...">
-            </div>
-            
-            <a href="{{ url_for('auth.logout') }}" class="nav-link">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
-            </a>
-        </div>
+    {% include 'navbar.html' %}
+
     </header>
     
     <div class="container mt-4">
