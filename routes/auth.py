@@ -91,6 +91,10 @@ def register():
         return redirect(url_for('auth.login'))
         
     return render_template('register.html')
+from routes.models import db, User  # Импортируй свою модель
+
+
+
 
 
 # from models import db, User  # Импортируй свою модель

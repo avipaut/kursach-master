@@ -1,7 +1,16 @@
 # models.py
 
 from datetime import datetime
+# models.py
+
+from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Text, Boolean, Table
+import enum
+from sqlalchemy.orm import relationship
+from enum import Enum as PyEnum
+
+from flask_security import RoleMixin
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Text, Boolean, Table
 import enum
 from sqlalchemy.orm import relationship
@@ -154,15 +163,28 @@ class PriorityLevel(enum.Enum):
     MEDIUM = "medium"
     HIGH = "high"
 
-class KPI(db.Model):
-    __tablename__ = 'kpi'
-    id = Column(Integer, primary_key=True)
-    row_index = Column(Integer, nullable=False)
-    column_name = Column(String(100), nullable=False)
-    value = Column(String(100), nullable=True)
+# Add to existing KPI model in models.py
 
-    def __repr__(self):
-        return f"<KPI {self.row_index} - {self.column_name}: {self.value}>"
+class KPI(db.Model):
+    __tablename__ = 'kpi'  # Fixed from tablename to __tablename__
+
+    id = db.Column(db.Integer, primary_key=True)
+    row_index = db.Column(db.Integer, nullable=False)
+    column_name = db.Column(db.String(100), nullable=False)
+    value = db.Column(db.String(1000), nullable=True)
+    formula = db.Column(db.String(1000), nullable=True)  # New column for formulas
+    calculated_value = db.Column(db.String(1000), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+
+    # Fixed from table_args to __table_args__
+    __table_args__ = (
+        db.UniqueConstraint('row_index', 'column_name', 'user_id', name='uix_kpi_row_column_user'),
+    )
+
+    user = db.relationship('User', backref=db.backref('kpi_values', lazy=True, cascade="all, delete-orphan"))
+
+    def __repr__(self):  # Fixed from repr to __repr__
+        return f"<KPI: {self.column_name} [{self.row_index}] = {self.value}>"
 
 class Board(db.Model):
     __tablename__ = 'board'
@@ -261,3 +283,38 @@ class Todo(db.Model):
 
     def __repr__(self):
         return f"<Todo {self.id}: {self.content[:20]}{'...' if len(self.content) > 20 else ''}>"
+    
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)  # Добавьте эту строку
+    message = db.Column(db.String(500), nullable=False)
+    link = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    read = db.Column(db.Boolean, default=False)
+    category = db.Column(db.String(50), default='info')
+    
+    # Добавьте отношение с таблицей User
+    user = db.relationship('User', backref=db.backref('notifications', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'message': self.message,
+            'link': self.link,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M'),
+            'read': self.read,
+            'category': self.category
+        }
+class PendingFile(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    temp_path = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
+    
+    user = db.relationship('User', backref=db.backref('pending_files', lazy=True))
+    
+    def __repr__(self):
+        return f'<PendingFile {self.original_filename}>'

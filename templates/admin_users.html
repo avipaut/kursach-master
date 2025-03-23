@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
+    <title>Document</title>
+    {% include 'navbar.html' %}
+
+</head>
+<body>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-lg-12 mb-4">
+                <div class="section-header animate__animated animate__fadeIn">
+                    <h2>User Folders</h2>
+                    <a href="{{ url_for('documents.list_documents', category='personal') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left me-1"></i> Back to My Documents
+                    </a>
+                </div>
+                
+                <div class="documents-container">
+                    <div class="user-list">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th scope="col" width="5%">#</th>
+                                    <th scope="col" width="10%"><i class="bi bi-folder-fill me-2"></i>Folder</th>
+                                    <th scope="col" width="40%">Username</th>
+                                    <th scope="col" width="25%">User ID</th>
+                                    <th scope="col" width="20%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users %}
+                                <tr class="animate-row" style="animation-delay: {{ loop.index * 0.05 }}s">
+                                    <th scope="row">{{ loop.index }}</th>
+                                    <td><i class="bi bi-folder-fill folder-icon"></i></td>
+                                    <td class="username">{{ user.username }}</td>
+                                    <td class="user-id">{{ user.id }}</td>
+                                    <td>
+                                        <a href="{{ url_for('documents.admin_view_user_documents', user_id=user.id) }}" class="action-btn">
+                                            <i class="bi bi-folder-symlink"></i> View Files
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+        :root {
+            --primary: #FFFFFF;
+            --secondary: #212529;
+            --tertiary: #E63946;
+            --accent: #1D3557;
+            --light-bg: #F8F9FA;
+            --light-accent: #A8DADC;
+            --card-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            background-color: var(--light-bg);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+        
+        .section-header h2 {
+            margin: 0;
+            color: var(--secondary);
+            position: relative;
+            font-weight: 600;
+            padding-bottom: 10px;
+        }
+        
+        .section-header h2:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 80px;
+            height: 4px;
+            background: var(--tertiary);
+            border-radius: 2px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: var(--primary);
+        }
+        
+        .btn-secondary:hover {
+            background-color: #000000;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+        }
+        
+        .btn i {
+            margin-right: 5px;
+            transition: transform 0.3s ease;
+        }
+        
+        .btn:hover i {
+            transform: translateX(-3px);
+        }
+        
+        .documents-container {
+            padding: 10px;
+        }
+        
+        .user-list {
+            background-color: var(--primary);
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            padding: 15px;
+            overflow: hidden;
+        }
+        
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table thead {
+            background-color: var(--light-bg);
+        }
+        
+        .table thead th {
+            border-bottom: none;
+            color: var(--secondary);
+            font-weight: 600;
+            padding: 15px;
+        }
+        
+        .table tbody tr {
+            transition: all 0.3s ease;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .table tbody tr:hover {
+            background-color: rgba(168, 218, 220, 0.1);
+            transform: translateX(5px);
+        }
+        
+        .folder-icon {
+            font-size: 1.3rem;
+            color: var(--tertiary);
+            transition: transform 0.3s ease;
+        }
+        
+        .table tbody tr:hover .folder-icon {
+            transform: scale(1.2);
+        }
+        
+        .username {
+            font-weight: 600;
+            color: var(--secondary);
+        }
+        
+        .user-id {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .action-btn {
+            display: inline-block;
+            padding: 6px 15px;
+            background-color: var(--tertiary);
+            color: white;
+            border-radius: 50px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 4px rgba(230, 57, 70, 0.3);
+        }
+        
+        .action-btn:hover {
+            background-color: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(230, 57, 70, 0.4);
+            color: white;
+        }
+        
+        .action-btn i {
+            margin-right: 5px;
+        }
+        
+        /* Animation classes */
+        .animate-row {
+            animation: fadeInRight 0.5s forwards;
+            opacity: 0;
+        }
+        
+        @keyframes fadeInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .section-header .btn {
+                margin-top: 15px;
+            }
+            
+            .table thead {
+                display: none;
+            }
+            
+            .table, .table tbody, .table tr, .table td {
+                display: block;
+                width: 100%;
+            }
+            
+            .table tr {
+                margin-bottom: 15px;
+                padding: 10px;
+                border: 1px solid rgba(0,0,0,0.1);
+                border-radius: 8px;
+            }
+            
+            .table td {
+                padding: 8px 10px;
+                text-align: right;
+                position: relative;
+                padding-left: 50%;
+            }
+            
+            .table td:before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                width: 45%;
+                font-weight: 600;
+                text-align: left;
+            }
+            
+            .table th {
+                display: none;
+            }
+        }
+    </style>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+         $(document).ready(function() {
+    // Remove animation classes from rows
+    $('.animate-row').removeClass('animate-row');
+    
+    // Detect if device is mobile
+    var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        // Single click for mobile devices
+        $('tbody tr').click(function() {
+            var url = $(this).find('.action-btn').attr('href');
+            window.location.href = url;
+        });
+    } else {
+        // Double click for desktop
+        $('tbody tr').dblclick(function() {
+            var url = $(this).find('.action-btn').attr('href');
+            window.location.href = url;
+        });
+    }
+    
+    // Add cursor style to show rows are clickable
+    $('tbody tr').css('cursor', 'pointer');
+});
+    </script>
+</body>
+</html>

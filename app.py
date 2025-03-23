@@ -21,14 +21,14 @@ from routes.auth import auth_bp, init_login_manager
 from routes.models import db, User, Role
 from routes.kanban import kanban_bp  # Импортируем Kanban Blueprint
 from routes.trash import trash_bp
+from routes.notifications import notifications_bp, add_notification
 
 
 
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
-socketio.init_app(app, async_mode="eventlet", cors_allowed_origins="*")  # Теперь init_app() вызовется корректно
-
+socketio.init_app(app, async_mode="eventlet", cors_allowed_origins="*", ping_timeout=5, ping_interval=25)
 # # Настройка приложения
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///main.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -121,7 +121,7 @@ app.register_blueprint(kpi_bp, url_prefix='/kpi')
 app.register_blueprint(auth_bp, url_prefix='/auth')  # Без url_prefix
 app.register_blueprint(kanban_bp, url_prefix='/kanban')  # Без url_prefix
 app.register_blueprint(trash_bp, url_prefix='/trash')
-
+app.register_blueprint(notifications_bp, url_prefix='/notifications')
 
 # Главный маршрут
 @app.route('/')
@@ -194,4 +194,4 @@ with app.app_context():
         print("Пользователь admin не найден")
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)

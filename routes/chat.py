@@ -214,6 +214,7 @@ def upload_file():
             file_type=request.files['file'].content_type
         )
         
+        
         db.session.add(new_message)
         db.session.commit()
         
@@ -341,7 +342,7 @@ def handle_send_message(data):
     message_data = new_message.to_dict()
     for user in lobby.users:
         emit('new_message', message_data, room=f'user_{user.id}')
-
+    
 @socketio.on('user_typing')
 def handle_user_typing(data):
     """Handle user typing indicator"""
