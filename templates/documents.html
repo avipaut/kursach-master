@@ -6,124 +6,12 @@
   <title>Document Management System</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
+
   <style>
    body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background-color: #ffffff;
-    }
-    
-    .navbar {
-      border-bottom: 1px solid #e9ecef;
-      padding-bottom: 0;
-    }
-    
-    .nav-link {
-      color: #333;
-      padding: 0.5rem 1rem;
-      border-bottom: 3px solid transparent;
-    }
-    
-    .nav-link.active {
-      border-bottom: 3px solid #dc3545;
-      font-weight: 500;
-    }
-    
-    /* Burger menu styles */
-    .navbar-toggler {
-      border: none;
-      padding: 0.5rem;
-    }
-    
-    .navbar-toggler:focus {
-      box-shadow: none;
-    }
-    
-    .navbar-toggler-icon {
-      width: 1.5em;
-      height: 1.5em;
-    }
-    
-    /* Mobile nav styles */
-    @media (max-width: 991px) {
-      .navbar-collapse {
-        position: fixed;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        width: 80%;
-        max-width: 300px;
-        background-color: #fff;
-        z-index: 1000;
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-        padding: 1rem;
-        overflow-y: auto;
-        box-shadow: 0 0 15px rgba(0,0,0,0.2);
-      }
-      
-      .navbar-collapse.show {
-        transform: translateX(0);
-      }
-      
-      .navbar-nav {
-        flex-direction: column;
-        width: 100%;
-      }
-      
-      .nav-item {
-        width: 100%;
-        margin-bottom: 0.5rem;
-      }
-      
-      .nav-link {
-        display: flex;
-        align-items: center;
-        padding: 0.75rem 1rem;
-      }
-      
-      .nav-link i {
-        margin-right: 0.75rem;
-        font-size: 1.2rem;
-      }
-      
-      .navbar-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: rgba(0,0,0,0.5);
-        z-index: 999;
-        display: none;
-      }
-      
-      body.menu-open {
-        overflow: hidden;
-      }
-      
-      body.menu-open .navbar-backdrop {
-        display: block;
-      }
-      
-      .navbar-brand {
-        margin-right: auto;
-      }
-      
-      .navbar-mobile-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-bottom: 1rem;
-        margin-bottom: 1rem;
-        border-bottom: 1px solid #e9ecef;
-      }
-      
-      .close-menu {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        padding: 0.25rem;
-      }
     }
     
     /* Document grid layout */
@@ -401,7 +289,48 @@
         margin-bottom: 1rem;
       }
     }
+    
+    /* Category navigation tabs */
+    .document-tabs {
+      display: flex;
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    .document-tab {
+      padding: 10px 20px;
+      font-weight: 500;
+      color: #495057;
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+    
+    .document-tab:hover {
+      color: #dc3545;
+    }
+    
+    .document-tab.active {
+      color: #dc3545;
+      border-bottom-color: #dc3545;
+    }
+    
+    @media (max-width: 575px) {
+      .document-tabs {
+        width: 100%;
+        justify-content: space-between;
+      }
+      
+      .document-tab {
+        flex: 1;
+        text-align: center;
+        padding: 10px 10px;
+      }
+    }
   </style>
+  {% set active_page = 'documents' %}
+  {% include 'navbar.html' %}
 </head>
 <body>
   <div class="container-fluid">
@@ -416,86 +345,6 @@
       {% endif %}
     {% endwith %}
     
-    <!-- Navbar with Burger Menu -->
-    <div class="row">
-      <div class="col-12">
-        <nav class="navbar navbar-expand-lg">
-          <div class="container-fluid">
-            <a class="navbar-brand" href="#">DocSystem</a>
-            
-            <!-- Burger Menu Button -->
-            <button class="navbar-toggler" type="button" id="navbarToggler">
-              <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <!-- Overlay Background -->
-            <div class="navbar-backdrop" id="navbarBackdrop"></div>
-            
-            <!-- Collapsible Navigation -->
-            <div class="collapse navbar-collapse" id="navbarNav">
-              <div class="navbar-mobile-header d-lg-none">
-                <div>Menu</div>
-                <button class="close-menu" id="closeMenu">
-                  <i class="bi bi-x-lg"></i>
-                </button>
-              </div>
-              <ul class="navbar-nav">
-                <li class="nav-item">
-                  <a class="nav-link active" href="{{ url_for('documents.documents') }}">
-                    <i class="bi bi-file-earmark-text"></i> <span>Documents</span>
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="{{ url_for('chat.messenger_page') }}">
-                    <i class="bi bi-chat-left-text"></i> <span>Chat</span>
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="{{ url_for('reports.view_reports') }}">
-                    <i class="bi bi-bar-chart"></i> <span>Reports</span>
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="{{ url_for('kpi.kpi_constructor') }}">
-                    <i class="bi bi-pie-chart"></i> <span>KPI</span>
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="{{ url_for('zoom.zoom') }}">
-                    <i class="bi bi-camera-video"></i> <span>Zoom</span>
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="{{ url_for('kanban.kanban_board') }}">
-                    <i class="bi bi-trello"></i> <span>Trello</span>
-                  </a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="{{ url_for('trash.view_trash') }}">
-                    <i class="bi bi-trash"></i> <span>Trash</span> <span class="badge bg-secondary rounded-pill">2</span>
-                  </a>
-                </li>
-                <li class="nav-item d-lg-none">
-                  <form action="{{ url_for('auth.logout') }}" method="GET" class="d-inline">
-                    <button type="submit" class="nav-link border-0 bg-transparent">
-                      <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
-                    </button>
-                  </form>
-                </li>
-              </ul>
-              <div class="ms-auto d-none d-lg-block">
-                <form action="{{ url_for('auth.logout') }}" method="GET" class="d-inline">
-                  <button type="submit" class="nav-link border-0 bg-transparent">
-                    <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
-        </nav>
-      </div>
-    </div>
-    
     <!-- Main Content -->
     <div class="row mt-4">
       <!-- Documents Section -->
@@ -505,6 +354,29 @@
           <button class="upload-btn" data-bs-toggle="modal" data-bs-target="#uploadModal">
             <i class="bi bi-upload me-1"></i> Upload
           </button>
+        </div>
+        
+        <!-- Document Category Tabs -->
+        <div class="document-tabs">
+          <a href="{{ url_for('documents.list_documents', category='personal') }}" class="document-tab {% if active_category == 'personal' %}active{% endif %}">
+            <i class="bi bi-person-fill me-1"></i> Personal
+          </a>
+          <a href="{{ url_for('documents.list_documents', category='common') }}" class="document-tab {% if active_category == 'common' %}active{% endif %}">
+            <i class="bi bi-people-fill me-1"></i> Common
+          </a>
+          <a href="{{ url_for('documents.list_documents', category='important') }}" class="document-tab {% if active_category == 'important' %}active{% endif %}">
+            <i class="bi bi-star-fill me-1"></i> Important
+          </a>
+          
+          {% if 'admin' in current_user.roles|map(attribute='name')|list %}
+          <a href="{{ url_for('documents.list_users') }}" class="document-tab {% if active_category == 'users' %}active{% endif %}">
+            <i class="bi bi-person-badge me-1"></i> Users
+          </a>
+          {% endif %}
+          <a href="{{ url_for('trash.view_trash') }}" class="nav-link {% if active_page == 'trash' %}active{% endif %}">
+            <i class="fas fa-trash"></i>
+            <span>trash</span>
+        </a>
         </div>
         
         <!-- Upload Modal -->
@@ -521,6 +393,14 @@
                     <label for="fileUpload" class="form-label">Select file</label>
                     <input type="file" class="form-control" id="fileUpload" name="file" required>
                     <div class="form-text">Supported formats: PDF, DOCX, DOC, TXT, RTF, ODT (max 10MB)</div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="categorySelect" class="form-label">Select category</label>
+                    <select class="form-select" id="categorySelect" name="category">
+                      <option value="personal" {% if active_category == 'personal' %}selected{% endif %}>Personal</option>
+                      <option value="common" {% if active_category == 'common' %}selected{% endif %}>Common</option>
+                      <option value="important" {% if active_category == 'important' %}selected{% endif %}>Important</option>
+                    </select>
                   </div>
                   <div class="d-grid">
                     <button type="submit" class="btn btn-danger">Upload Document</button>
@@ -576,13 +456,14 @@
                   </div>
                   <!-- Action buttons -->
                   <div class="document-actions">
-                    <a href="{{ url_for('documents.view_file', filename=doc.name) }}" class="action-btn" target="_blank">
+                    <a href="{{ url_for('documents.view_file', filename=doc.name, category=active_category) }}" class="action-btn" target="_blank">
                       <i class="bi bi-eye"></i>
                     </a>
-                    <a href="{{ url_for('documents.download_file', filename=doc.name) }}" class="action-btn">
+                    <a href="{{ url_for('documents.download_file', filename=doc.name, category=active_category) }}" class="action-btn">
                       <i class="bi bi-download"></i>
                     </a>
                     <form action="{{ url_for('documents.delete_file', filename=doc.name) }}" method="POST" class="d-inline">
+                      <input type="hidden" name="category" value="{{ active_category }}">
                       <button type="submit" class="action-btn" 
                               onclick="return confirm('Are you sure you want to move this file to trash?');">
                         <i class="bi bi-trash"></i>
@@ -608,8 +489,7 @@
               <div class="mb-2">Translation Direction</div>
               <div class="direction-options">
                 <label class="direction-option active">
-                  <input type="radio" name="direction" value="ky-ru" class="d-none" checked>
-                  Kyrgyz → Russian
+                  <input type="radio" name="direction" value="ky-ru" class="d-none" checked>Kyrgyz → Russian
                 </label>
                 <label class="direction-option">
                   <input type="radio" name="direction" value="ru-ky" class="d-none">
@@ -618,200 +498,191 @@
               </div>
             </div>
             
-            <!-- Document Upload -->
+            <!-- File Drop Zone -->
             <div class="mb-3">
-              <div class="mb-2">Document for Translation</div>
-              <label for="translationFile" class="w-100">
-                <div class="upload-area">
-                  <div class="upload-circle">
-                    <i class="bi bi-upload upload-icon"></i>
-                  </div>
-                  <div class="mb-2 fs-5">Upload document for translation</div>
-                  <div class="text-muted mb-1">PDF, DOCX, or TXT files</div>
-                  <div class="text-muted small">Supports .pdf, .docx, .doc, .txt</div>
-                  <div class="text-muted small">Max size: 10 MB per file</div>
-                  <input type="file" id="translationFile" name="file" class="d-none" required>
+              <div class="upload-area">
+                <input type="file" name="file" id="translationFile" class="d-none" required>
+                <div class="upload-circle">
+                  <i class="bi bi-cloud-arrow-up upload-icon"></i>
                 </div>
-              </label>
+                <h5>Drag & drop file here</h5>
+                <p class="text-muted">or</p>
+                <button type="button" class="btn btn-outline-secondary" id="browseFilesBtn">Browse Files</button>
+                <div class="mt-2 small text-muted">Supported formats: PDF, DOCX, DOC, TXT (max 10MB)</div>
+              </div>
             </div>
             
-            <!-- Translate Button -->
-            <button type="submit" class="translate-btn">Translate Document</button>
+            <!-- Submit Button -->
+            <button type="submit" class="translate-btn">
+              <i class="bi bi-translate me-2"></i> Translate Document
+            </button>
           </form>
         </div>
+        
+        <!-- Recent Activity -->
+        
       </div>
     </div>
   </div>
-  
+
+  <!-- JavaScript -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // Auto-hide flash messages after 5 seconds
-    setTimeout(function() {
-      var flashMessages = document.querySelectorAll('.flash-message');
-      flashMessages.forEach(function(message) {
-        message.style.display = 'none';
-      });
-    }, 5000);
-    
-    // Handle file input display for translation
-    document.getElementById('translationFile').addEventListener('change', function(e) {
-      if (e.target.files.length > 0) {
-        var fileName = e.target.files[0].name;
-        var fileSize = (e.target.files[0].size / 1024).toFixed(2) + ' KB';
-        var uploadArea = document.querySelector('.upload-area');
-        uploadArea.innerHTML = `
-          <div class="upload-circle">
-            <i class="bi bi-file-earmark upload-icon"></i>
-          </div>
-          <div class="mb-2 fs-5">${fileName}</div>
-          <div class="text-muted">${fileSize}</div>
-          <div class="text-muted small">Click to change file</div>
-        `;
-      }
-    });
-    
-    // Translation direction selection
-    document.querySelectorAll('.direction-option').forEach(option => {
-      option.addEventListener('click', function() {
-        document.querySelectorAll('.direction-option').forEach(opt => {
-          opt.classList.remove('active');
-        });
-        this.classList.add('active');
-        this.querySelector('input').checked = true;
-      });
-    });
-    
-    // Search and Sorting functionality
     document.addEventListener('DOMContentLoaded', function() {
-      const sortButtons = document.querySelectorAll('.sort-btn');
-      const searchInput = document.getElementById('searchInput');
-      const noResults = document.querySelector('.no-results');
-      let currentSort = 'name';
-      let ascending = true;
+      // Set up flash message auto-dismiss
+      setTimeout(function() {
+        const flashMessages = document.querySelectorAll('.flash-message');
+        flashMessages.forEach(message => {
+          message.style.opacity = '0';
+          setTimeout(() => message.remove(), 500);
+        });
+      }, 5000);
       
-      // Search functionality
-      function searchFiles() {
-        const searchTerm = searchInput.value.toLowerCase();
-        const fileItems = document.querySelectorAll('.document-card');
-        let hasVisibleFiles = false;
+      // Document search functionality
+      const searchInput = document.getElementById('searchInput');
+      const documentCards = document.querySelectorAll('.document-card');
+      const noResults = document.querySelector('.no-results');
+      
+      searchInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        let hasResults = false;
         
-        fileItems.forEach(item => {
-          const fileName = item.dataset.name.toLowerCase();
-          if (fileName.includes(searchTerm)) {
-            item.style.display = '';
-            hasVisibleFiles = true;
+        documentCards.forEach(card => {
+          const name = card.getAttribute('data-name').toLowerCase();
+          if (name.includes(searchTerm)) {
+            card.style.display = 'flex';
+            hasResults = true;
           } else {
-            item.style.display = 'none';
+            card.style.display = 'none';
           }
         });
         
-        noResults.style.display = hasVisibleFiles ? 'none' : 'block';
-      }
-      
-      searchInput.addEventListener('input', searchFiles);
+        noResults.style.display = hasResults ? 'none' : 'block';
+      });
       
       // Sorting functionality
-      function sortFiles(sortBy) {
-        const container = document.querySelector('.document-row');
-        const files = Array.from(container.querySelectorAll('.document-card'));
-        
-        if (files.length <= 1) return;
-        
-        files.sort((a, b) => {
-          let valueA = a.dataset[sortBy].toLowerCase();
-          let valueB = b.dataset[sortBy].toLowerCase();
-          
-          if (sortBy === 'size') {
-            valueA = convertSizeToBytes(valueA);
-            valueB = convertSizeToBytes(valueB);
-          } else if (sortBy === 'date') {
-            valueA = new Date(valueA).getTime();
-            valueB = new Date(valueB).getTime();
-          }
-          
-          if (ascending) {
-            return valueA > valueB ? 1 : -1;
-          } else {
-            return valueA < valueB ? 1 : -1;
-          }
-        });
-        
-        // Reappend in sorted order
-        files.forEach(file => container.appendChild(file));
-      }
-      
-      function convertSizeToBytes(sizeStr) {
-        const units = {
-          'B': 1,
-          'KB': 1024,
-          'MB': 1024 * 1024,
-          'GB': 1024 * 1024 * 1024
-        };
-        
-        const matches = sizeStr.match(/^(\d+\.?\d*)\s*(B|KB|MB|GB)/i);
-        if (!matches) return 0;
-        
-        const size = parseFloat(matches[1]);
-        const unit = matches[2].toUpperCase();
-        
-        return size * units[unit];
-      }
+      const sortButtons = document.querySelectorAll('.sort-btn');
       
       sortButtons.forEach(button => {
         button.addEventListener('click', function() {
-          const sortBy = this.dataset.sort;
+          const sortType = this.getAttribute('data-sort');
           
-          if (currentSort === sortBy) {
-            ascending = !ascending;
-          } else {
-            ascending = true;
-          }
+          // Update active button state
+          sortButtons.forEach(btn => btn.classList.remove('active'));
+          this.classList.add('active');
           
-          sortButtons.forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.querySelector('.sort-icon')) {
-              btn.querySelector('.sort-icon').className = 'bi sort-icon';
-            }
+          // Update sort icon
+          const sortIcons = document.querySelectorAll('.sort-icon');
+          sortIcons.forEach(icon => {
+            icon.classList.remove('bi-sort-down', 'bi-sort-up');
           });
           
-          this.classList.add('active');
-          if (this.querySelector('.sort-icon')) {
-            this.querySelector('.sort-icon').className = `bi bi-sort-${ascending ? 'down' : 'up'} sort-icon`;
+          // Get current direction from the icon
+          const sortIcon = this.querySelector('.sort-icon');
+          const isAscending = sortIcon ? sortIcon.classList.contains('bi-sort-up') : false;
+          
+          if (sortIcon) {
+            sortIcon.classList.add(isAscending ? 'bi-sort-down' : 'bi-sort-up');
           } else {
-            this.innerHTML += ` <i class="bi bi-sort-${ascending ? 'down' : 'up'} sort-icon"></i>`;
+            this.innerHTML += ' <i class="bi bi-sort-down sort-icon"></i>';
           }
           
-          currentSort = sortBy;
-          sortFiles(sortBy);
+          // Sort the document cards
+          const documentRow = document.querySelector('.document-row');
+          const cards = Array.from(documentCards);
+          
+          cards.sort((a, b) => {
+            let valueA, valueB;
+            
+            if (sortType === 'name') {
+              valueA = a.getAttribute('data-name');
+              valueB = b.getAttribute('data-name');
+            } else if (sortType === 'date') {
+              valueA = new Date(a.getAttribute('data-date'));
+              valueB = new Date(b.getAttribute('data-date'));
+            } else if (sortType === 'size') {
+              valueA = a.getAttribute('data-size');
+              valueB = b.getAttribute('data-size');
+              
+              // Convert size strings to numbers
+              const sizeRegex = /(\d+(?:\.\d+)?)\s*(KB|MB|GB)/;
+              const matchA = valueA.match(sizeRegex);
+              const matchB = valueB.match(sizeRegex);
+              
+              if (matchA && matchB) {
+                const [, numA, unitA] = matchA;
+                const [, numB, unitB] = matchB;
+                
+                const unitMultiplier = {
+                  'KB': 1,
+                  'MB': 1024,
+                  'GB': 1024 * 1024
+                };
+                
+                valueA = parseFloat(numA) * unitMultiplier[unitA];
+                valueB = parseFloat(numB) * unitMultiplier[unitB];
+              }
+            }
+            
+            if (valueA < valueB) return isAscending ? 1 : -1;
+            if (valueA > valueB) return isAscending ? -1 : 1;
+            return 0;
+          });
+          
+          // Reappend sorted cards
+          cards.forEach(card => {
+            documentRow.appendChild(card);
+          });
         });
       });
-       
-      // Initial sort
-      sortFiles('name');
       
-      // Mobile navigation menu handling
-      const navbarToggler = document.getElementById('navbarToggler');
-      const closeMenuBtn = document.getElementById('closeMenu');
-      const navbarBackdrop = document.getElementById('navbarBackdrop');
-      const navbarCollapse = document.getElementById('navbarNav');
-      const body = document.body;
-  
-      // Function to open the menu
-      function openMenu() {
-        navbarCollapse.classList.add('show');
-        body.classList.add('menu-open');
-      }
-  
-      // Function to close the menu
-      function closeMenuHandler() {
-        navbarCollapse.classList.remove('show');
-        body.classList.remove('menu-open');
-      }
-  
-      // Event listeners
-      navbarToggler.addEventListener('click', openMenu);
-      closeMenuBtn.addEventListener('click', closeMenuHandler);
-      navbarBackdrop.addEventListener('click', closeMenuHandler);
+      // File upload handling
+      const uploadArea = document.querySelector('.upload-area');
+      const translationFileInput = document.getElementById('translationFile');
+      const browseFilesBtn = document.getElementById('browseFilesBtn');
+      
+      browseFilesBtn.addEventListener('click', function() {
+        translationFileInput.click();
+      });
+      
+      translationFileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+          uploadArea.classList.add('border-success');
+          uploadArea.querySelector('h5').textContent = this.files[0].name;
+        }
+      });
+      
+      // Handle drag and drop
+      uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadArea.classList.add('border-primary');
+      });
+      
+      uploadArea.addEventListener('dragleave', function() {
+        uploadArea.classList.remove('border-primary');
+      });
+      
+      uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('border-primary');
+        
+        if (e.dataTransfer.files.length > 0) {
+          translationFileInput.files = e.dataTransfer.files;
+          uploadArea.classList.add('border-success');
+          uploadArea.querySelector('h5').textContent = e.dataTransfer.files[0].name;
+        }
+      });
+      
+      // Translation direction selection
+      const directionOptions = document.querySelectorAll('.direction-option');
+      
+      directionOptions.forEach(option => {
+        option.addEventListener('click', function() {
+          directionOptions.forEach(opt => opt.classList.remove('active'));
+          this.classList.add('active');
+          this.querySelector('input').checked = true;
+        });
+      });
     });
   </script>
 </body>

@@ -1,5 +1,59 @@
 // chat.js
+// Добавьте этот код в начало вашего chat.js файла
 
+// Определяем, является ли устройство iOS
+// Определяем устройства iOS
+
+// Add this function to your existing JavaScript
+function initChatInterface() {
+    const chatContainer = document.getElementById('chatContainer');
+    const contactsContainer = document.querySelector('.contacts-container');
+    const activeChat = document.getElementById('activeChat');
+    const contactItems = document.querySelectorAll('.contact-item');
+    const mobileChatBack = document.getElementById('mobileChatBack');
+    
+    // Function to open chat
+    function openChat(chatId) {
+        // Hide "no chat selected" message
+        document.getElementById('noChatSelected').style.display = 'none';
+        
+        // Show the active chat
+        activeChat.style.display = 'flex';
+        
+        // On mobile only: add the mobile-chat-active class to body
+        if (window.innerWidth < 768) {
+            document.body.classList.add('mobile-chat-active');
+        }
+        
+        // Fetch chat messages for the selected chat (replace with your actual data fetching)
+        // fetchChatMessages(chatId);
+    }
+    
+    // Add click event to each contact item
+    contactItems.forEach(contact => {
+        contact.addEventListener('click', function() {
+            const chatId = this.getAttribute('data-chat-id');
+            openChat(chatId);
+        });
+    });
+    
+    // Back button for mobile only
+    if (mobileChatBack) {
+        mobileChatBack.addEventListener('click', function() {
+            document.body.classList.remove('mobile-chat-active');
+        });
+    }
+    
+    // Detect window resize and reset mobile classes if needed
+    window.addEventListener('resize', function() {
+        if (window.innerWidth >= 768) {
+            document.body.classList.remove('mobile-chat-active');
+        }
+    });
+}
+
+// Call this function when the DOM is loaded
+document.addEventListener('DOMContentLoaded', initChatInterface);
 // Connect to Socket.IO
 const socket = io();
 let currentLobbyId = null;
@@ -1325,3 +1379,171 @@ function renderAllUsers() {
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', initApp);
+// Add this to your existing chat.js file
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Get DOM elements
+    const appContainer = document.querySelector('.app-container');
+    const contactsList = document.getElementById('contactsList');
+    const chatContainer = document.getElementById('chatContainer');
+    const activeChat = document.getElementById('activeChat');
+    const noChatSelected = document.getElementById('noChatSelected');
+    const viewProfileBtn = document.getElementById('viewProfileBtn');
+    const closeProfile = document.getElementById('closeProfile');
+    const profilePanel = document.getElementById('profilePanel');
+    const mobileChatBack = document.getElementById('mobileChatBack');
+    const messageInput = document.getElementById('messageInput');
+    
+    // Function for Safari height adjustment
+    function adjustHeight() {
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+        
+        // Scroll to hide address bar
+        setTimeout(function() {
+            window.scrollTo(0, 1);
+        }, 100);
+    }
+    
+    // Safari-specific fix for search bar
+    function setupSafariSearchBarFix() {
+        // This function was referenced but not defined in original code
+        // Adding empty implementation to prevent errors
+        adjustHeight();
+    }
+    
+    // Mobile back button handler
+    if (mobileChatBack) {
+        mobileChatBack.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                // Switch back to contacts list
+                appContainer.classList.remove('mobile-chat-active');
+            }
+        });
+    }
+    
+    // Contact selection - modified for mobile first approach
+    contactsList.addEventListener('click', function(e) {
+        // Find clicked contact item (closest ancestor with contact class)
+        const contactItem = e.target.closest('.contact-item');
+        if (!contactItem) return;
+        
+        // Logic for selecting contact
+        // ... your existing contact selection logic here
+        
+        // Show chat container on mobile
+        if (window.innerWidth <= 768) {
+            // Enable active chat mode
+            appContainer.classList.add('mobile-chat-active');
+            activeChat.style.display = 'flex';
+            noChatSelected.style.display = 'none';
+        } else {
+            // Standard behavior for desktop
+            activeChat.style.display = 'flex';
+            noChatSelected.style.display = 'none';
+        }
+        setupSafariSearchBarFix();
+    });
+    
+    // Handle profile panel toggle
+    viewProfileBtn.addEventListener('click', function() {
+        profilePanel.style.display = 'block';
+        setTimeout(() => {
+            profilePanel.classList.add('active');
+        }, 10);
+    });
+    
+    closeProfile.addEventListener('click', function() {
+        profilePanel.classList.remove('active');
+        setTimeout(() => {
+            profilePanel.style.display = 'none';
+        }, 300);
+    });
+    
+    // Handle window resize events
+    window.addEventListener('resize', function() {
+        adjustHeight(); // Call Safari height adjustment on resize
+        
+        if (window.innerWidth > 768) {
+            // Reset mobile view states when returning to desktop
+            appContainer.classList.remove('mobile-chat-active');
+            
+            // Restore normal view for desktop
+            if (activeChat.style.display === 'flex') {
+                chatContainer.style.display = 'flex';
+            }
+        }
+    });
+    
+    // Auto-resize textarea for chat input
+    if (messageInput) {
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            const newHeight = Math.min(this.scrollHeight, 120);
+            this.style.height = newHeight + 'px';
+        });
+        
+        // Add focus handler for mobile keyboard
+        messageInput.addEventListener('focus', function() {
+            setTimeout(function() {
+                messageInput.scrollIntoView({behavior: 'smooth'});
+            }, 300);
+        });
+    }
+    
+    // Call Safari height adjustment on load
+    adjustHeight();
+});
+// Функция для решения проблемы с поисковой строкой на iOS
+function setupSafariSearchBarFix() {
+    // Проверяем, является ли устройство iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    if (isIOS) {
+      // Добавляем класс для идентификации iOS устройств
+      document.documentElement.classList.add('ios-device');
+      
+      // Устанавливаем высоту документа
+      function setDocumentHeight() {
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+      }
+      
+      // Вызываем функцию сразу и при изменении размера окна
+      setDocumentHeight();
+      window.addEventListener('resize', setDocumentHeight);
+      
+      // Добавляем обработчик для полей ввода
+      const inputFields = document.querySelectorAll('input, textarea');
+      inputFields.forEach(input => {
+        input.addEventListener('focus', function() {
+          // Прокручиваем страницу после небольшой задержки
+          setTimeout(() => {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const inputTop = this.getBoundingClientRect().top + scrollTop;
+            window.scrollTo(0, inputTop - 100);
+          }, 300);
+        });
+      });
+    }
+  }
+  function adjustLayoutForSafari() {
+    // Обновляем высоту контента при изменении размера окна
+    function updateHeight() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+      
+      // Перерасчет высоты контейнера контента
+      const contentWrapper = document.querySelector('.content-wrapper');
+      if (contentWrapper) {
+        contentWrapper.style.height = `calc(${vh * 100}px - env(safe-area-inset-bottom, 50px) - 60px)`;
+      }
+    }
+    
+    // Вызываем сразу и при изменении размера окна
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+  }
+  
+  // Добавьте вызов функции в документ
+  document.addEventListener('DOMContentLoaded', adjustLayoutForSafari);

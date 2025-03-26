@@ -13,6 +13,7 @@
     --busy-color: #e41e3f;
     --shadow-light: 0 2px 5px rgba(0, 0, 0, 0.1);
     --shadow-medium: 0 5px 15px rgba(0, 0, 0, 0.1);
+    
 }
 
 * {
@@ -1064,7 +1065,173 @@ body {
 .participant-checkbox {
     margin-left: 0.75rem;
 }
+/* Responsive styles for chat interface */
 
+/* Base responsive container adjustments */
+.app-container {
+    flex-direction: row;
+  }
+  
+  /* Contacts container responsive styling */
+  .contacts-container {
+    width: 300px;
+    min-width: 300px;
+    transition: all 0.3s ease;
+  }
+  
+  /* Chat container responsive styling */
+  .chat-container {
+    flex: 1;
+    min-width: 0; /* Prevents flex items from overflowing */
+  }
+  
+  /* Profile panel responsive styling */
+  .profile-panel {
+    width: 300px;
+    min-width: 300px;
+    transition: all 0.3s ease;
+  }
+  
+  /* Message input adjustments for better mobile experience */
+  .chat-input-container {
+    padding: 10px;
+  }
+  
+  .chat-input {
+    flex: 1;
+  }
+  
+  .chat-input-field {
+    padding: 10px;
+    border-radius: 20px;
+  }
+  
+  /* Responsive design for tablet */
+  @media (max-width: 992px) {
+    .profile-panel {
+      position: fixed;
+      right: 0;
+      top: 56px; /* Adjust based on navbar height */
+      bottom: 0;
+      z-index: 100;
+      transform: translateX(100%);
+      background-color: white;
+      box-shadow: var(--shadow-lg);
+    }
+    
+    .profile-panel.active {
+      transform: translateX(0);
+    }
+  }
+  
+  /* Responsive design for mobile */
+  @media (max-width: 768px) {
+    .app-container {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* Контакты и чат занимают весь экран на мобильных устройствах */
+    .contacts-container, 
+    .chat-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.3s ease;
+    }
+    
+    /* Изначально контакты видны */
+    .contacts-container {
+      transform: translateX(0);
+      z-index: 20;
+    }
+    
+    /* Изначально чат скрыт справа */
+    .chat-container {
+      transform: translateX(100%);
+      z-index: 30;
+    }
+    
+    /* Когда чат активен, контакты скрываются влево, а чат показывается */
+    .mobile-chat-active .contacts-container {
+      transform: translateX(-100%);
+    }
+    
+    .mobile-chat-active .chat-container {
+      transform: translateX(0);
+    }
+    
+    /* Делаем скрытие/показ активного чата через visibility вместо display */
+    .active-chat {
+      display: flex !important; /* Для совместимости со старым кодом */
+      flex-direction: column;
+      visibility: hidden;
+      opacity: 0;
+      transition: visibility 0.3s, opacity 0.3s;
+    }
+    
+    .mobile-chat-active .active-chat {
+      visibility: visible;
+      opacity: 1;
+    }
+    
+    .no-chat-selected {
+      visibility: hidden;
+      opacity: 0;
+      transition: visibility 0.3s, opacity 0.3s;
+    }
+    
+    /* Adjust chat header for mobile */
+    .chat-header {
+      padding: 10px;
+    }
+    
+    /* Make messages more compact on mobile */
+    .chat-messages {
+      padding: 10px;
+    }
+    
+    .message-bubble {
+      max-width: 80%;
+    }
+    
+    /* Improve input area spacing */
+    .chat-input-container {
+      padding: 8px;
+    }
+    
+    /* Adjust the attachment preview for mobile */
+    .attachment-preview {
+      padding: 8px;
+    }
+  }
+  
+  /* Small mobile devices */
+  @media (max-width: 480px) {
+    .message-bubble {
+      max-width: 90%;
+      padding: 8px 12px;
+    }
+    
+    .chat-header-actions button {
+      padding: 5px;
+      margin-left: 5px;
+    }
+    
+    .avatar {
+      width: 35px;
+      height: 35px;
+    }
+  }
+  
+  /* Extra small devices */
+  @media (max-width: 360px) {
+    .profile-panel {
+      width: 100%;
+    }
+  }
 /* Animations */
 @keyframes slide-in {
     from {
@@ -1104,4 +1271,97 @@ body {
     .message-container {
         max-width: 90%;
     }
+}
+/* Стили для обхода проблемы с поисковой строкой Safari на iOS */
+/* Полностью новый подход для iOS */
+/* Радикальный подход для iOS */
+
+
+
+body.ios-device .app-container {
+    /* Устанавливаем прокрутку для контейнера приложения */
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    height: 100%;
+}
+
+body.ios-device .chat-container {
+    /* Убираем фиксированную высоту, чтобы контент мог расширяться */
+    height: auto;
+    min-height: 100%;
+}
+
+body.ios-device .chat-messages {
+    /* Важно: позволяем прокручивать сообщения */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+}
+
+body.ios-device .chat-input-container {
+    /* Убираем фиксированное позиционирование (JS будет управлять им) */
+    position: relative;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0) + 10px);
+}
+
+/* Отключаем анимации и переходы на iOS */
+body.ios-device * {
+    -webkit-transition: none !important;
+    transition: none !important;@media (max-width: 768px) {
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  
+  .active-chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  .chat-input-container {
+    position: sticky;
+    bottom: 0;
+    background-color: #fff;
+    z-index: 10;
+    width: 100%;
+  }
+}
+}
+@media (max-width: 768px) {
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  
+  .active-chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  .chat-input-container {
+    position: sticky;
+    bottom: 0;
+    background-color: #fff;
+    z-index: 10;
+    width: 100%;
+  }
 }
