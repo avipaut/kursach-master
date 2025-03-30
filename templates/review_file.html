@@ -10,6 +10,41 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
   {% set active_page = 'admin' %}
   {% include 'navbar.html' %}
+  <!-- PDF.js для просмотра PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <!-- Mammoth.js для просмотра DOCX -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.0/mammoth.browser.min.js"></script>
+  <style>
+    .preview-container {
+      width: 100%;
+      max-height: 600px;
+      border: 1px solid #ddd;
+      margin-bottom: 20px;
+      overflow: auto;
+      padding: 15px;
+    }
+    .pdf-page {
+      margin-bottom: 20px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 20px;
+    }
+    .pdf-page:last-child {
+      border-bottom: none;
+    }
+    #text-content {
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
+    #docx-content img {
+      max-width: 100%;
+    }
+    .pagination-controls {
+      margin: 10px 0;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+  </style>
 </head>
 <body>
   <div class="container mt-4">
@@ -43,37 +78,35 @@
         </div>
         
         <div class="card mb-4">
-          <div class="card-header bg-light">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Предпросмотр файла</h5>
+            <a href="{{ url_for('documents.preview_temp_file', filename=file.filename) }}" 
+               class="btn btn-sm btn-outline-primary" download>
+              <i class="bi bi-download me-1"></i> Скачать оригинал
+            </a>
           </div>
           <div class="card-body">
-            <div class="text-center p-3">
-              {% if file.original_filename.lower().endswith(('.pdf', '.doc', '.docx', '.txt', '.odt')) %}
-                <i class="bi bi-file-earmark-text" style="font-size: 4rem; color: #0d6efd;"></i>
-                <p class="mt-2">{{ file.original_filename }}</p>
-                
-                {% if file.original_filename.lower().endswith('.pdf') %}
-                  <div class="mt-3">
-                    <a href="#" class="btn btn-outline-primary" onclick="openPreview(); return false;">
-                      <i class="bi bi-eye me-1"></i> Просмотреть PDF
-                    </a>
-                  </div>
-                  <script>
-                    function openPreview() {
-                      // Create a temporary iframe to display the PDF
-                      const iframe = document.createElement('iframe');
-                      iframe.src = "/temp/preview/{{ file.filename }}";
-                      iframe.style.width = '100%';
-                      iframe.style.height = '500px';
-                      iframe.style.border = 'none';
-                      
-                      const container = document.getElementById('previewContainer');
-                      container.innerHTML = '';
-                      container.appendChild(iframe);
-                    }
-                  </script>
-                  <div id="previewContainer" class="mt-3"></div>
-                {% endif %}
+            <div class="preview-container" id="preview-content">
+              {% if file.original_filename.lower().endswith('.pdf') %}
+                <div id="pdf-container"></div>
+                <div class="pagination-controls">
+                  <button id="prev-page" class="btn btn-sm btn-outline-secondary" disabled>
+                    <i class="bi bi-chevron-left"></i> Назад
+                  </button>
+                  <span id="page-num">Страница 1 из 1</span>
+                  <button id="next-page" class="btn btn-sm btn-outline-secondary" disabled>
+                    Вперед <i class="bi bi-chevron-right"></i>
+                  </button>
+                </div>
+              {% elif file.original_filename.lower().endswith(('.txt', '.csv', '.log')) %}
+                <pre id="text-content">Загрузка содержимого...</pre>
+              {% elif file.original_filename.lower().endswith(('.docx', '.doc')) %}
+                <div id="docx-content">Загрузка DOCX документа...</div>
+              {% else %}
+                <div class="text-center py-5">
+                  <i class="bi bi-file-earmark" style="font-size: 4rem; color: #0d6efd;"></i>
+                  <p class="mt-3">Предпросмотр недоступен для этого типа файла</p>
+                </div>
               {% endif %}
             </div>
           </div>
@@ -102,7 +135,206 @@
       </div>
     </div>
   </div>
-  
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // Инициализация PDF.js для просмотра PDF
+    {% if file.original_filename.lower().endswith('.pdf') %}
+      let pdfDoc = null;
+      let pageNum = 1;
+      let pageRendering = false;
+      let pageNumPending = null;
+      const scale = 1.5;
+      
+      pdfjsLib.getDocument("{{ url_for('documents.preview_temp_file', filename=file.filename) }}").promise.then(function(pdf) {
+        pdfDoc = pdf;
+        document.getElementById('page-num').textContent = `Страница 1 из ${pdf.numPages}`;
+        
+        // Enable/disable pagination buttons
+        if (pdf.numPages > 1) {
+          document.getElementById('next-page').disabled = false;
+        }
+        
+        // Render the first page
+        renderPage(pageNum);
+      }).catch(function(error) {
+        console.error('Error loading PDF:', error);
+        document.getElementById('pdf-container').innerHTML = 
+          '<div class="alert alert-danger">Ошибка загрузки PDF. Вы можете <a href="{{ url_for("documents.preview_temp_file", filename=file.filename) }}" download>скачать файл</a> для просмотра.</div>';
+      });
+      
+      function renderPage(num) {
+        pageRendering = true;
+        pdfDoc.getPage(num).then(function(page) {
+          const viewport = page.getViewport({ scale: scale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+          };
+          
+          document.getElementById('pdf-container').innerHTML = '';
+          document.getElementById('pdf-container').appendChild(canvas);
+          
+          const renderTask = page.render(renderContext);
+          renderTask.promise.then(function() {
+            pageRendering = false;
+            if (pageNumPending !== null) {
+              renderPage(pageNumPending);
+              pageNumPending = null;
+            }
+          });
+        });
+        
+        document.getElementById('page-num').textContent = `Страница ${num} из ${pdfDoc.numPages}`;
+      }
+      
+      function queueRenderPage(num) {
+        if (pageRendering) {
+          pageNumPending = num;
+        } else {
+          renderPage(num);
+        }
+      }
+      
+      document.getElementById('prev-page').addEventListener('click', function() {
+        if (pageNum <= 1) return;
+        pageNum--;
+        queueRenderPage(pageNum);
+        document.getElementById('next-page').disabled = false;
+        if (pageNum === 1) {
+          document.getElementById('prev-page').disabled = true;
+        }
+      });
+      
+      document.getElementById('next-page').addEventListener('click', function() {
+        if (pageNum >= pdfDoc.numPages) return;
+        pageNum++;
+        queueRenderPage(pageNum);
+        document.getElementById('prev-page').disabled = false;
+        if (pageNum === pdfDoc.numPages) {
+          document.getElementById('next-page').disabled = true;
+        }
+      });
+    {% endif %}
+
+    // Загрузка текстового содержимого для TXT файлов
+    {% if file.original_filename.lower().endswith(('.txt', '.csv', '.log')) %}
+      fetch("{{ url_for('documents.preview_temp_file', filename=file.filename) }}")
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok');
+          return response.text();
+        })
+        .then(text => {
+          document.getElementById('text-content').textContent = text;
+        })
+        .catch(error => {
+          console.error('Error loading text file:', error);
+          document.getElementById('text-content').innerHTML = 
+            '<div class="alert alert-danger">Ошибка загрузки содержимого файла. Вы можете скачать файл для просмотра.</div>';
+        });
+    {% endif %}
+
+    // Просмотр DOCX/DOC с помощью mammoth.js
+    {% if file.original_filename.lower().endswith(('.docx', '.doc')) %}
+// Продвинутый просмотр DOCX с сохранением форматирования
+fetch("{{ url_for('documents.preview_temp_file', filename=file.filename) }}")
+  .then(response => {
+    if (!response.ok) throw new Error('Ошибка загрузки файла');
+    return response.arrayBuffer();
+  })
+  .then(arrayBuffer => {
+    // Сначала пробуем конвертировать в HTML с форматированием
+    return mammoth.convertToHtml({arrayBuffer: arrayBuffer})
+      .then(result => {
+        if (result.value) {
+          // Добавляем базовые стили для форматирования
+          const styles = `
+            <style>
+              .docx-content {
+                font-family: Arial, sans-serif;
+                line-height: 1.5;
+                color: #333;
+              }
+              .docx-content h1, .docx-content h2, .docx-content h3 {
+                margin-top: 1.5em;
+                margin-bottom: 0.5em;
+                font-weight: bold;
+              }
+              .docx-content h1 { font-size: 1.8em; }
+              .docx-content h2 { font-size: 1.5em; }
+              .docx-content h3 { font-size: 1.3em; }
+              .docx-content p {
+                margin-bottom: 1em;
+              }
+              .docx-content ul, .docx-content ol {
+                margin-bottom: 1em;
+                padding-left: 2em;
+              }
+              .docx-content strong, .docx-content b {
+                font-weight: bold;
+              }
+              .docx-content em, .docx-content i {
+                font-style: italic;
+              }
+              .docx-content u {
+                text-decoration: underline;
+              }
+              .docx-content table {
+                border-collapse: collapse;
+                margin-bottom: 1em;
+                width: 100%;
+              }
+              .docx-content table, .docx-content th, .docx-content td {
+                border: 1px solid #ddd;
+              }
+              .docx-content th, .docx-content td {
+                padding: 8px;
+              }
+            </style>
+          `;
+          document.getElementById("docx-content").innerHTML = 
+            styles + `<div class="docx-content">${result.value}</div>`;
+          
+          // Добавляем сообщения о предупреждениях, если есть
+          if (result.messages.length > 0) {
+            const warnings = result.messages.map(msg => `<li>${msg.message}</li>`).join('');
+            document.getElementById("docx-content").innerHTML += `
+              <div class="alert alert-warning mt-3">
+                <h5>Предупреждения при конвертации:</h5>
+                <ul>${warnings}</ul>
+              </div>
+            `;
+          }
+        } else {
+          throw new Error('Пустой документ');
+        }
+      })
+      .catch(error => {
+        console.error('Ошибка конвертации в HTML:', error);
+        // Fallback: пробуем извлечь простой текст
+        return mammoth.extractRawText({arrayBuffer: arrayBuffer})
+          .then(result => {
+            document.getElementById("docx-content").innerHTML = 
+              `<pre class="p-3 bg-light rounded">${result.value}</pre>`;
+          });
+      });
+  })
+  .catch(error => {
+    console.error('Ошибка загрузки DOCX:', error);
+    document.getElementById("docx-content").innerHTML = `
+      <div class="alert alert-danger">
+        Ошибка загрузки документа. Вы можете 
+        <a href="{{ url_for('documents.preview_temp_file', filename=file.filename) }}" download>
+          скачать файл
+        </a> для просмотра.
+        <div class="mt-2">${error.message}</div>
+      </div>`;
+  });
+{% endif %}
+  </script>
 </body>
 </html>
