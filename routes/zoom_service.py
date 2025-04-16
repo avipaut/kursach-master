@@ -130,6 +130,7 @@ class EnhancedZoomService:
         except Exception as e:
             logger.error(f"Exception in get_zak_token: {str(e)}")
             return None
+    # Исправление метода create_meeting для автоматического добавления создателя как участника
     @staticmethod
     def create_meeting(data, creator_id, participant_ids=None):
         """
@@ -228,11 +229,18 @@ class EnhancedZoomService:
             
             db.session.add(event)
             
+            # Get the creator user
+            creator = User.query.get(creator_id)
+            
             # Add participants if provided
             if participant_ids:
                 participants = User.query.filter(User.id.in_(participant_ids)).all()
                 for participant in participants:
                     event.participants.append(participant)
+            
+            # Add creator as participant if not already added
+            if creator and creator not in event.participants:
+                event.participants.append(creator)
             
             db.session.commit()
             
@@ -248,7 +256,6 @@ class EnhancedZoomService:
             logger.error(f"Error creating Zoom meeting: {str(e)}")
             db.session.rollback()
             return None, f"Ошибка создания встречи Zoom: {str(e)}"
-
     @staticmethod
     def get_meeting_recordings(meeting_id):
         """Get recordings for a specific meeting"""
@@ -297,12 +304,14 @@ class EnhancedZoomService:
             logger.error(f"Error getting recordings: {str(e)}")
             return None, f"Ошибка получения записей встречи: {str(e)}"
     
+    # Улучшение метода get_all_recordings для лучшего логирования и обработки ошибок
     @staticmethod
     def get_all_recordings(from_date=None, to_date=None):
-        """Get all recordings within a date range"""
+        """Get all recordings within a date range with improved error handling"""
         try:
             access_token = EnhancedZoomService.get_access_token()
             if not access_token:
+                logger.error("Failed to get access token for recordings")
                 return None, "Не удалось получить токен доступа"
                 
             headers = {
@@ -322,22 +331,34 @@ class EnhancedZoomService:
                 "to": to_date
             }
             
+            logger.info(f"Requesting recordings from {from_date} to {to_date}")
+            
             response = requests.get(
                 "https://api.zoom.us/v2/users/me/recordings",
                 headers=headers,
                 params=params
             )
             
+            logger.info(f"Recordings API response status: {response.status_code}")
+            
             if response.status_code != 200:
                 logger.error(f"Failed to get recordings: {response.text}")
                 return None, f"Ошибка получения записей: {response.text}"
                 
-            return response.json(), None
+            recordings_data = response.json()
+            
+            # Log some basic info about the received data
+            total_meetings = len(recordings_data.get('meetings', []))
+            logger.info(f"Retrieved {total_meetings} recordings")
+            
+            return recordings_data, None
             
         except Exception as e:
             logger.error(f"Error getting recordings: {str(e)}")
+            # Добавим более подробную информацию об ошибке в лог
+            import traceback
+            logger.error(traceback.format_exc())
             return None, f"Ошибка получения записей: {str(e)}"
-
     @staticmethod
     def add_participants_to_meeting(event_id, participant_ids):
         """
@@ -571,11 +592,12 @@ class EnhancedZoomService:
             db.session.rollback()
             return False, f"Ошибка удаления события: {str(e)}"
             
+    # Исправление метода get_events для отображения только тех событий, где пользователь участник или создатель
     @staticmethod
     def get_events(user_id):
         """
         Get all events visible to the user:
-        - All public events
+        - All public events where user is participant or creator
         - All private events created by the user
         """
         try:
@@ -583,20 +605,21 @@ class EnhancedZoomService:
             if not user:
                 return None, "Пользователь не найден"
                 
-            # Get all public events
-            public_events = CalendarEvent.query.filter_by(is_private=False).all()
+            # Get events where user is creator
+            created_events = CalendarEvent.query.filter_by(creator_id=user_id).all()
             
-            # Get all private events created by the user
-            private_events = CalendarEvent.query.filter_by(is_private=True, creator_id=user_id).all()
+            # Get events where user is participant 
+            participating_events = user.participating_events
             
-            # Combine and convert to dict
-            all_visible_events = public_events + private_events
+            # Combine and ensure no duplicates (using set to avoid duplicates)
+            all_visible_events = list(set(created_events + list(participating_events)))
+            
             return [event.to_dict() for event in all_visible_events], None
             
         except Exception as e:
             logger.error(f"Error getting events: {str(e)}")
             return None, f"Ошибка получения событий: {str(e)}"
-    
+
     @staticmethod
     def get_meeting_participants(event_id):
         """Get list of participants for a meeting"""
@@ -679,6 +702,7 @@ class EnhancedZoomService:
             logger.error(f"Error generating join URL: {str(e)}")
             return None, f"Ошибка создания ссылки для подключения: {str(e)}"
 
+        # Исправление метода create_recurring_meeting для автоматического добавления создателя как участника
     @staticmethod
     def create_recurring_meeting(data, creator_id, participant_ids=None):
         """Create a recurring Zoom meeting"""
@@ -780,11 +804,18 @@ class EnhancedZoomService:
             
             db.session.add(event)
             
+            # Get the creator user
+            creator = User.query.get(creator_id)
+            
             # Add participants if provided
             if participant_ids:
                 participants = User.query.filter(User.id.in_(participant_ids)).all()
                 for participant in participants:
                     event.participants.append(participant)
+            
+            # Add creator as participant if not already added
+            if creator and creator not in event.participants:
+                event.participants.append(creator)
             
             db.session.commit()
             
@@ -800,7 +831,6 @@ class EnhancedZoomService:
             logger.error(f"Error creating recurring Zoom meeting: {str(e)}")
             db.session.rollback()
             return None, f"Ошибка создания повторяющейся встречи Zoom: {str(e)}"
-
     @staticmethod
     def generate_meeting_report(event_id):
         """Generate a detailed report for a meeting"""

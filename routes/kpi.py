@@ -7,7 +7,6 @@ from typing import List, Dict, Any
 import re
 import json
 
-# Setup logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
@@ -18,51 +17,149 @@ logger.addHandler(handler)
 
 kpi_bp = Blueprint('kpi', __name__)
 
-# Default columns
 DEFAULT_COLUMNS = ["Название", "Значение", "Цель", "Прогресс"]
+import ast
+import operator
+import math
 
-def evaluate_formula(formula, row_data):
-    """Evaluate a formula using row data."""
+# Поддерживаемые операции
+SAFE_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
+# Поддерживаемые функции
+SAFE_FUNCTIONS = {
+    'abs': abs,
+    'round': round,
+    'min': min,
+    'max': max,
+    'sum': sum,
+    'sqrt': math.sqrt,
+    'log': math.log,
+    'log10': math.log10,
+    'exp': math.exp,
+    'sin': math.sin,
+    'cos': math.cos,
+    'tan': math.tan,
+    'ceil': math.ceil,
+    'floor': math.floor,
+}
+
+def safe_eval(expr, variables):
+    """Безопасное вычисление выражения"""
     try:
-        # Create a safe formula evaluation context
-        local_vars = {}
+        tree = ast.parse(expr, mode='eval')
+    except SyntaxError:
+        raise ValueError("Invalid syntax in formula")
+    
+    def _eval(node):
+        if isinstance(node, ast.Num):
+            return node.n
+        elif isinstance(node, ast.Name):
+            if node.id in variables:
+                return variables[node.id]
+            elif node.id in SAFE_FUNCTIONS:
+                return SAFE_FUNCTIONS[node.id]
+            else:
+                raise ValueError(f"Unknown variable or function: {node.id}")
+        elif isinstance(node, ast.BinOp):
+            return SAFE_OPERATORS[type(node.op)](_eval(node.left), _eval(node.right))
+        elif isinstance(node, ast.UnaryOp):
+            return SAFE_OPERATORS[type(node.op)](_eval(node.operand))
+        elif isinstance(node, ast.Call):
+            func = _eval(node.func)
+            args = [_eval(arg) for arg in node.args]
+            return func(*args)
+        else:
+            raise ValueError(f"Unsupported operation: {type(node).__name__}")
+    
+    return _eval(tree.body)
+
+def evaluate_formula(formula: str, row_data: dict, column_names: list = None) -> str:
+    """Улучшенная обработка формул"""
+    if column_names is None:
+        column_names = list(row_data.keys())
+    
+    try:
+        # Подготовка переменных
+        variables = {}
         
-        # Add all column values as variables (using lowercase names without spaces)
+        # Добавляем значения из строки
         for col_name, value in row_data.items():
-            safe_name = re.sub(r'[^a-zA-Z0-9]', '_', col_name).lower()
+            safe_name = col_name.lower().replace(' ', '_')
             try:
-                local_vars[safe_name] = float(value)
+                variables[safe_name] = float(value) if value else 0.0
             except (ValueError, TypeError):
-                local_vars[safe_name] = 0
+                variables[safe_name] = 0.0
         
-        # Replace column references with variable names
-        safe_formula = formula
-        for col_name in row_data.keys():
-            safe_name = re.sub(r'[^a-zA-Z0-9]', '_', col_name).lower()
+        # Добавляем математические константы
+        variables.update({
+            'pi': math.pi,
+            'e': math.e
+        })
+        
+        # Заменяем ссылки на столбцы [Column] на переменные column
+        normalized_formula = formula
+        for col_name in column_names:
+            safe_name = col_name.lower().replace(' ', '_')
             pattern = r'\[' + re.escape(col_name) + r'\]'
-            safe_formula = re.sub(pattern, safe_name, safe_formula)
+            normalized_formula = re.sub(pattern, safe_name, normalized_formula)
         
-        # Evaluate the formula
-        result = eval(safe_formula, {"__builtins__": {}}, local_vars)
-        return str(round(result, 2))
+        # Вычисляем результат
+        result = safe_eval(normalized_formula, variables)
+        
+        # Форматируем результат
+        if isinstance(result, (int, float)):
+            return str(round(result, 4)).rstrip('0').rstrip('.') if '.' in str(result) else str(result)
+        return str(result)
+    
     except Exception as e:
-        logger.error(f"Formula evaluation error: {e}")
-        return "#ERROR"
+        logger.error(f"Formula error: {e} in formula '{formula}'")
+        return f"#ERROR: {str(e)}"
+
+
+
+
+@kpi_bp.route('/validate_formula', methods=['POST'])
+@login_required
+def validate_formula():
+    """Validate formula syntax."""
+    try:
+        data = request.get_json()
+        formula = data.get('formula')
+        
+        if not formula:
+            return jsonify({"valid": False, "errors": ["No formula provided"]})
+        
+        # Get column names for current user
+        columns_query = db.session.query(KPI.column_name).filter(
+            KPI.user_id == current_user.id
+        ).distinct()
+        column_names = [col[0] for col in columns_query.all()]
+        
+        validation = validate_formula(formula, column_names)
+        return jsonify(validation)
+        
+    except Exception as e:
+        logger.error(f"Formula validation error: {e}")
+        return jsonify({"valid": False, "errors": [str(e)]})
 
 def get_kpi_data_from_db(user_id=None, admin_view=False):
     """Get KPI data from database and format for template."""
     try:
-        # Query base
         query = db.session.query(KPI)
         
-        # If not admin view, filter by user_id
         if not admin_view:
             query = query.filter(KPI.user_id == user_id)
             
-        # Get all KPI records
         kpis = query.order_by(KPI.user_id, KPI.row_index, KPI.column_name).all()
         
-        # Get unique columns
         if admin_view:
             columns_query = db.session.query(KPI.column_name).distinct()
         else:
@@ -72,13 +169,10 @@ def get_kpi_data_from_db(user_id=None, admin_view=False):
         columns = DEFAULT_COLUMNS.copy()
         columns.extend([col[0] for col in db_columns if col[0] not in DEFAULT_COLUMNS])
         
-        # For admin view, we need to organize by user
         if admin_view:
-            # Get all users who have KPI data
             user_ids = db.session.query(KPI.user_id).distinct().all()
             user_ids = [uid[0] for uid in user_ids]
             
-            # Create a dictionary of user_id -> KPI data
             users_data = {}
             for user_id in user_ids:
                 user = User.query.get(user_id)
@@ -86,7 +180,7 @@ def get_kpi_data_from_db(user_id=None, admin_view=False):
                     # Find the max row index for this user
                     max_row = db.session.query(db.func.max(KPI.row_index)).filter(KPI.user_id == user_id).scalar() or 0
                     # Create empty data matrix with 5 extra rows
-                    data = [["" for _ in range(len(columns))] for _ in range(max_row + 6)]
+                    data = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]
                     
                     # Fill data from database
                     user_kpis = [kpi for kpi in kpis if kpi.user_id == user_id]
@@ -108,7 +202,7 @@ def get_kpi_data_from_db(user_id=None, admin_view=False):
             # Find the max row index for this user
             max_row = db.session.query(db.func.max(KPI.row_index)).filter(KPI.user_id == user_id).scalar() or 0
             # Create empty data matrix with 5 extra rows
-            data = [["" for _ in range(len(columns))] for _ in range(max_row + 6)]
+            data = [["" for _ in range(len(columns))] for _ in range(max_row + 2)]
             
             # Fill data from database
             for kpi in kpis:
@@ -165,26 +259,39 @@ def get_kpi_data_from_db(user_id=None, admin_view=False):
 def kpi_constructor():
     """Main route for KPI constructor."""
     try:
-        admin_view = request.args.get('admin', 'false').lower() == 'true'
+        selected_user_id = request.args.get('user_id')
         
-        # Check if user is admin for admin view
-        if admin_view and not current_user.is_admin:
-            return jsonify({"status": "error", "message": "Unauthorized"}), 403
-        
-        if admin_view:
-            kpi_data, columns = get_kpi_data_from_db(admin_view=True)
+        if current_user.is_admin:
+            # Для админа получаем список всех пользователей
+            users = User.query.all()
+            
+            # Если выбран конкретный пользователь - показываем его данные
+            if selected_user_id:
+                kpi_data, columns = get_kpi_data_from_db(user_id=selected_user_id)
+                return render_template(
+                    'kpi_constructor.html',
+                    kpi_columns=columns,
+                    kpi_data=kpi_data,
+                    users=users,
+                    selected_user_id=int(selected_user_id),
+                    is_admin=True
+                )
+            
+            # Если пользователь не выбран - показываем список
             return render_template(
-                'kpi_admin.html',
-                users_data=kpi_data,
-                kpi_columns=columns
+                'kpi_constructor.html',
+                users=users,
+                is_admin=True
             )
         else:
+            # Для обычного пользователя
             kpi_data, columns = get_kpi_data_from_db(user_id=current_user.id)
             return render_template(
                 'kpi_constructor.html',
                 kpi_columns=columns,
                 kpi_data=kpi_data,
-                user_id=current_user.id
+                user_id=current_user.id,
+                is_admin=False
             )
     except Exception as e:
         logger.error(f"Error displaying KPI constructor: {e}")
@@ -193,10 +300,16 @@ def kpi_constructor():
 @kpi_bp.route('/add_column', methods=['POST'])
 @login_required
 def add_column():
+    
     """Add a new column to KPI constructor."""
     try:
-        data = request.get_json() if request.is_json else {}
-        column_name = data.get('column_name', f"Показатель {db.session.query(KPI.column_name).distinct().count() + 1}")
+        data = request.get_json()
+        column_name = data.get('column_name')
+        user_id = data.get('user_id', current_user.id)  # Для админа берем из запроса
+        
+        if current_user.is_admin and user_id != current_user.id:
+            # Проверяем права админа на изменение других пользователей
+            pass  # Здесь можно добавить дополнительную проверку прав
         
         # No need to store columns globally anymore, they're retrieved from DB
         
@@ -416,3 +529,41 @@ def get_chart_data():
     except Exception as e:
         logger.error(f"Error getting chart data: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+@kpi_bp.route('/delete_row', methods=['POST'])
+@login_required
+def delete_row():
+    """Delete a specific row by index."""
+    try:
+        data = request.get_json()
+        row_index = data.get("row_index")
+        user_id = current_user.id
+        
+        if row_index is None:
+            return jsonify({"status": "error", "message": "Row index required"}), 400
+        
+        # Delete all KPI entries for this row and user
+        db.session.query(KPI).filter(
+            KPI.row_index == row_index,
+            KPI.user_id == user_id
+        ).delete()
+        
+        # Update row indices for rows after the deleted one
+        db.session.query(KPI).filter(
+            KPI.row_index > row_index,
+            KPI.user_id == user_id
+        ).update({KPI.row_index: KPI.row_index - 1})
+        
+        db.session.commit()
+
+        logger.info(f"Deleted row: {row_index}")
+        return jsonify({"status": "success"})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting row: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
+
+
+
+
+    

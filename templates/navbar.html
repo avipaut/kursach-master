@@ -1,7 +1,7 @@
-
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
 <!-- navbar.html -->
 <header class="navbar">
@@ -13,7 +13,6 @@
             </div>
         </div>
         
-        <!-- Navigation moved to left, right after logo -->
         <nav class="main-nav">
             <a href="{{ url_for('kanban.kanban_board') }}" class="nav-link {% if active_page == 'kanban' %}active{% endif %}" id="kanban-link">
                 <i class="fas fa-clipboard-list"></i>
@@ -39,227 +38,208 @@
                 <i class="fas fa-video"></i>
                 <span>Zoom</span>
             </a>
-            {% if 'admin' in current_user.roles|map(attribute='name')|list %}
-          <a href="{{ url_for('auth.admin_panel') }}" class="document-tab {% if active_category == 'users' %}active{% endif %}">
-            <i class="bi fa-person me-1"></i> Admin_panel
-          </a>
-          {% endif %}
-            <a href="{{ url_for('auth.logout') }}" class="nav-link">
-              <i class="fas fa-sign-out-alt"></i>
-              <span>Logout</span>
-          </a>
+            
             
         </nav>
     </div>
-    <div class="position-relative ms-2 notification-bell-container">
-        <button class="btn btn-link text-decoration-none position-relative" 
-                id="notificationBell" 
-                data-bs-toggle="dropdown" 
-                aria-expanded="false">
-          <i class="bi bi-bell fs-5"></i>
-          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge" 
-                id="notificationCount" 
-                style="font-size: 0.6rem; display: none;">
-            0
-          </span>
-        </button>
-        
-        <div class="dropdown-menu dropdown-menu-end notification-dropdown py-0" 
-             style="width: 320px; max-height: 400px; overflow-y: auto;">
-          <div class="py-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center">
-            <strong>Notifications</strong>
-            <button class="btn btn-sm text-primary mark-all-read">Mark all as read</button>
-          </div>
-          <div id="notificationDropdownContent">
-            <div class="text-center p-3">
-              <div class="spinner-border spinner-border-sm text-secondary" role="status">
-                <span class="visually-hidden">Loading...</span>
-              </div>
-            </div>
-          </div>
-          <div class="py-2 text-center border-top">
-            <a href="{{ url_for('notifications.notifications_page') }}" class="text-decoration-none">View all notifications</a>
-          </div>
-        </div>
-      </div>
+    
     <div class="navbar-right">
+        {% if 'admin' in current_user.roles|map(attribute='name')|list %}
+        <div class="admin-badge nav-link" onclick="location.href='{{ url_for('auth.admin_panel') }}'">
+            <i class="fas fa-shield-alt"></i>
+            <span class="admin-text">Admin</span>
+        </div>
+        {% endif %}
         
-    </div>
-</header>
-<script>
-  
-  document.addEventListener('DOMContentLoaded', function() {
-  const notificationBell = document.getElementById('notificationBell');
-  const notificationCount = document.getElementById('notificationCount');
-  const notificationDropdownContent = document.getElementById('notificationDropdownContent');
-  
-  function updateNotificationCount() {
-    fetch('{{ url_for("notifications.get_unread_count") }}')
-      .then(response => response.json())
-      .then(data => {
-        if (data.count > 0) {
-          notificationCount.textContent = data.count > 99 ? '99+' : data.count;
-          notificationCount.style.display = 'block';
-        } else {
-          notificationCount.style.display = 'none';
-        }
-      })
-      .catch(error => console.error('Error fetching notification count:', error));
-  }
-  
-  function loadNotifications() {
-    fetch('{{ url_for("notifications.get_recent") }}')
-      .then(response => response.json())
-      .then(data => {
-        // Update the count badge
-        if (data.unread_count > 0) {
-          notificationCount.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
-          notificationCount.style.display = 'block';
-        } else {
-          notificationCount.style.display = 'none';
-        }
-        
-        // Update dropdown content
-        if (data.notifications.length === 0) {
-          notificationDropdownContent.innerHTML = `
-            <div class="text-center p-4 text-muted">
-              <i class="bi bi-bell" style="font-size: 1.5rem;"></i>
-              <p class="mt-2 mb-0">No notifications yet</p>
-            </div>
-          `;
-          return;
-        }
-        
-        let html = '';
-        data.notifications.forEach(notification => {
-          // Choose icon based on category
-          let icon = 'info-circle text-info';
-          if (notification.category === 'success') icon = 'check-circle text-success';
-          if (notification.category === 'warning') icon = 'exclamation-circle text-warning';
-          if (notification.category === 'danger') icon = 'x-circle text-danger';
-          
-          html += `
-            <div class="dropdown-item px-3 py-2 notification-item ${notification.read ? '' : 'bg-light'}" 
-                 data-id="${notification.id}">
-              <div class="d-flex">
-                <div class="me-2">
-                  <i class="bi bi-${icon}"></i>
+        <div class="position-relative notification-bell-container">
+            <button class="btn btn-link text-decoration-none position-relative" 
+                    id="notificationBell" 
+                    data-bs-toggle="dropdown" 
+                    aria-expanded="false">
+                <i class="bi bi-bell fs-5"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge" 
+                      id="notificationCount" 
+                      style="font-size: 0.6rem; display: none;">
+                    0
+                </span>
+            </button>
+            
+            <div class="dropdown-menu dropdown-menu-end notification-dropdown py-0">
+                <div class="py-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <strong>Notifications</strong>
+                    <button class="btn btn-sm text-primary mark-all-read">Mark all as read</button>
                 </div>
-                <div>
-                  <div class="mb-1">${notification.message}</div>
-                  <div class="text-muted small">${notification.created_at}</div>
-                  ${notification.link ? `<a href="${notification.link}" class="btn btn-sm btn-link p-0 mt-1">View details</a>` : ''}
-                </div>
+                <div class="py-2 text-center border-top">
+                  <a href="{{ url_for('notifications.notifications_page') }}" class="text-decoration-none">View all notifications</a>
               </div>
+                <div id="notificationDropdownContent" class="notification-dropdown-content">
+                    <div class="text-center p-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                
             </div>
-            <div class="dropdown-divider m-0"></div>
-          `;
-        });
+        </div>
         
-        notificationDropdownContent.innerHTML = html;
-        
-        // Add click handlers to mark individual notifications as read
-        document.querySelectorAll('.notification-item').forEach(item => {
-          item.addEventListener('click', function(e) {
-            // Don't trigger if clicking on a link inside
-            if (e.target.tagName === 'A') return;
-            
-            const id = this.dataset.id;
-            
-            fetch(`{{ url_for("notifications.mark_as_read", notification_id=0) }}`.replace('/0', `/${id}`), {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              }
-            })
+        <a href="{{ url_for('auth.logout') }}" class="nav-link desktop-only logout-link">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+        </a>
+    </div>
+    
+    <button class="mobile-menu-button">
+        <i class="fas fa-bars"></i>
+    </button>
+</header>
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Notification functionality (остается без изменений)
+    const notificationBell = document.getElementById('notificationBell');
+    const notificationCount = document.getElementById('notificationCount');
+    const notificationDropdownContent = document.getElementById('notificationDropdownContent');
+    
+    function updateNotificationCount() {
+        fetch('{{ url_for("notifications.get_unread_count") }}')
             .then(response => response.json())
             .then(data => {
-              if (data.success) {
-                this.classList.remove('bg-light');
-                updateNotificationCount();
-              }
+                if (data.count > 0) {
+                    notificationCount.textContent = data.count > 99 ? '99+' : data.count;
+                    notificationCount.style.display = 'block';
+                } else {
+                    notificationCount.style.display = 'none';
+                }
             })
-            .catch(error => console.error('Error marking notification as read:', error));
-          });
-        });
-      })
-      .catch(error => console.error('Error fetching notifications:', error));
-  }
-  
-  // Handle "Mark all as read" in dropdown
-  document.querySelector('.mark-all-read').addEventListener('click', function(e) {
-    e.stopPropagation(); // Prevent dropdown from closing
-    
-    fetch('{{ url_for("notifications.mark_all_as_read") }}', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        document.querySelectorAll('.notification-item.bg-light').forEach(el => {
-          el.classList.remove('bg-light');
-        });
-        notificationCount.style.display = 'none';
-      }
-    })
-    .catch(error => console.error('Error marking all notifications as read:', error));
-  });
-  
-  // Load notifications when dropdown is opened
-  notificationBell.addEventListener('show.bs.dropdown', loadNotifications);
-  
-  // Update notification count on page load
-  updateNotificationCount();
-  
-  // Update notification count periodically (every 60 seconds)
-  setInterval(updateNotificationCount, 60000);
-  
-  // Новый функционал мобильного меню
-  const navbarLeft = document.querySelector('.navbar-left');
-  const mainNav = document.querySelector('.main-nav');
-  
-  const mobileMenuButton = document.createElement('button');
-  mobileMenuButton.className = 'mobile-menu-button';
-  mobileMenuButton.innerHTML = '<i class="fas fa-bars"></i>';
-  mobileMenuButton.setAttribute('aria-label', 'Открыть меню навигации');
-  
-  // Добавляем кнопку в DOM
-  navbarLeft.appendChild(mobileMenuButton);
-  
-  // Обработчик клика по кнопке мобильного меню
-  mobileMenuButton.addEventListener('click', function() {
-    mainNav.classList.toggle('active');
-    
-    // Меняем иконку кнопки
-    const icon = this.querySelector('i');
-    if (mainNav.classList.contains('active')) {
-      icon.className = 'fas fa-times';
-    } else {
-      icon.className = 'fas fa-bars';
+            .catch(error => console.error('Error fetching notification count:', error));
     }
-  });
-  
-  // Закрываем мобильное меню при выборе пункта меню
-  const navLinks = mainNav.querySelectorAll('.nav-link');
-  navLinks.forEach(link => {
-    link.addEventListener('click', function() {
-      if (window.innerWidth <= 768) {
-        mainNav.classList.remove('active');
-        mobileMenuButton.querySelector('i').className = 'fas fa-bars';
-      }
+    
+    function loadNotifications() {
+        fetch('{{ url_for("notifications.get_recent") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.unread_count > 0) {
+                    notificationCount.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                    notificationCount.style.display = 'block';
+                } else {
+                    notificationCount.style.display = 'none';
+                }
+                
+                if (data.notifications.length === 0) {
+                    notificationDropdownContent.innerHTML = `
+                        <div class="text-center p-4 text-muted">
+                            <i class="bi bi-bell" style="font-size: 1.5rem;"></i>
+                            <p class="mt-2 mb-0">No notifications yet</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = '';
+                data.notifications.forEach(notification => {
+                    let icon = 'info-circle text-info';
+                    if (notification.category === 'success') icon = 'check-circle text-success';
+                    if (notification.category === 'warning') icon = 'exclamation-circle text-warning';
+                    if (notification.category === 'danger') icon = 'x-circle text-danger';
+                    
+                    html += `
+                        <div class="dropdown-item px-3 py-2 notification-item ${notification.read ? '' : 'bg-light'}" 
+                             data-id="${notification.id}">
+                            <div class="d-flex">
+                                <div class="me-2">
+                                    <i class="bi bi-${icon}"></i>
+                                </div>
+                                <div>
+                                    <div class="mb-1">${notification.message}</div>
+                                    <div class="text-muted small">${notification.created_at}</div>
+                                    ${notification.link ? `<a href="${notification.link}" class="btn btn-sm btn-link p-0 mt-1">View details</a>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="dropdown-divider m-0"></div>
+                    `;
+                });
+                
+                notificationDropdownContent.innerHTML = html;
+                
+                document.querySelectorAll('.notification-item').forEach(item => {
+                    item.addEventListener('click', function(e) {
+                        if (e.target.tagName === 'A') return;
+                        
+                        const id = this.dataset.id;
+                        
+                        fetch(`{{ url_for("notifications.mark_as_read", notification_id=0) }}`.replace('/0', `/${id}`), {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.classList.remove('bg-light');
+                                updateNotificationCount();
+                            }
+                        })
+                        .catch(error => console.error('Error marking notification as read:', error));
+                    });
+                });
+            })
+            .catch(error => console.error('Error fetching notifications:', error));
+    }
+    
+    document.querySelector('.mark-all-read').addEventListener('click', function(e) {
+        e.stopPropagation();
+        
+        fetch('{{ url_for("notifications.mark_all_as_read") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.querySelectorAll('.notification-item.bg-light').forEach(el => {
+                    el.classList.remove('bg-light');
+                });
+                notificationCount.style.display = 'none';
+            }
+        })
+        .catch(error => console.error('Error marking all notifications as read:', error));
     });
-  });
-  
-  // Закрываем мобильное меню при изменении размера окна
-  window.addEventListener('resize', function() {
-    if (window.innerWidth > 768) {
-      mainNav.classList.remove('active');
-      mobileMenuButton.querySelector('i').className = 'fas fa-bars';
-    }
-  });
+    
+    notificationBell.addEventListener('show.bs.dropdown', loadNotifications);
+    updateNotificationCount();
+    setInterval(updateNotificationCount, 60000);
+    
+    // Mobile menu functionality
+    const mobileMenuButton = document.querySelector('.mobile-menu-button');
+    const mainNav = document.querySelector('.main-nav');
+    
+    mobileMenuButton.addEventListener('click', function() {
+        mainNav.classList.toggle('active');
+        const icon = this.querySelector('i');
+        icon.className = mainNav.classList.contains('active') ? 'fas fa-times' : 'fas fa-bars';
+    });
+    
+    document.querySelectorAll('.main-nav .nav-link').forEach(link => {
+        link.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                mainNav.classList.remove('active');
+                mobileMenuButton.querySelector('i').className = 'fas fa-bars';
+            }
+        });
+    });
+    
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            mainNav.classList.remove('active');
+            mobileMenuButton.querySelector('i').className = 'fas fa-bars';
+        }
+    });
 });
-
 </script>
