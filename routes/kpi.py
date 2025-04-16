@@ -17,7 +17,6 @@ logger.addHandler(handler)
 
 kpi_bp = Blueprint('kpi', __name__)
 
-DEFAULT_COLUMNS = ["Название", "Значение", "Цель", "Прогресс"]
 import ast
 import operator
 import math
@@ -153,22 +152,27 @@ def validate_formula():
 def get_kpi_data_from_db(user_id=None, admin_view=False):
     """Get KPI data from database and format for template."""
     try:
-        query = db.session.query(KPI)
-        
-        if not admin_view:
-            query = query.filter(KPI.user_id == user_id)
+        # Для шаблонов
+        if admin_view and request.args.get('template'):
+            query = db.session.query(KPI).filter_by(is_template=True)
+            kpis = query.order_by(KPI.row_index).all()
+        # Для пользователей
+        else:
+            if not admin_view:
+                query = db.session.query(KPI).filter(KPI.user_id == user_id)
+            else:
+                query = db.session.query(KPI)
             
-        kpis = query.order_by(KPI.user_id, KPI.row_index, KPI.column_name).all()
-        
+            kpis = query.filter_by(is_template=False).order_by(KPI.user_id, KPI.row_index).all()
+
+        # Получаем уникальные колонки из БД
         if admin_view:
             columns_query = db.session.query(KPI.column_name).distinct()
         else:
             columns_query = db.session.query(KPI.column_name).filter(KPI.user_id == user_id).distinct()
             
-        db_columns = columns_query.all()
-        columns = DEFAULT_COLUMNS.copy()
-        columns.extend([col[0] for col in db_columns if col[0] not in DEFAULT_COLUMNS])
-        
+        columns = [col[0] for col in columns_query.all()]  # Только колонки из БД
+
         if admin_view:
             user_ids = db.session.query(KPI.user_id).distinct().all()
             user_ids = [uid[0] for uid in user_ids]
@@ -252,8 +256,7 @@ def get_kpi_data_from_db(user_id=None, admin_view=False):
             return data, columns
     except SQLAlchemyError as e:
         logger.error(f"Database error fetching KPI data: {e}")
-        return [["" for _ in DEFAULT_COLUMNS] for _ in range(10)], DEFAULT_COLUMNS
-
+        return [[] for _ in range(10)], []  # Пустые данные при ошибке
 @kpi_bp.route('/kpi', methods=['GET'])
 @login_required
 def kpi_constructor():
@@ -496,7 +499,10 @@ def get_chart_data():
         ).order_by(KPI.row_index).all()
         
         # Get the label column values (usually from the first column "Название")
-        label_column = DEFAULT_COLUMNS[0]  # "Название"
+        first_column = db.session.query(KPI.column_name).filter(
+            KPI.user_id == user_id
+        ).order_by(KPI.id).first()
+        label_column = first_column[0] if first_column else "Label"  # Fallback
         label_entries = KPI.query.filter_by(
             column_name=label_column,
             user_id=user_id
@@ -563,7 +569,126 @@ def delete_row():
         return jsonify({"status": "error", "message": str(e)}), 500
     
 
+@kpi_bp.route('/template')
+@login_required
+def get_template():
+    if not current_user.is_admin:
+        abort(403)
+    
+    # Получаем данные шаблона
+    template_data = KPI.query.filter_by(is_template=True).order_by(KPI.row_index).all()
+    
+    # Форматируем данные для фронтенда
+    columns = set()
+    data = {}
+    
+    for item in template_data:
+        if item.row_index not in data:
+            data[item.row_index] = {}
+        data[item.row_index][item.column_name] = item.value
+        columns.add(item.column_name)
+    
+    return jsonify({
+        'columns': list(columns),
+        'data': data
+    })
+from datetime import datetime
+@kpi_bp.route('/save_template', methods=['POST'])
+@login_required
+def save_template():
+    if not current_user.is_admin:
+        return jsonify({'status': 'error', 'message': 'Доступ запрещён'}), 403
 
-
+    try:
+        data = request.get_json()
+        
+        # Удаляем старые шаблонные данные
+        db.session.query(KPI).filter(KPI.is_template == True).delete()
+        
+        # Сохраняем данные шаблона
+        template_data = data.get('template_data', {})
+        
+        for row_idx, row in template_data.get('rows', {}).items():
+            for col_name, cell_data in row.items():
+                new_kpi = KPI(
+                    row_index=int(row_idx),
+                    column_name=col_name,
+                    value=cell_data.get('value', ''),
+                    formula=cell_data.get('formula', ''),
+                    is_template=True,
+                    user_id=None,  # Шаблоны не привязаны к пользователю
+                    created_at=datetime.utcnow(),
+                    created_by=current_user.id
+                )
+                db.session.add(new_kpi)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Шаблон успешно сохранён'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Ошибка сохранения шаблона: {str(e)}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'Ошибка сохранения шаблона: {str(e)}'
+        }), 500
+def apply_template_changes():
+    """Применяет изменения шаблона ко всем пользователям"""
+    # Получаем текущий шаблон
+    template_items = KPI.query.filter_by(is_template=True).order_by(KPI.row_index).all()
+    
+    # Получаем всех пользователей (кроме админов, если нужно)
+    users = User.query.filter(User.id != current_user.id).all()
+    
+    for user in users:
+        # Удаляем только KPI пользователя, которые были созданы из шаблона
+        KPI.query.filter_by(user_id=user.id, is_template=False).delete()
+        
+        # Создаем новые KPI на основе шаблона
+        for template_item in template_items:
+            kpi = KPI(
+                row_index=template_item.row_index,
+                column_name=template_item.column_name,
+                value=template_item.value,
+                formula=template_item.formula,
+                user_id=user.id,
+                is_template=False,
+                template_id=template_item.id
+            )
+            db.session.add(kpi)
+    
+    db.session.commit()
 
     
+@kpi_bp.route('/template/apply', methods=['POST'])
+@login_required
+def apply_template():
+    if not current_user.is_admin:
+        abort(403)
+    
+    try:
+        apply_template_changes()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@kpi_bp.route('/template/history', methods=['GET'])
+@login_required
+def get_template_history():
+    if not current_user.is_admin:
+        abort(403)
+    
+    history = KPITemplateHistory.query.order_by(KPITemplateHistory.changed_at.desc()).limit(50).all()
+    
+    return jsonify({
+        'history': [{
+            'id': item.id,
+            'changed_at': item.changed_at.isoformat(),
+            'changed_by': item.user.username,
+            'description': item.change_description
+        } for item in history]
+    })

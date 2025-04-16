@@ -13,7 +13,6 @@
     --busy-color: #e41e3f;
     --shadow-light: 0 2px 5px rgba(0, 0, 0, 0.1);
     --shadow-medium: 0 5px 15px rgba(0, 0, 0, 0.1);
-    
 }
 
 * {
@@ -24,124 +23,21 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f0f2f5;
+    background-color: var(--secondary-color);
     color: var(--text-color);
     height: 100vh;
     display: flex;
     flex-direction: column;
 }
 
-/* Top Navigation Bar */
-.top-navbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 1rem;
-    background-color: #fff;
-    box-shadow: var(--shadow-light);
-    height: 60px;
-    position: sticky;
-    top: 0;
-    z-index: 1000;
+body.ios-device .app-container {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    height: 100%;
 }
 
-.nav-left, .nav-right {
-    display: flex;
-    align-items: center;
-}
-
-.nav-left {
-    gap: 1.5rem;
-}
-
-.nav-right {
-    gap: 1rem;
-}
-
-.brand {
-    font-weight: 600;
-    font-size: 1.1rem;
-    color: var(--primary-color);
-    text-decoration: none;
-    margin-right: 1rem;
-}
-
-.nav-item {
-    text-decoration: none;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 5px;
-    transition: all 0.2s;
-}
-
-.nav-item i {
-    font-size: 1.2rem;
-}
-
-.nav-item:hover {
-    background-color: var(--secondary-color);
-    color: var(--text-color);
-}
-
-.nav-item.active {
-    color: var(--primary-color);
-    border-bottom: 3px solid var(--primary-color);
-    font-weight: 500;
-}
-
-.search-box, .notification-box {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background-color: var(--secondary-color);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.search-box:hover, .notification-box:hover {
-    background-color: #e4e6eb;
-}
-
-.notification-box {
-    position: relative;
-}
-
-.notification-badge {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background-color: var(--primary-color);
-    color: white;
-    font-size: 0.7rem;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.logout-btn {
-    text-decoration: none;
-    color: var(--text-color);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-    background-color: var(--secondary-color);
-    transition: all 0.2s;
-}
-
-.logout-btn:hover {
-    background-color: #e4e6eb;
+body.ios-device * {
+    transition: none !important;
 }
 
 /* App Container */
@@ -159,11 +55,13 @@ body {
     flex-direction: column;
     background-color: white;
     position: relative;
+    min-width: 300px;
+    transition: all 0.3s ease;
 }
 
-.contacts-header {
-    padding: 1rem;
-    border-bottom: 1px solid var(--border-color);
+.contacts-header { 
+    padding: 1rem; 
+    border-bottom: 1px solid var(--border-color); 
 }
 
 .search-container {
@@ -197,6 +95,7 @@ body {
     text-transform: uppercase;
 }
 
+/* Contact Item */
 .contact-item {
     display: flex;
     align-items: center;
@@ -204,15 +103,29 @@ body {
     cursor: pointer;
     transition: background-color 0.2s;
     border-radius: 8px;
-    margin: 0 0.5rem 0.5rem 0.5rem;
+    margin: 0 0.5rem 0.5rem;
 }
 
-.contact-item:hover {
+.contact-item:hover, .contact-item.selected {
     background-color: var(--secondary-color);
 }
 
-.contact-item.selected {
-    background-color: var(--secondary-color);
+.contact-item.has-unread {
+    background-color: rgba(245, 75, 100, 0.05);
+}
+
+.contact-item.has-unread:hover {
+    background-color: rgba(245, 75, 100, 0.1);
+}
+
+.contact-item.has-unread .contact-name {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.contact-item.has-unread .contact-message {
+    font-weight: 500;
+    color: var(--text-color);
 }
 
 .avatar {
@@ -235,9 +148,9 @@ body {
     object-fit: cover;
 }
 
-.avatar-text {
-    color: white;
-    font-size: 1.2rem;
+.avatar-text { 
+    color: white; 
+    font-size: 1.2rem; 
 }
 
 .status-indicator {
@@ -250,45 +163,15 @@ body {
     border: 2px solid white;
 }
 
-.status-online {
-    background-color: var(--online-color);
-}
+.status-online { background-color: var(--online-color); }
+.status-offline { background-color: var(--offline-color); }
+.status-away { background-color: var(--away-color); }
+.status-busy { background-color: var(--busy-color); }
+.status-group { background-color: var(--primary-color); }
 
-.status-offline {
-    background-color: var(--offline-color);
-}
-
-.status-away {
-    background-color: var(--away-color);
-}
-
-.status-busy {
-    background-color: var(--busy-color);
-}
-
-.status-group {
-    background-color: var(--primary-color);
-}
-
-.group-indicator {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background-color: var(--primary-color);
-    color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 0.6rem;
-    border: 2px solid white;
-}
-
-.contact-info {
-    flex: 1;
-    min-width: 0;
+.contact-info { 
+    flex: 1; 
+    min-width: 0; 
 }
 
 .contact-name-row {
@@ -320,6 +203,21 @@ body {
     max-width: 200px;
 }
 
+.unread-count-badge {
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: bold;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 6px;
+    margin-left: 10px;
+}
+
 .create-chat-btn {
     position: absolute;
     bottom: 1.5rem;
@@ -338,8 +236,8 @@ body {
     transition: all 0.2s;
 }
 
-.create-chat-btn:hover {
-    transform: scale(1.05);
+.create-chat-btn:hover { 
+    transform: scale(1.05); 
 }
 
 .no-results {
@@ -354,6 +252,12 @@ body {
     display: flex;
     flex-direction: column;
     background-color: #fff;
+    min-width: 0;
+}
+
+body.ios-device .chat-container { 
+    height: auto; 
+    min-height: 100%; 
 }
 
 .no-chat-selected {
@@ -400,20 +304,20 @@ body {
     border-bottom: 1px solid var(--border-color);
 }
 
-.chat-user-info {
-    display: flex;
-    align-items: center;
+.chat-user-info { 
+    display: flex; 
+    align-items: center; 
     cursor: pointer;
 }
 
-.chat-user-status {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
+.chat-user-status { 
+    font-size: 0.8rem; 
+    color: var(--text-secondary); 
 }
 
-.chat-header-actions {
-    display: flex;
-    gap: 0.75rem;
+.chat-header-actions { 
+    display: flex; 
+    gap: 0.75rem; 
 }
 
 .view-profile-btn {
@@ -429,10 +333,11 @@ body {
     transition: all 0.2s;
 }
 
-.view-profile-btn:hover {
-    background-color: #e4e6eb;
+.view-profile-btn:hover { 
+    background-color: var(--border-color); 
 }
 
+/* Messages Area */
 .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -440,7 +345,11 @@ body {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    background-color: #f0f2f5;
+    background-color: var(--secondary-color);
+}
+
+body.ios-device .chat-messages { 
+    -webkit-overflow-scrolling: touch; 
 }
 
 .chat-empty-state {
@@ -459,13 +368,29 @@ body {
     color: #ccc;
 }
 
+/* Message Groups and Messages */
 .message-group {
     display: flex;
+    flex-direction: column;
     margin-bottom: 1rem;
+    width: 100%;
 }
 
+/* Принятые сообщения (слева) */
+.message-group:not(.own-messages) {
+    align-items: flex-start;
+}
+
+/* Отправленные сообщения (справа) */
 .message-group.own-messages {
-    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+/* Информация о пользователе (аватар и имя) для входящих сообщений */
+.message-user-info {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.25rem;
 }
 
 .message-avatar {
@@ -473,11 +398,11 @@ body {
     height: 36px;
     border-radius: 50%;
     overflow: hidden;
-    margin-right: 0.5rem;
     display: flex;
     justify-content: center;
     align-items: center;
     background-color: #ccc;
+    margin-right: 0.5rem;
 }
 
 .message-avatar img {
@@ -486,49 +411,66 @@ body {
     object-fit: cover;
 }
 
+.message-sender {
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+/* Контейнер сообщения */
 .message-container {
     display: flex;
     flex-direction: column;
     max-width: 70%;
-}
-
-.message-sender {
-    font-weight: 500;
-    font-size: 0.875rem;
     margin-bottom: 0.25rem;
 }
 
+.own-messages .message-container {
+    align-items: flex-end;
+}
+
+.message-group:not(.own-messages) .message-container {
+    align-items: flex-start;
+}
+
+/* Пузырь сообщения */
 .message-bubble {
     padding: 0.75rem 1rem;
     border-radius: 18px;
     background-color: white;
     box-shadow: var(--shadow-light);
-    margin-bottom: 0.25rem;
+    max-width: 100%;
+    word-break: break-word;
+    hyphens: auto;
 }
 
 .own-messages .message-bubble {
     background-color: var(--primary-color);
     color: white;
+    border-top-right-radius: 4px;
+}
+
+.message-group:not(.own-messages) .message-bubble {
+    border-top-left-radius: 4px;
 }
 
 .message-text {
     font-size: 0.9375rem;
     line-height: 1.4;
-    word-break: break-word;
 }
 
-.message-text a {
-    color: #1877f2;
-    text-decoration: none;
+.message-text a { 
+    color: #1877f2; 
+    text-decoration: none; 
 }
 
-.own-messages .message-text a {
-    color: white;
-    text-decoration: underline;
+.own-messages .message-text a { 
+    color: white; 
+    text-decoration: underline; 
 }
 
+/* Attachments in messages */
 .message-attachment {
-    margin-top: 0.5rem;
+    margin-top: 8px;
 }
 
 .attachment-image {
@@ -546,13 +488,13 @@ body {
     border-radius: 8px;
 }
 
-.own-messages .attachment-file {
-    background-color: rgba(255, 255, 255, 0.1);
+.own-messages .attachment-file { 
+    background-color: rgba(255, 255, 255, 0.1); 
 }
 
-.attachment-details {
-    flex: 1;
-    min-width: 0;
+.attachment-details { 
+    flex: 1; 
+    min-width: 0; 
 }
 
 .attachment-name {
@@ -567,11 +509,11 @@ body {
     color: var(--text-secondary);
 }
 
-.own-messages .attachment-size {
-    color: rgba(255, 255, 255, 0.7);
+.own-messages .attachment-size { 
+    color: rgba(255, 255, 255, 0.7); 
 }
 
-.attachment-download {
+.attachment-download, .attachment-view {
     color: var(--text-secondary);
     width: 32px;
     height: 32px;
@@ -581,34 +523,58 @@ body {
     align-items: center;
     transition: all 0.2s;
     text-decoration: none;
-}
-
-.attachment-download:hover {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
-.own-messages .attachment-download {
-    color: white;
+.attachment-download:hover, .attachment-view:hover {
+    background-color: rgba(0, 0, 0, 0.1);
 }
 
-.own-messages .attachment-download:hover {
+.own-messages .attachment-download, .own-messages .attachment-view {
+    color: white;
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-.message-time {
+.own-messages .attachment-download:hover, .own-messages .attachment-view:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Время и статус сообщения */
+.message-time-container {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
     font-size: 0.75rem;
     color: var(--text-secondary);
-    margin-left: auto;
 }
 
-.own-messages .message-time {
-    margin-right: 0.5rem;
+.own-messages .message-time-container {
+    justify-content: flex-end;
 }
 
-.message-animation {
-    animation: slide-in 0.3s ease;
+.message-status {
+    display: flex;
+    align-items: center;
+    margin-left: 4px;
 }
 
+.message-sent {
+    color: #a0a0a0;
+}
+
+.message-read {
+    color: #4eb1ff;
+}
+
+.second-check {
+    margin-left: -3px;
+}
+
+.message-animation { 
+    animation: slide-in 0.3s ease; 
+}
+
+/* Typing Indicator */
 .chat-typing {
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
@@ -632,27 +598,16 @@ body {
     animation: typing 1s infinite ease-in-out;
 }
 
-.typing-indicator span:nth-child(1) {
-    animation-delay: 0s;
-}
-
-.typing-indicator span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-    animation-delay: 0.4s;
-}
+.typing-indicator span:nth-child(1) { animation-delay: 0s; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes typing {
-    0%, 60%, 100% {
-        transform: translateY(0);
-    }
-    30% {
-        transform: translateY(-6px);
-    }
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-6px); }
 }
 
+/* Attachment Preview */
 .attachment-preview {
     padding: 0.75rem 1rem;
     border-top: 1px solid var(--border-color);
@@ -671,7 +626,7 @@ body {
     max-width: 100%;
 }
 
-.preview-image {
+.preview-image, .preview-icon {
     width: 60px;
     height: 60px;
     border-radius: 4px;
@@ -685,9 +640,6 @@ body {
 }
 
 .preview-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 4px;
     background-color: rgba(0, 0, 0, 0.05);
     display: flex;
     justify-content: center;
@@ -696,9 +648,9 @@ body {
     color: var(--text-secondary);
 }
 
-.preview-info {
-    flex: 1;
-    min-width: 0;
+.preview-info { 
+    flex: 1; 
+    min-width: 0; 
 }
 
 .preview-name {
@@ -708,9 +660,9 @@ body {
     text-overflow: ellipsis;
 }
 
-.preview-size {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
+.preview-size { 
+    font-size: 0.75rem; 
+    color: var(--text-secondary); 
 }
 
 .preview-remove {
@@ -727,67 +679,70 @@ body {
     transition: all 0.2s;
 }
 
-.preview-remove:hover {
-    background-color: rgba(0, 0, 0, 0.2);
+.preview-remove:hover { 
+    background-color: rgba(0, 0, 0, 0.2); 
 }
 
+/* Chat Input Area */
 .chat-input-container {
     display: flex;
+    flex-direction: column;
     padding: 1rem;
     border-top: 1px solid var(--border-color);
+    position: relative;
+}
+
+body.ios-device .chat-input-container {
+    position: relative;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0) + 10px);
 }
 
 .chat-input-actions {
     display: flex;
-    align-items: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.chat-input {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: var(--secondary-color);
+    border-radius: 24px;
+    padding: 0.5rem 0.75rem;
 }
 
 .chat-input-btn {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background-color: var(--secondary-color);
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    margin-right: 0.75rem;
     transition: all 0.2s;
 }
 
-.chat-input-btn:hover {
-    background-color: #e4e6eb;
-}
-
-.chat-input {
-    flex: 1;
-    display: flex;
-    align-items: flex-end;
-    gap: 0.75rem;
+.chat-input-btn:hover { 
+    background-color: rgba(0, 0, 0, 0.1); 
 }
 
 .chat-input-field {
     flex: 1;
     resize: none;
-    padding: 0.75rem 1rem;
-    border-radius: 20px;
+    padding: 0.5rem;
     border: none;
-    background-color: var(--secondary-color);
+    background-color: transparent;
     font-family: inherit;
     font-size: 0.875rem;
     line-height: 1.5;
-    max-height: 120px;
+    max-height: 100px;
     outline: none;
-    transition: all 0.2s;
-}
-
-.chat-input-field:focus {
-    background-color: #e9ebef;
 }
 
 .chat-send-btn {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background-color: var(--primary-color);
     display: flex;
@@ -798,8 +753,8 @@ body {
     transition: all 0.2s;
 }
 
-.chat-send-btn:hover {
-    background-color: #e43c56;
+.chat-send-btn:hover { 
+    background-color: #e43c56; 
 }
 
 /* Profile Panel */
@@ -810,6 +765,8 @@ body {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    min-width: 300px;
+    transition: all 0.3s ease;
 }
 
 .profile-header {
@@ -820,8 +777,8 @@ body {
     align-items: center;
 }
 
-.profile-title {
-    font-weight: 600;
+.profile-title { 
+    font-weight: 600; 
 }
 
 .profile-close {
@@ -835,12 +792,12 @@ body {
     transition: all 0.2s;
 }
 
-.profile-close:hover {
-    background-color: var(--secondary-color);
+.profile-close:hover { 
+    background-color: var(--secondary-color); 
 }
 
-.profile-content {
-    padding: 1.5rem;
+.profile-content { 
+    padding: 1.5rem; 
 }
 
 .profile-user {
@@ -869,11 +826,6 @@ body {
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 0.25rem;
-}
-
-.profile-title {
-    color: var(--text-secondary);
-    margin-bottom: 0.75rem;
 }
 
 .profile-status-badge {
@@ -928,18 +880,18 @@ body {
     font-size: 0.875rem;
 }
 
-.profile-info-item:last-child {
-    margin-bottom: 0;
+.profile-info-item:last-child { 
+    margin-bottom: 0; 
 }
 
-.profile-info-icon {
-    color: var(--text-secondary);
+.profile-info-icon { 
+    color: var(--text-secondary); 
 }
 
-.shared-files {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+.shared-files { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 0.75rem; 
 }
 
 .shared-file-item {
@@ -976,9 +928,9 @@ body {
     color: var(--text-secondary);
 }
 
-.shared-file-info {
-    flex: 1;
-    min-width: 0;
+.shared-file-info { 
+    flex: 1; 
+    min-width: 0; 
 }
 
 .shared-file-name {
@@ -988,9 +940,9 @@ body {
     text-overflow: ellipsis;
 }
 
-.shared-file-meta {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
+.shared-file-meta { 
+    font-size: 0.75rem; 
+    color: var(--text-secondary); 
 }
 
 .shared-file-download {
@@ -1005,8 +957,8 @@ body {
     text-decoration: none;
 }
 
-.shared-file-download:hover {
-    background-color: rgba(0, 0, 0, 0.05);
+.shared-file-download:hover { 
+    background-color: rgba(0, 0, 0, 0.05); 
 }
 
 .no-shared-files {
@@ -1032,16 +984,16 @@ body {
     transition: background-color 0.2s;
 }
 
-.participant-item:last-child {
-    border-bottom: none;
+.participant-item:last-child { 
+    border-bottom: none; 
 }
 
-.participant-item:hover {
-    background-color: var(--secondary-color);
+.participant-item:hover { 
+    background-color: var(--secondary-color); 
 }
 
-.participant-item.selected {
-    background-color: rgba(245, 75, 100, 0.1);
+.participant-item.selected { 
+    background-color: rgba(245, 75, 100, 0.1); 
 }
 
 .participant-avatar {
@@ -1057,311 +1009,373 @@ body {
     overflow: hidden;
 }
 
-.participant-name {
-    flex: 1;
+.participant-name { 
+    flex: 1; 
+    font-weight: 500; 
+}
+
+.participant-checkbox { 
+    margin-left: 0.75rem; 
+}
+
+/* Dropdown and Group Chat Buttons */
+.contacts-dropdown-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    background-color: var(--secondary-color);
+    border-radius: 8px;
+    margin: 0.5rem;
+}
+
+.contacts-dropdown-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     font-weight: 500;
 }
 
-.participant-checkbox {
-    margin-left: 0.75rem;
+.contacts-dropdown-toggle {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
-/* Responsive styles for chat interface */
 
-/* Base responsive container adjustments */
-.app-container {
-    flex-direction: row;
-  }
-  
-  /* Contacts container responsive styling */
-  .contacts-container {
-    width: 300px;
-    min-width: 300px;
-    transition: all 0.3s ease;
-  }
-  
-  /* Chat container responsive styling */
-  .chat-container {
-    flex: 1;
-    min-width: 0; /* Prevents flex items from overflowing */
-  }
-  
-  /* Profile panel responsive styling */
-  .profile-panel {
-    width: 300px;
-    min-width: 300px;
-    transition: all 0.3s ease;
-  }
-  
-  /* Message input adjustments for better mobile experience */
-  .chat-input-container {
-    padding: 10px;
-  }
-  
-  .chat-input {
-    flex: 1;
-  }
-  
-  .chat-input-field {
-    padding: 10px;
+.users-container { 
+    margin-bottom: 1rem; 
+}
+
+.user-item { 
+    padding-left: 1.5rem; 
+}
+
+.group-chat-icon {
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+    color: var(--primary-color);
+}
+
+.create-group-chat-btn {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem;
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    gap: 0.5rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.create-group-chat-btn:hover { 
+    background-color: #e43c56; 
+}
+
+.create-group-chat-btn i { 
+    font-size: 1.2rem; 
+}
+
+/* Image Handling */
+.image-container {
+    position: relative;
+    max-width: 250px;
+    max-height: 250px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.image-container.blurred img { 
+    filter: blur(15px); 
+}
+
+.image-container img {
+    max-width: 100%;
+    max-height: 250px; 
+    display: block;
+    cursor: pointer;
+}
+
+.image-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+.view-image-btn {
+    padding: 0.5rem 1rem;
+    background-color: white;
+    border: none;
     border-radius: 20px;
-  }
-  
-  /* Responsive design for tablet */
-  @media (max-width: 992px) {
-    .profile-panel {
-      position: fixed;
-      right: 0;
-      top: 56px; /* Adjust based on navbar height */
-      bottom: 0;
-      z-index: 100;
-      transform: translateX(100%);
-      background-color: white;
-      box-shadow: var(--shadow-lg);
-    }
-    
-    .profile-panel.active {
-      transform: translateX(0);
-    }
-  }
-  
-  /* Responsive design for mobile */
-  @media (max-width: 768px) {
-    .app-container {
-      position: relative;
-      overflow: hidden;
-    }
-    
-    /* Контакты и чат занимают весь экран на мобильных устройствах */
-    .contacts-container, 
-    .chat-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      transition: transform 0.3s ease;
-    }
-    
-    /* Изначально контакты видны */
-    .contacts-container {
-      transform: translateX(0);
-      z-index: 20;
-    }
-    
-    /* Изначально чат скрыт справа */
-    .chat-container {
-      transform: translateX(100%);
-      z-index: 30;
-    }
-    
-    /* Когда чат активен, контакты скрываются влево, а чат показывается */
-    .mobile-chat-active .contacts-container {
-      transform: translateX(-100%);
-    }
-    
-    .mobile-chat-active .chat-container {
-      transform: translateX(0);
-    }
-    
-    /* Делаем скрытие/показ активного чата через visibility вместо display */
-    .active-chat {
-      display: flex !important; /* Для совместимости со старым кодом */
-      flex-direction: column;
-      visibility: hidden;
-      opacity: 0;
-      transition: visibility 0.3s, opacity 0.3s;
-    }
-    
-    .mobile-chat-active .active-chat {
-      visibility: visible;
-      opacity: 1;
-    }
-    
-    .no-chat-selected {
-      visibility: hidden;
-      opacity: 0;
-      transition: visibility 0.3s, opacity 0.3s;
-    }
-    
-    /* Adjust chat header for mobile */
-    .chat-header {
-      padding: 10px;
-    }
-    
-    /* Make messages more compact on mobile */
-    .chat-messages {
-      padding: 10px;
-    }
-    
-    .message-bubble {
-      max-width: 80%;
-    }
-    
-    /* Improve input area spacing */
-    .chat-input-container {
-      padding: 8px;
-    }
-    
-    /* Adjust the attachment preview for mobile */
-    .attachment-preview {
-      padding: 8px;
-    }
-  }
-  
-  /* Small mobile devices */
-  @media (max-width: 480px) {
-    .message-bubble {
-      max-width: 90%;
-      padding: 8px 12px;
-    }
-    
-    .chat-header-actions button {
-      padding: 5px;
-      margin-left: 5px;
-    }
-    
-    .avatar {
-      width: 35px;
-      height: 35px;
-    }
-  }
-  
-  /* Extra small devices */
-  @media (max-width: 360px) {
-    .profile-panel {
-      width: 100%;
-    }
-  }
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.view-image-btn:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.image-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.85);
+    z-index: 1050;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
+.image-modal-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+}
+
+.image-modal-content img {
+    max-width: 100%;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.image-modal-close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    color: white;
+    font-size: 30px;
+    cursor: pointer;
+    z-index: 1051;
+}
+
+/* Media Players */
+.audio-player, .video-player {
+    width: 100%;
+    border-radius: 8px;
+}
+
+.video-player { 
+    max-height: 300px; 
+}
+
+/* Emoji Picker */
+.emoji-picker {
+    position: absolute;
+    bottom: 100%;
+    right: 1rem;
+    width: 300px;
+    height: 300px;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: var(--shadow-medium);
+    padding: 1rem;
+    overflow-y: auto;
+    z-index: 100;
+}
+
+.emoji-category { 
+    margin-bottom: 1rem; 
+}
+
+.emoji-category-title {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 0.5rem;
+}
+
+.emoji-item {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 1.25rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.emoji-item:hover { 
+    background-color: var(--secondary-color); 
+}
+
+/* Unread badge for navigation */
+.unread-chat-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 0.7rem;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+}
+
 /* Animations */
 @keyframes slide-in {
-    from {
-        transform: translateY(20px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 /* Responsive Design */
 @media (max-width: 992px) {
-    .app-container {
-        flex-direction: column;
+    .app-container { 
+        flex-direction: column; 
     }
     
-    .contacts-container, .chat-container, .profile-panel {
-        width: 100%;
+    .contacts-container, .chat-container, .profile-panel { 
+        width: 100%; 
     }
     
     .profile-panel {
-        position: absolute;
-        top: 0;
+        position: fixed;
         right: 0;
+        top: 56px;
         bottom: 0;
         z-index: 100;
+        transform: translateX(100%);
+        box-shadow: var(--shadow-medium);
+    }
+    
+    .profile-panel.active { 
+        transform: translateX(0); 
+    }
+}
+
+@media (max-width: 768px) {
+    .app-container { 
+        position: relative; 
+    }
+    
+    .contacts-container, .chat-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.3s ease;
+    }
+    
+    .contacts-container { 
+        transform: translateX(0); 
+        z-index: 20; 
+    }
+    
+    .chat-container { 
+        transform: translateX(100%); 
+        z-index: 30; 
+    }
+    
+    .mobile-chat-active .contacts-container { 
+        transform: translateX(-100%); 
+    }
+    
+    .mobile-chat-active .chat-container { 
+        transform: translateX(0); 
+    }
+    
+    .active-chat { 
+        visibility: hidden; 
+        opacity: 0; 
+        transition: visibility 0.3s, opacity 0.3s; 
+    }
+    
+    .mobile-chat-active .active-chat { 
+        visibility: visible; 
+        opacity: 1; 
+    }
+    
+    .no-chat-selected { 
+        visibility: hidden; 
+        opacity: 0; 
+        transition: visibility 0.3s, opacity 0.3s; 
+    }
+    
+    .chat-header, .chat-messages, .attachment-preview { 
+        padding: 10px; 
+    }
+    
+    .chat-input-container {
+        position: sticky;
+        bottom: 0;
+        background-color: #fff;
+        z-index: 10;
+        width: 100%;
+        padding: 8px;
+    }
+    
+    .message-container { 
+        max-width: 80%; 
+    }
+    
+    .unread-chat-badge {
+        top: 0;
+        right: 0;
+        font-size: 0.65rem;
+        width: 18px;
+        height: 18px;
     }
 }
 
 @media (max-width: 576px) {
-    .contact-message, .contact-time {
-        display: none;
+    .contact-message, .contact-time { 
+        display: none; 
     }
     
-    .message-container {
-        max-width: 90%;
+    .message-container { 
+        max-width: 90%; 
     }
 }
-/* Стили для обхода проблемы с поисковой строкой Safari на iOS */
-/* Полностью новый подход для iOS */
-/* Радикальный подход для iOS */
 
-
-
-body.ios-device .app-container {
-    /* Устанавливаем прокрутку для контейнера приложения */
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
-    height: 100%;
+@media (max-width: 480px) {
+    .message-bubble { 
+        max-width: 90%; 
+        padding: 8px 12px; 
+    }
+    
+    .chat-header-actions button { 
+        padding: 5px; 
+        margin-left: 5px; 
+    }
+    
+    .avatar { 
+        width: 35px; 
+        height: 35px; 
+    }
 }
 
-body.ios-device .chat-container {
-    /* Убираем фиксированную высоту, чтобы контент мог расширяться */
-    height: auto;
-    min-height: 100%;
-}
-
-body.ios-device .chat-messages {
-    /* Важно: позволяем прокручивать сообщения */
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    flex: 1;
-}
-
-body.ios-device .chat-input-container {
-    /* Убираем фиксированное позиционирование (JS будет управлять им) */
-    position: relative;
-    bottom: auto;
-    left: auto;
-    right: auto;
-    padding-bottom: calc(env(safe-area-inset-bottom, 0) + 10px);
-}
-
-/* Отключаем анимации и переходы на iOS */
-body.ios-device * {
-    -webkit-transition: none !important;
-    transition: none !important;@media (max-width: 768px) {
-  .chat-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-  
-  .active-chat {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-  
-  .chat-messages {
-    flex: 1;
-    overflow-y: auto;
-  }
-  
-  .chat-input-container {
-    position: sticky;
-    bottom: 0;
-    background-color: #fff;
-    z-index: 10;
-    width: 100%;
-  }
-}
-}
-@media (max-width: 768px) {
-  .chat-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-  
-  .active-chat {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-  
-  .chat-messages {
-    flex: 1;
-    overflow-y: auto;
-  }
-  
-  .chat-input-container {
-    position: sticky;
-    bottom: 0;
-    background-color: #fff;
-    z-index: 10;
-    width: 100%;
-  }
+@media (max-width: 360px) {
+    .profile-panel { 
+        width: 100%; 
+    }
 }

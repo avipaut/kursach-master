@@ -67,6 +67,99 @@
           flex: 1;
           overflow: hidden;
         }
+
+        /* Стили для бейджа непрочитанных сообщений в навигационной панели */
+        .unread-chat-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: var(--primary-color);
+            color: white;
+            font-size: 0.7rem;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+        }
+
+        /* Стили для индикатора непрочитанных сообщений в списке контактов */
+        .unread-count-badge {
+            background-color: var(--primary-color);
+            color: white;
+            font-size: 0.75rem;
+            font-weight: bold;
+            min-width: 22px;
+            height: 22px;
+            border-radius: 11px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0 6px;
+            margin-left: 10px;
+        }
+
+        /* Выделяем контакты с непрочитанными сообщениями */
+        .contact-item.has-unread {
+            background-color: rgba(245, 75, 100, 0.05);
+        }
+
+        .contact-item.has-unread:hover {
+            background-color: rgba(245, 75, 100, 0.1);
+        }
+
+        /* Стили для отображения имени контакта с непрочитанными сообщениями */
+        .contact-item.has-unread .contact-name {
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        /* Стили для последнего сообщения контакта с непрочитанными сообщениями */
+        .contact-item.has-unread .contact-message {
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        /* Стили для контейнера времени и статуса сообщения */
+        .message-time-container {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .message-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* Стили для индикатора статуса сообщения */
+        .message-status {
+            display: flex;
+            align-items: center;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .message-sent {
+            color: #a0a0a0;
+        }
+
+        .message-read {
+            color: #4eb1ff;
+        }
+
+        /* Позиционирование двойной галочки */
+        .second-check {
+            margin-left: -3px;
+        }
+
+        /* Изменяем размещение контейнера со временем и статусом для выравнивания */
+        .own-messages .message-time-container {
+            justify-content: flex-end;
+        }
     </style>
 </head>
 <body>
@@ -154,13 +247,22 @@
                         <div class="chat-input-btn" id="attachFile">
                             <i class="fas fa-paperclip"></i>
                         </div>
-                        <input type="file" id="fileInput" style="display: none;">
+                        <input type="file" id="fileInput" style="display: none;" multiple>
+                        
+                        <div class="chat-input-btn" id="openEmoji">
+                            <i class="far fa-smile"></i>
+                        </div>
                     </div>
                     <div class="chat-input">
                         <textarea class="chat-input-field" id="messageInput" placeholder="Type a message..." rows="1"></textarea>
                         <div class="chat-send-btn" id="sendMessage">
                             <i class="fas fa-paper-plane"></i>
                         </div>
+                    </div>
+                    
+                    <!-- Добавим панель эмодзи -->
+                    <div class="emoji-picker" id="emojiPicker" style="display: none;">
+                        <!-- Эмодзи будут загружены динамически -->
                     </div>
                 </div>
             </div>
@@ -243,11 +345,125 @@
         </div>
     </div>
 
+    <!-- Модальное окно для просмотра изображений -->
+    <div id="imageModal" class="image-modal" style="display: none;">
+        <div class="image-modal-content">
+            <img id="modalImage" alt="Full size image">
+        </div>
+        <div class="image-modal-close">&times;</div>
+    </div>
+
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Socket.IO client -->
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+
+    <script>
+        // Получение общего количества непрочитанных сообщений для обновления индикатора в навбаре
+        function updateUnreadMessagesTotal() {
+            fetch('/chat/api/unread_messages_total')
+                .then(response => response.json())
+                .then(data => {
+                    // Обновляем индикатор в навигационной панели
+                    const navChatLink = document.querySelector('a.nav-link[href*="chat"]');
+                    if (navChatLink) {
+                        // Находим или создаем бейдж для непрочитанных сообщений
+                        let unreadBadge = navChatLink.querySelector('.unread-chat-badge');
+                        
+                        if (data.unread_count > 0) {
+                            if (!unreadBadge) {
+                                unreadBadge = document.createElement('span');
+                                unreadBadge.className = 'unread-chat-badge';
+                                navChatLink.appendChild(unreadBadge);
+                            }
+                            // Обновляем содержимое бейджа
+                            unreadBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                        } else if (unreadBadge) {
+                            unreadBadge.remove();
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching unread messages count:', error);
+                });
+        }
+
+        // Обновление списка лобби с количеством непрочитанных сообщений
+        function updateLobbiesWithUnread() {
+            fetch('/chat/api/lobbies_with_unread')
+                .then(response => response.json())
+                .then(lobbiesWithUnread => {
+                    // Создаем карту лобби с непрочитанными сообщениями для быстрого доступа
+                    const unreadCountMap = new Map();
+                    lobbiesWithUnread.forEach(item => {
+                        unreadCountMap.set(item.lobby_id, item.unread_count);
+                    });
+                    
+                    // Обновляем индикаторы непрочитанных сообщений для каждого контакта
+                    document.querySelectorAll('.contact-item[data-lobby-id]').forEach(contactItem => {
+                        const lobbyId = parseInt(contactItem.dataset.lobbyId);
+                        if (!lobbyId) return;
+                        
+                        // Находим или создаем бейдж для непрочитанных сообщений
+                        let unreadBadge = contactItem.querySelector('.unread-count-badge');
+                        
+                        if (unreadCountMap.has(lobbyId)) {
+                            const unreadCount = unreadCountMap.get(lobbyId);
+                            
+                            if (!unreadBadge) {
+                                unreadBadge = document.createElement('div');
+                                unreadBadge.className = 'unread-count-badge';
+                                contactItem.querySelector('.contact-info').appendChild(unreadBadge);
+                            }
+                            
+                            unreadBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                            // Выделяем контакт с непрочитанными сообщениями
+                            contactItem.classList.add('has-unread');
+                        } else if (unreadBadge) {
+                            unreadBadge.remove();
+                            contactItem.classList.remove('has-unread');
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching lobbies with unread messages:', error);
+                });
+        }
+
+        // Вызываем функции обновления при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            // Инициализация при загрузке DOM
+            updateUnreadMessagesTotal();
+            updateLobbiesWithUnread();
+            
+            // Устанавливаем интервал обновления
+            setInterval(() => {
+                updateUnreadMessagesTotal();
+                updateLobbiesWithUnread();
+            }, 60000); // Каждую минуту
+        });
+    </script>
+    
+    {% if initial_lobby_id is defined and initial_lobby_id %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Когда DOM загружен и лобби загружены, выбираем начальное лобби
+            const checkLobbiesInterval = setInterval(function() {
+                if (typeof lobbiesList !== 'undefined' && lobbiesList.length > 0) {
+                    clearInterval(checkLobbiesInterval);
+                    
+                    // Проверяем, существует ли указанное лобби
+                    const lobbyExists = lobbiesList.some(lobby => lobby.id == {{ initial_lobby_id }});
+                    
+                    if (lobbyExists) {
+                        selectLobby({{ initial_lobby_id }});
+                    }
+                }
+            }, 100);
+        });
+    </script>
+    {% endif %}
 </body>
 </html>

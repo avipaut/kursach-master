@@ -20,7 +20,7 @@ import shutil
 @role_required('admin')  # Только для администраторов
 def list_users():
     users = User.query.all()
-    return render_template('admin_users.html', users=users)
+    return render_template('documents/admin_users.html', users=users)
 def normalize_filename(filename):
     """
     Normalize Unicode filename while preserving Cyrillic characters
@@ -114,6 +114,12 @@ def translate_file(filepath, direction='ky-ru'):
         print(f"Error during translation: {e}")
         return None
 
+
+
+
+
+
+
 @documents_bp.route('/translate_upload', methods=['GET', 'POST'])
 @login_required
 def translate_upload():
@@ -201,12 +207,12 @@ def list_documents(category):
     if not documents:
         documents = [{'name': "No documents available. Upload a new file!"}]
     
-    return render_template('documents.html', documents=documents, active_category=category)
+    return render_template('documents/documents.html', documents=documents, active_category=category)
 
 @documents_bp.route('/create_documents', methods=['GET', 'POST'])
 def create_documents():
     # ваш код для создания документов
-    return render_template('create_document.html')
+    return render_template('documents/create_document.html')
 
 @documents_bp.route('/upload', methods=['POST'])
 @login_required
@@ -299,7 +305,7 @@ def pending_files():
     from .models import PendingFile
     
     pending_files = PendingFile.query.filter_by(status='pending').all()
-    return render_template('admin_pending_files.html', pending_files=pending_files)
+    return render_template('documents/admin_pending_files.html', pending_files=pending_files)
 
 @documents_bp.route('/admin/review_file/<int:file_id>')
 @login_required
@@ -310,7 +316,7 @@ def review_pending_file(file_id):
     pending_file = PendingFile.query.get_or_404(file_id)
     user = User.query.get(pending_file.user_id)
     
-    return render_template('review_file.html', file=pending_file, user=user)
+    return render_template('documents/review_file.html', file=pending_file, user=user)
 
 @documents_bp.route('/admin/approve_file/<int:file_id>', methods=['POST'])
 @login_required
@@ -527,4 +533,4 @@ def admin_view_user_documents(user_id):
     if not documents:
         documents = [{'name': "No documents available for this user."}]
     
-    return render_template('user_documents.html', documents=documents, user=user)
+    return render_template('documents/user_documents.html', documents=documents, user=user)

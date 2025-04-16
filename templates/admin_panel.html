@@ -152,7 +152,7 @@
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button type="button" class="icon-button me-1" title="{{ 'Блокировать' if user.active else 'Активировать' }}"
-                                                onclick="toggleUserStatus({{ user.id }}, {{ 'true' if user.active else 'false' }})">
+                                                onclick="toggleUserStatus({{ user_id }}, {{ 'true' if user.active else 'false' }})">
                                             <i class="fas fa-{{ 'ban' if user.active else 'check' }}"></i>
                                         </button>
                                         <button type="button" class="icon-button" title="Изменить роли" 

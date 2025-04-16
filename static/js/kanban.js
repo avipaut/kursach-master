@@ -106,18 +106,6 @@ function updateUIBasedOnPermissions() {
         });
     }
     
-    // Show admin indicator in UI if admin
-    if (isAdmin) {
-        const userInfo = document.createElement('div');
-        userInfo.className = 'admin-badge';
-        userInfo.innerHTML = '<i class="fas fa-shield-alt"></i> Admin';
-        
-        // Add it to the navbar if possible
-        const navbar = document.querySelector('.navbar-right');
-        if (navbar) {
-            navbar.insertBefore(userInfo, navbar.firstChild);
-        }
-    }
 }
 
 
@@ -2062,33 +2050,7 @@ function updateTodoStatus(todoId, completed, cardId) {
 function addAdminStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        .admin-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-            background-color: #4338ca;
-            color: white;
-            font-size: 12px;
-            font-weight: 600;
-            border-radius: 9999px;
-            padding: 2px 8px;
-            margin-left: 8px;
-        }
         
-        .board-item.admin-only {
-            border-left: 3px solid #4338ca;
-        }
-        
-        .board-name .admin-badge {
-            font-size: 10px;
-            padding: 1px 6px;
-            background-color: #4338ca;
-        }
-        
-        .hidden {
-            display: none !important;
-        }
     `;
     document.head.appendChild(style);
 }

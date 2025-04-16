@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, current_app
 from flask_login import login_required, current_user
-from .models import db, Notification
+from .models import db, Notification, User, Lobby
 
 notifications_bp = Blueprint('notifications', __name__)
 
@@ -104,6 +104,42 @@ def notify_user(user_id, message, category='info', link=None):
         category=category,
         link=link
     )
+    
+    db.session.add(notification)
+    db.session.commit()
 
+def create_message_notification(recipient_id, sender_id, lobby_id, message_text):
+    """
+    Создает уведомление о новом сообщении
+    """
+    sender = User.query.get(sender_id)
+    lobby = Lobby.query.get(lobby_id)
+    
+    if not sender or not lobby:
+        return
+    
+    # Текст уведомления зависит от типа лобби
+    if lobby.is_group:
+        notification_text = f"{sender.username} sent a message in {lobby.name}"
+    else:
+        notification_text = f"New message from {sender.username}"
+    
+    # Добавляем краткий текст сообщения
+    if message_text:
+        if len(message_text) > 30:
+            message_text = message_text[:27] + "..."
+        notification_text += f": {message_text}"
+    
+    # Ссылка на чат
+    link = f"/chat?lobby_id={lobby_id}"
+    
+    # Создаем уведомление
+    notification = Notification(
+        user_id=recipient_id,
+        message=notification_text,
+        link=link,
+        category='info'
+    )
+    
     db.session.add(notification)
     db.session.commit()

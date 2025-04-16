@@ -1,22 +1,15 @@
 # models.py
 
 from datetime import datetime
-# models.py
-
-from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Text, Boolean, Table
 import enum
-from sqlalchemy.orm import relationship
 from enum import Enum as PyEnum
-
 from flask_security import RoleMixin
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Text, Boolean, Table
-import enum
 from sqlalchemy.orm import relationship
-from enum import Enum as PyEnum
-
-from flask_security import RoleMixin
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, BooleanField, SelectMultipleField, TextAreaField
+from wtforms.validators import DataRequired, Email, Length, Optional
 
 db =  SQLAlchemy()
 # В models.py добавьте в начало файла:
@@ -47,6 +40,9 @@ class User(UserMixin, db.Model):
     fs_uniquifier = db.Column(db.String(255), unique=True)
     is_admin = db.Column(db.Boolean, default=False)
     avatar = Column(String(255), nullable=True)  # Path to user avatar
+    is_online = db.Column(db.Boolean, default=False)
+    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
+
 
     # Добавим отношения
     roles = db.relationship('Role', secondary=roles_users, 
@@ -64,7 +60,10 @@ class User(UserMixin, db.Model):
             'id': self.id,
             'username': self.username,
             'email': self.email,
-            'avatar': self.avatar
+            'avatar': self.avatar,
+            'is_online': self.is_online,
+            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
+            'is_admin': self.is_admin
         }
     def __repr__(self):
         return f"<User {self.username}>"
@@ -81,7 +80,7 @@ class Message(db.Model):
     id = Column(Integer, primary_key=True, autoincrement=True)
     sender_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     lobby_id = Column(Integer, ForeignKey('lobbies.id', ondelete="CASCADE"), nullable=False)
-    text = Column(Text, nullable=True)  # Can be null for non-text messages
+    text = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     
     # Message type and content
@@ -89,12 +88,15 @@ class Message(db.Model):
     file_path = Column(String(255), nullable=True)
     file_name = Column(String(255), nullable=True)
     file_size = Column(Integer, nullable=True)
-    file_type = Column(String(50), nullable=True)  # MIME type
+    file_type = Column(String(50), nullable=True)
     
     # For tracking read status
     read_by = db.relationship('ReadReceipt', backref='message', lazy=True, cascade="all, delete-orphan")
     
     def to_dict(self):
+        # Получаем список ID пользователей, прочитавших сообщение
+        read_by_user_ids = [receipt.user_id for receipt in self.read_by]
+        
         return {
             'id': self.id,
             'sender_id': self.sender_id,
@@ -107,7 +109,8 @@ class Message(db.Model):
             'file_path': self.file_path,
             'file_name': self.file_name,
             'file_size': self.file_size,
-            'file_type': self.file_type
+            'file_type': self.file_type,
+            'read_by': read_by_user_ids  # Добавляем список ID прочитавших
         }
     
     def __repr__(self):
@@ -121,6 +124,8 @@ class ReadReceipt(db.Model):
     
     def __repr__(self):
         return f"<ReadReceipt message:{self.message_id} by user:{self.user_id}>"
+    
+
 class Lobby(db.Model):
     __tablename__ = 'lobbies'
     id = Column(Integer, primary_key=True)
@@ -134,6 +139,20 @@ class Lobby(db.Model):
     # Relationships
     users = db.relationship('User', secondary=user_lobby, back_populates='lobbies')
     messages = db.relationship('Message', backref='lobby', lazy=True, cascade="all, delete-orphan")
+    
+    def get_unread_count_for_user(self, user_id):
+        """Получить количество непрочитанных сообщений для пользователя"""
+        from sqlalchemy import and_, not_
+        
+        # Запрос для подсчета сообщений, которые не были прочитаны пользователем
+        # и были отправлены другими пользователями
+        unread_count = Message.query.filter(
+            Message.lobby_id == self.id,
+            Message.sender_id != user_id,
+            ~Message.read_by.any(ReadReceipt.user_id == user_id)
+        ).count()
+        
+        return unread_count
     
     def to_dict(self):
         return {
@@ -163,28 +182,40 @@ class PriorityLevel(enum.Enum):
     MEDIUM = "medium"
     HIGH = "high"
 
-# Add to existing KPI model in models.py
-
 class KPI(db.Model):
-    __tablename__ = 'kpi'  # Fixed from tablename to __tablename__
+    __tablename__ = 'kpi'
 
     id = db.Column(db.Integer, primary_key=True)
     row_index = db.Column(db.Integer, nullable=False)
     column_name = db.Column(db.String(100), nullable=False)
     value = db.Column(db.String(1000), nullable=True)
-    formula = db.Column(db.String(1000), nullable=True)  # New column for formulas
+    formula = db.Column(db.String(1000), nullable=True)
     calculated_value = db.Column(db.String(1000), nullable=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=True)
+    is_template = db.Column(db.Boolean, default=False, nullable=False)
+    template_id = db.Column(db.Integer, db.ForeignKey('kpi.id'), nullable=True)  # Добавлено это поле
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id'))
 
-    # Fixed from table_args to __table_args__
-    __table_args__ = (
-        db.UniqueConstraint('row_index', 'column_name', 'user_id', name='uix_kpi_row_column_user'),
-    )
+    # Отношения
+    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('kpi_values', lazy=True))
+    template = db.relationship('KPI', remote_side=[id], backref='instances')
+    creator = db.relationship('User', foreign_keys=[created_by])
+    updater = db.relationship('User', foreign_keys=[updated_by])
 
-    user = db.relationship('User', backref=db.backref('kpi_values', lazy=True, cascade="all, delete-orphan"))
+class KPITemplateHistory(db.Model):
+    __tablename__ = 'kpi_template_history'
 
-    def __repr__(self):  # Fixed from repr to __repr__
-        return f"<KPI: {self.column_name} [{self.row_index}] = {self.value}>"
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('kpi.id'), nullable=False)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    changed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    change_description = db.Column(db.String(500), nullable=True)
+
+    template = db.relationship('KPI', backref='history_records')
+    user = db.relationship('User', backref='template_changes')
 
 class Board(db.Model):
     __tablename__ = 'board'
@@ -318,3 +349,75 @@ class PendingFile(db.Model):
     
     def __repr__(self):
         return f'<PendingFile {self.original_filename}>'
+    
+# Association table for CalendarEvent-User (participants) many-to-many relationship
+event_participants = db.Table(
+    'event_participants',
+    db.Column('event_id', db.Integer, db.ForeignKey('calendar_events.id', ondelete="CASCADE"), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
+)
+
+class EventType(PyEnum):
+    TASK = "task"
+    ZOOM = "zoom"
+    PERSONAL = "personal"  # For personal tasks
+
+class CalendarEvent(db.Model):
+    __tablename__ = 'calendar_events'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False)
+    end_time = db.Column(db.DateTime, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    event_type = db.Column(db.String(20), nullable=False, default='task')  # 'task', 'zoom', 'personal'
+    color = db.Column(db.String(20), nullable=True)
+    all_day = db.Column(db.Boolean, default=False)
+    
+    # Creator of the event
+    creator_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    creator = db.relationship('User', foreign_keys=[creator_id], backref='created_events')
+    
+    # For Zoom meetings
+    zoom_url = db.Column(db.String(500), nullable=True)
+    zoom_meeting_id = db.Column(db.String(100), nullable=True)
+    zoom_password = db.Column(db.String(50), nullable=True)
+    zoom_host_key = db.Column(db.String(50), nullable=True)
+    is_recorded = db.Column(db.Boolean, default=False)
+    recording_url = db.Column(db.String(500), nullable=True)
+    
+    # Participants (for zoom meetings or shared tasks)
+    participants = db.relationship('User', secondary=event_participants, backref='participating_events')
+    
+    # For visibility control
+    is_private = db.Column(db.Boolean, default=False)  # True for personal tasks
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'start': self.start_time.isoformat(),
+            'end': self.end_time.isoformat(),
+            'description': self.description,
+            'type': self.event_type,
+            'color': self.color,
+            'allDay': self.all_day,
+            'creator_id': self.creator_id,
+            'creator_name': self.creator.username if self.creator else None,
+            'zoom_url': self.zoom_url,
+            'zoom_meeting_id': self.zoom_meeting_id,
+            'is_recorded': self.is_recorded,
+            'recording_url': self.recording_url if self.is_recorded else None,
+            'participants': [user.to_dict() for user in self.participants],
+            'is_private': self.is_private
+        }
+    
+class UserForm(FlaskForm):
+    username = StringField('Имя пользователя', validators=[DataRequired(), Length(min=3, max=50)])
+    email = StringField('Email', validators=[Optional(), Email()])
+    password = PasswordField('Пароль', validators=[DataRequired(), Length(min=6)])
+    active = BooleanField('Активен', default=True)
+    roles = SelectMultipleField('Роли', coerce=int)
+
+class RoleForm(FlaskForm):
+    name = StringField('Название роли', validators=[DataRequired(), Length(max=80)])
+    description = TextAreaField('Описание', validators=[Optional(), Length(max=255)])

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Management System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/documents.css') }}">
+  {% set active_page = 'documents' %}
+  {% include 'navbar.html' %}
+</head>
+<body>
+  <div class="container-fluid">
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash-message alert alert-{{ category }}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    
+    <!-- Main Content -->
+    <div class="row mt-4">
+      <!-- Documents Section -->
+      <div class="col-lg-8 mb-4">
+        <div class="section-header">
+          <h2>Documents</h2>
+          <button class="upload-btn" data-bs-toggle="modal" data-bs-target="#uploadModal">
+            <i class="bi bi-upload me-1"></i> Upload
+          </button>
+        </div>
+        
+        <!-- Document Category Tabs -->
+        <div class="document-tabs">
+          <a href="{{ url_for('documents.list_documents', category='personal') }}" class="document-tab {% if active_category == 'personal' %}active{% endif %}">
+            <i class="bi bi-person-fill me-1"></i> Personal
+          </a>
+          <a href="{{ url_for('documents.list_documents', category='common') }}" class="document-tab {% if active_category == 'common' %}active{% endif %}">
+            <i class="bi bi-people-fill me-1"></i> Common
+          </a>
+          <a href="{{ url_for('documents.list_documents', category='important') }}" class="document-tab {% if active_category == 'important' %}active{% endif %}">
+            <i class="bi bi-star-fill me-1"></i> Important
+          </a>
+          
+          {% if 'admin' in current_user.roles|map(attribute='name')|list %}
+          <a href="{{ url_for('documents.list_users') }}" class="document-tab {% if active_category == 'users' %}active{% endif %}">
+            <i class="bi bi-person-badge me-1"></i> Users
+          </a>
+          {% endif %}
+          <a href="{{ url_for('trash.view_trash') }}" class="nav-link {% if active_page == 'trash' %}active{% endif %}">
+            <i class="fas fa-trash"></i>
+            <span>trash</span>
+        </a>
+        </div>
+        
+        <!-- Upload Modal -->
+        <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Upload Document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <form action="{{ url_for('documents.upload_file') }}" method="post" enctype="multipart/form-data">
+                  <div class="mb-3">
+                    <label for="fileUpload" class="form-label">Select file</label>
+                    <input type="file" class="form-control" id="fileUpload" name="file" required>
+                    <div class="form-text">Supported formats: PDF, DOCX, DOC, TXT, RTF, ODT (max 10MB)</div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="categorySelect" class="form-label">Select category</label>
+                    <select class="form-select" id="categorySelect" name="category">
+                      <option value="personal" {% if active_category == 'personal' %}selected{% endif %}>Personal</option>
+                      <option value="common" {% if active_category == 'common' %}selected{% endif %}>Common</option>
+                      <option value="important" {% if active_category == 'important' %}selected{% endif %}>Important</option>
+                    </select>
+                  </div>
+                  <div class="d-grid">
+                    <button type="submit" class="btn btn-danger">Upload Document</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Search and Sort -->
+        <div class="row">
+          <div class="col-md-8">
+            <div class="search-container">
+              <i class="bi bi-search search-icon"></i>
+              <input type="text" class="form-control search-input" placeholder="Search documents..." id="searchInput">
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="sort-container">
+              <button class="sort-btn active me-1" data-sort="name">Name <i class="bi bi-sort-down sort-icon"></i></button>
+              <button class="sort-btn me-1" data-sort="date">Date</button>
+              <button class="sort-btn" data-sort="size">Size</button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="no-results">
+          No files found matching your search.
+        </div>
+        
+        <!-- Documents Container -->
+        <div class="documents-container">
+          {% if documents == [{'name': "No documents available. Upload a new file!"}] %}
+            <div class="alert alert-info">
+              {{ documents[0].name }}
+            </div>
+          {% else %}
+            <div class="document-row">
+              {% for doc in documents %}
+                <div class="document-card" 
+                     data-name="{{ doc.name }}"
+                     data-size="{{ doc.size }}"
+                     data-date="{{ doc.uploaded_at }}">
+                  <div class="document-icon">
+                    <i class="bi {% if 'pdf' in doc.name %}bi-file-earmark-pdf{% elif 'doc' in doc.name %}bi-file-earmark-word{% else %}bi-file-earmark-text{% endif %}"></i>
+                  </div>
+                  <div class="document-info">{{ doc.name }}</div>
+                  <div class="document-meta">{{ doc.size }} • {{ doc.uploaded_at }}</div>
+                  <div class="progress-bar-container">
+                    <!-- Random progress for visual appeal -->
+                    <div class="progress-bar-fill" style="width: {{ (loop.index * 13) % 100 + 50 }}%"></div>
+                  </div>
+                  <!-- Action buttons -->
+                  <div class="document-actions">
+                    <a href="{{ url_for('documents.view_file', filename=doc.name, category=active_category) }}" class="action-btn" target="_blank">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                    <a href="{{ url_for('documents.download_file', filename=doc.name, category=active_category) }}" class="action-btn">
+                      <i class="bi bi-download"></i>
+                    </a>
+                    <form action="{{ url_for('documents.delete_file', filename=doc.name) }}" method="POST" class="d-inline">
+                      <input type="hidden" name="category" value="{{ active_category }}">
+                      <button type="submit" class="action-btn" 
+                              onclick="return confirm('Are you sure you want to move this file to trash?');">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      
+      <!-- Translation Section -->
+      <div class="col-lg-4">
+        <div class="translation-card">
+          <div class="translation-title"><i class="bi bi-translate me-2"></i> Document Translation</div>
+          
+          <!-- Translation Form -->
+          <form action="{{ url_for('documents.translate_upload') }}" method="post" enctype="multipart/form-data">
+            <!-- Translation Direction -->
+            <div class="mb-3">
+              <div class="mb-2">Translation Direction</div>
+              <div class="direction-options">
+                <label class="direction-option active">
+                  <input type="radio" name="direction" value="ky-ru" class="d-none" checked>Kyrgyz → Russian
+                </label>
+                <label class="direction-option">
+                  <input type="radio" name="direction" value="ru-ky" class="d-none">
+                  Russian → Kyrgyz
+                </label>
+              </div>
+            </div>
+            
+            <!-- File Drop Zone -->
+            <div class="mb-3">
+              <div class="upload-area">
+                <input type="file" name="file" id="translationFile" class="d-none" required>
+                <div class="upload-circle">
+                  <i class="bi bi-cloud-arrow-up upload-icon"></i>
+                </div>
+                <h5>Drag & drop file here</h5>
+                <p class="text-muted">or</p>
+                <button type="button" class="btn btn-outline-secondary" id="browseFilesBtn">Browse Files</button>
+                <div class="mt-2 small text-muted">Supported formats: PDF, DOCX, DOC, TXT (max 10MB)</div>
+              </div>
+            </div>
+            
+            <!-- Submit Button -->
+            <button type="submit" class="translate-btn">
+              <i class="bi bi-translate me-2"></i> Translate Document
+            </button>
+          </form>
+        </div>
+        
+        <!-- Recent Activity -->
+        
+      </div>
+    </div>
+  </div>
+  <script defer src="{{ url_for('static', filename='js/documents.js') }}"></script>
+
+  <!-- JavaScript -->
+
+</body>
+</html>

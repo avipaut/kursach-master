@@ -1,7 +1,7 @@
 # app.py
 
 from flask import Flask, redirect, url_for, request, session
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 from flask_login import LoginManager, current_user
 import os
@@ -12,7 +12,7 @@ from routes.models import Role, User
 from werkzeug.security import generate_password_hash
 from routes.documents import documents_bp
 from routes.chat import chat_bp, socketio
-from routes.zoom import zoom_bp
+from routes.calendar import calendar_bp
 from routes.reports import reports_bp
 from routes.kpi import kpi_bp
 from routes.auth import auth_bp, init_login_manager
@@ -20,8 +20,6 @@ from routes.models import db, User, Role
 from routes.kanban import kanban_bp  # Импортируем Kanban Blueprint
 from routes.trash import trash_bp
 from routes.notifications import notifications_bp, add_notification
-
-
 
 # Инициализация Flask
 app = Flask(__name__)
@@ -63,6 +61,20 @@ db.init_app(app)
 migrate = Migrate(app, db)
 # Передаём login_manager в auth.py
 init_login_manager(login_manager)
+
+# Добавляем обработчики WebSocket (новый код)
+@socketio.on('connect')
+def handle_connect():
+    if current_user.is_authenticated:
+        join_room(f'user_{current_user.id}')
+        print(f'User {current_user.id} connected to WebSocket')
+    else:
+        return False
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    if current_user.is_authenticated:
+        print(f'User {current_user.id} disconnected from WebSocket')
 
 # Функция для создания начальных ролей и админа
 def create_initial_roles_and_admin():
@@ -113,7 +125,7 @@ def admin_required(f):
 # Регистрация Blueprints
 app.register_blueprint(documents_bp, url_prefix='/documents')
 app.register_blueprint(chat_bp, url_prefix='/chat')
-app.register_blueprint(zoom_bp, url_prefix='/zoom')
+app.register_blueprint(calendar_bp, url_prefix='/calendar')
 app.register_blueprint(reports_bp, url_prefix='/reports')
 app.register_blueprint(kpi_bp, url_prefix='/kpi')
 app.register_blueprint(auth_bp, url_prefix='/auth')  # Без url_prefix

@@ -9,7 +9,7 @@
         <div class="logo-group">
             <div class="app-logo">
                 <i class="fas fa-clipboard-list"></i>
-                <span>CRM System</span>
+                <span>LMS System</span>
             </div>
         </div>
         
@@ -34,12 +34,10 @@
                 <i class="fas fa-chart-line"></i>
                 <span>KPI</span>
             </a>
-            <a href="{{ url_for('zoom.zoom') }}" class="nav-link {% if active_page == 'zoom' %}active{% endif %}">
+            <a href="{{ url_for('calendar.calendar_page') }}" class="nav-link {% if active_page == 'zoom' %}active{% endif %}">
                 <i class="fas fa-video"></i>
                 <span>Zoom</span>
             </a>
-            
-            
         </nav>
     </div>
     
@@ -70,8 +68,8 @@
                     <button class="btn btn-sm text-primary mark-all-read">Mark all as read</button>
                 </div>
                 <div class="py-2 text-center border-top">
-                  <a href="{{ url_for('notifications.notifications_page') }}" class="text-decoration-none">View all notifications</a>
-              </div>
+                    <a href="{{ url_for('notifications.notifications_page') }}" class="text-decoration-none">View all notifications</a>
+                </div>
                 <div id="notificationDropdownContent" class="notification-dropdown-content">
                     <div class="text-center p-3">
                         <div class="spinner-border spinner-border-sm text-secondary" role="status">
@@ -79,7 +77,6 @@
                         </div>
                     </div>
                 </div>
-                
             </div>
         </div>
         
@@ -89,157 +86,24 @@
         </a>
     </div>
     
-    <button class="mobile-menu-button">
+    <button class="mobile-menu-button" id="mobileMenuButton">
         <i class="fas fa-bars"></i>
     </button>
 </header>
 
+<!-- Глобальный JavaScript для всех страниц -->
+<script src="{{ url_for('static', filename='js/global.js') }}"></script>
 
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Notification functionality (остается без изменений)
-    const notificationBell = document.getElementById('notificationBell');
-    const notificationCount = document.getElementById('notificationCount');
-    const notificationDropdownContent = document.getElementById('notificationDropdownContent');
-    
-    function updateNotificationCount() {
-        fetch('{{ url_for("notifications.get_unread_count") }}')
-            .then(response => response.json())
-            .then(data => {
-                if (data.count > 0) {
-                    notificationCount.textContent = data.count > 99 ? '99+' : data.count;
-                    notificationCount.style.display = 'block';
-                } else {
-                    notificationCount.style.display = 'none';
-                }
-            })
-            .catch(error => console.error('Error fetching notification count:', error));
-    }
-    
-    function loadNotifications() {
-        fetch('{{ url_for("notifications.get_recent") }}')
-            .then(response => response.json())
-            .then(data => {
-                if (data.unread_count > 0) {
-                    notificationCount.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
-                    notificationCount.style.display = 'block';
-                } else {
-                    notificationCount.style.display = 'none';
-                }
-                
-                if (data.notifications.length === 0) {
-                    notificationDropdownContent.innerHTML = `
-                        <div class="text-center p-4 text-muted">
-                            <i class="bi bi-bell" style="font-size: 1.5rem;"></i>
-                            <p class="mt-2 mb-0">No notifications yet</p>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                let html = '';
-                data.notifications.forEach(notification => {
-                    let icon = 'info-circle text-info';
-                    if (notification.category === 'success') icon = 'check-circle text-success';
-                    if (notification.category === 'warning') icon = 'exclamation-circle text-warning';
-                    if (notification.category === 'danger') icon = 'x-circle text-danger';
-                    
-                    html += `
-                        <div class="dropdown-item px-3 py-2 notification-item ${notification.read ? '' : 'bg-light'}" 
-                             data-id="${notification.id}">
-                            <div class="d-flex">
-                                <div class="me-2">
-                                    <i class="bi bi-${icon}"></i>
-                                </div>
-                                <div>
-                                    <div class="mb-1">${notification.message}</div>
-                                    <div class="text-muted small">${notification.created_at}</div>
-                                    ${notification.link ? `<a href="${notification.link}" class="btn btn-sm btn-link p-0 mt-1">View details</a>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="dropdown-divider m-0"></div>
-                    `;
-                });
-                
-                notificationDropdownContent.innerHTML = html;
-                
-                document.querySelectorAll('.notification-item').forEach(item => {
-                    item.addEventListener('click', function(e) {
-                        if (e.target.tagName === 'A') return;
-                        
-                        const id = this.dataset.id;
-                        
-                        fetch(`{{ url_for("notifications.mark_as_read", notification_id=0) }}`.replace('/0', `/${id}`), {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            }
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                this.classList.remove('bg-light');
-                                updateNotificationCount();
-                            }
-                        })
-                        .catch(error => console.error('Error marking notification as read:', error));
-                    });
-                });
-            })
-            .catch(error => console.error('Error fetching notifications:', error));
-    }
-    
-    document.querySelector('.mark-all-read').addEventListener('click', function(e) {
-        e.stopPropagation();
-        
-        fetch('{{ url_for("notifications.mark_all_as_read") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.querySelectorAll('.notification-item.bg-light').forEach(el => {
-                    el.classList.remove('bg-light');
-                });
-                notificationCount.style.display = 'none';
-            }
-        })
-        .catch(error => console.error('Error marking all notifications as read:', error));
-    });
-    
-    notificationBell.addEventListener('show.bs.dropdown', loadNotifications);
-    updateNotificationCount();
-    setInterval(updateNotificationCount, 60000);
-    
-    // Mobile menu functionality
-    const mobileMenuButton = document.querySelector('.mobile-menu-button');
-    const mainNav = document.querySelector('.main-nav');
-    
-    mobileMenuButton.addEventListener('click', function() {
-        mainNav.classList.toggle('active');
-        const icon = this.querySelector('i');
-        icon.className = mainNav.classList.contains('active') ? 'fas fa-times' : 'fas fa-bars';
-    });
-    
-    document.querySelectorAll('.main-nav .nav-link').forEach(link => {
-        link.addEventListener('click', function() {
-            if (window.innerWidth <= 768) {
-                mainNav.classList.remove('active');
-                mobileMenuButton.querySelector('i').className = 'fas fa-bars';
-            }
-        });
-    });
-    
-    window.addEventListener('resize', function() {
-        if (window.innerWidth > 768) {
-            mainNav.classList.remove('active');
-            mobileMenuButton.querySelector('i').className = 'fas fa-bars';
-        }
-    });
-});
+    window.appConfig = {
+        notificationEndpoint: "{{ url_for('notifications.get_recent') }}",
+        markAsReadEndpoint: "{{ url_for('notifications.mark_as_read', notification_id=0) }}".replace('/0', ''),
+        markAllReadEndpoint: "{{ url_for('notifications.mark_all_as_read') }}",
+        notificationSound: "{{ url_for('static', filename='sounds/notification.mp3') }}",
+        currentUserId: "{{ current_user.id if current_user.is_authenticated else '' }}"
+    };
 </script>
+
+<script src="{{ url_for('static', filename='js/navbar.js') }}"></script>

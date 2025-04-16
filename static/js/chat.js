@@ -1,8 +1,69 @@
 // chat.js
-// Добавьте этот код в начало вашего chat.js файла
+
+let imageModal = null;
+let modalImage = null;
+
+// Функция для инициализации модального окна для просмотра изображений
+function setupImageModal() {
+    // Создаем модальное окно, если его еще нет
+    if (!document.getElementById('imageModal')) {
+        const modal = document.createElement('div');
+        modal.id = 'imageModal';
+        modal.className = 'image-modal';
+        
+        const closeBtn = document.createElement('div');
+        closeBtn.className = 'image-modal-close';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.addEventListener('click', closeImageModal);
+        
+        const content = document.createElement('div');
+        content.className = 'image-modal-content';
+        
+        const img = document.createElement('img');
+        
+        content.appendChild(img);
+        modal.appendChild(content);
+        modal.appendChild(closeBtn);
+        
+        document.body.appendChild(modal);
+        
+        // Закрытие по клику вне изображения
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeImageModal();
+            }
+        });
+        
+        imageModal = modal;
+        modalImage = img;
+    }
+}
+
+// Функция для открытия изображения в модальном окне
+function openImageModal(imageSrc) {
+    if (!imageModal) {
+        setupImageModal();
+    }
+    
+    modalImage.src = imageSrc;
+    imageModal.style.display = 'flex';
+    
+    // Запрещаем прокрутку страницы
+    document.body.style.overflow = 'hidden';
+}
+
+// Функция для закрытия модального окна
+function closeImageModal() {
+    imageModal.style.display = 'none';
+    
+    // Возвращаем прокрутку страницы
+    document.body.style.overflow = '';
+}
 
 // Определяем, является ли устройство iOS
-// Определяем устройства iOS
+function isIOSDevice() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
 
 // Add this function to your existing JavaScript
 function initChatInterface() {
@@ -24,9 +85,6 @@ function initChatInterface() {
         if (window.innerWidth < 768) {
             document.body.classList.add('mobile-chat-active');
         }
-        
-        // Fetch chat messages for the selected chat (replace with your actual data fetching)
-        // fetchChatMessages(chatId);
     }
     
     // Add click event to each contact item
@@ -52,16 +110,92 @@ function initChatInterface() {
     });
 }
 
+// Function to try loading image from multiple possible paths
+function tryLoadImage(imgElement, originalPath) {
+    console.log("Loading image from path:", originalPath);
+    
+    if (!originalPath) {
+        console.error("Image path is empty");
+        imgElement.src = "/static/img/image-error.png"; // Fallback image
+        return;
+    }
+    
+    // Ensure the path starts with a slash if it doesn't already
+    const normalizedPath = originalPath.startsWith('/') ? originalPath : '/' + originalPath;
+    
+    // Generate all possible paths to try
+    const possiblePaths = [
+        originalPath, // Original path as provided
+        normalizedPath, // Normalized path with leading slash
+        window.location.origin + normalizedPath, // Full URL
+        '/chat' + normalizedPath, // Path with /chat prefix
+        normalizedPath.replace('/uploads/', '/chat/uploads/'), // Replace /uploads with /chat/uploads
+        normalizedPath.replace('/uploads/', '/static/uploads/'), // Replace /uploads with /static/uploads
+        '/static' + normalizedPath // Path with /static prefix
+    ];
+    
+    // Remove any duplicates from the paths array
+    const uniquePaths = [...new Set(possiblePaths)];
+    console.log("Will try these paths:", uniquePaths);
+    
+    // Track our attempts
+    let currentIndex = 0;
+    
+    function tryNextPath() {
+        if (currentIndex >= uniquePaths.length) {
+            console.error("Failed to load image after trying all paths");
+            imgElement.src = "/static/img/image-error.png"; // Fallback image
+            return;
+        }
+        
+        const path = uniquePaths[currentIndex++];
+        console.log(`Trying path (${currentIndex}/${uniquePaths.length}): ${path}`);
+        imgElement.src = path;
+    }
+    
+    // Set success and error handlers
+    imgElement.onload = function() {
+        console.log("Successfully loaded image from:", this.src);
+        imgElement.onerror = null; // Remove error handler once loaded
+    };
+    
+    imgElement.onerror = function() {
+        console.log(`Failed to load from: ${this.src}`);
+        tryNextPath();
+    };
+    
+    // Start with the first path
+    tryNextPath();
+}
+
+
 // Call this function when the DOM is loaded
 document.addEventListener('DOMContentLoaded', initChatInterface);
+
 // Connect to Socket.IO
-const socket = io();
+const socket = io({ 
+    transports: ['websocket'],
+    upgrade: false
+});
+socket.on('connect', function() {
+    console.log('Connected to Socket.IO');
+});
+
+socket.on('connect_error', function(error) {
+    console.error('Socket.IO connection error:', error);
+});
+
+socket.on('disconnect', function() {
+    console.log('Disconnected from Socket.IO');
+});
+
 let currentLobbyId = null;
 let currentUser = null;
 let usersList = [];
 let lobbiesList = [];
 let activeProfile = null;
 let pendingAttachments = [];
+const allowedFileTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
 
 // DOM Elements
 const contactsList = document.getElementById('contactsList');
@@ -85,6 +219,8 @@ const attachFileBtn = document.getElementById('attachFile');
 const attachmentPreview = document.getElementById('attachmentPreview');
 const typingIndicator = document.getElementById('typingIndicator');
 const typingUsername = document.getElementById('typingUsername');
+const openEmojiBtn = document.getElementById('openEmoji');
+const emojiPicker = document.getElementById('emojiPicker');
 
 // Profile Elements
 const profileAvatar = document.getElementById('profileAvatar');
@@ -105,13 +241,16 @@ const createGroupBtn = document.getElementById('createGroupBtn');
 
 // Initialize the application
 function initApp() {
-    // Fetch current user info
+    // Explicitly show the "Your Messages" screen first
+    showNoChatSelectedView();
+    
+    // Fetch current user info first
     fetchCurrentUser();
     
-    // Fetch all users for contacts list
+    // Then fetch all users for contacts list
     fetchAllUsers();
     
-    // Fetch lobbies and render them
+    // Then fetch lobbies and render them
     fetchLobbies();
     
     // Set up event listeners
@@ -119,33 +258,123 @@ function initApp() {
     
     // Socket.IO event listeners
     setupSocketListeners();
+    
+    // Setup emoji picker
+    setupEmojiPicker();
+    
+    // Check URL parameters (but do this ONLY when explicitly requested in URL)
+    handleUrlParams();
+    
+    // Обновляем счетчики непрочитанных сообщений
+    updateUnreadMessagesTotal();
+    updateLobbiesWithUnread();
+    
+    // Установим интервал для периодического обновления счетчиков
+    setInterval(() => {
+        updateUnreadMessagesTotal();
+        updateLobbiesWithUnread();
+    }, 60000); // Обновляем каждую минуту
+}
+
+// Function to explicitly show "Your Messages" screen
+function showNoChatSelectedView() {
+    // Reset current lobby ID
+    currentLobbyId = null;
+    
+    // Hide the active chat
+    if (activeChat) {
+        activeChat.style.display = 'none';
+    }
+    
+    // Show the "no chat selected" message
+    if (noChatSelected) {
+        noChatSelected.style.display = 'flex';
+    }
+    
+    // Clear localStorage
+    localStorage.removeItem('currentLobbyId');
+    
+    // Mobile view reset
+    if (window.innerWidth <= 768) {
+        document.body.classList.remove('mobile-chat-active');
+    }
+}
+
+// Handle URL parameters
+function handleUrlParams() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const lobbyId = urlParams.get('lobby_id');
+    
+    // Only handle lobby_id if it's explicitly provided in the URL
+    if (lobbyId) {
+        const checkLobbiesInterval = setInterval(function() {
+            if (typeof lobbiesList !== 'undefined' && lobbiesList.length > 0) {
+                clearInterval(checkLobbiesInterval);
+                
+                const lobbyExists = lobbiesList.some(lobby => lobby.id == lobbyId);
+                
+                if (lobbyExists) {
+                    selectLobby(parseInt(lobbyId), false); // false indicates not user initiated
+                    
+                    // Clear URL parameter
+                    const newUrl = window.location.pathname;
+                    window.history.replaceState({}, document.title, newUrl);
+                }
+            }
+        }, 100);
+    } else {
+        // No lobby_id in URL, make sure we show the "Your Messages" screen
+        showNoChatSelectedView();
+    }
 }
 
 // Fetch current user information
 function fetchCurrentUser() {
-    fetch('/chat/api/user/current')
-        .then(response => response.json())
-        .then(data => {
-            currentUser = data;
-            console.log('Current user:', currentUser);
-        })
-        .catch(error => {
-            console.error('Error fetching current user:', error);
-        });
+    return new Promise((resolve, reject) => {
+        fetch('/chat/api/user/current')
+            .then(response => response.json())
+            .then(data => {
+                currentUser = data;
+                console.log('Current user:', currentUser);
+                
+                // Если кнопка создания группового чата существует, проверяем права доступа
+                if (createChatBtn) {
+                    // Скрываем кнопку для обычных пользователей
+                    if (!currentUser.is_admin) {
+                        createChatBtn.style.display = 'none';
+                    }
+                }
+                resolve();
+            })
+            .catch(error => {
+                console.error('Error fetching current user:', error);
+                reject(error);
+            });
+    });
 }
 
 // Fetch all lobbies for the current user
 function fetchLobbies() {
-    fetch('/chat/lobbies')
-        .then(response => response.json())
-        .then(data => {
-            lobbiesList = data;
-            renderContacts();
-        })
-        .catch(error => {
-            console.error('Error fetching lobbies:', error);
-        });
+    return new Promise((resolve, reject) => {
+        fetch('/chat/lobbies')
+            .then(response => response.json())
+            .then(data => {
+                lobbiesList = data;
+                renderContacts();
+                resolve();
+            })
+            .catch(error => {
+                console.error('Error fetching lobbies:', error);
+                reject(error);
+            });
+    });
 }
+
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("DOM Loaded");
+    initApp();
+});
 
 // Fetch all users for creating new chats
 function fetchUsers() {
@@ -166,7 +395,9 @@ function setupEventListeners() {
     searchInput.addEventListener('input', handleSearch);
     
     // Create new chat button
-    createChatBtn.addEventListener('click', showCreateChatModal);
+    if (createChatBtn) {
+        createChatBtn.addEventListener('click', showCreateChatModal);
+    }
     
     // Send message button
     sendMessageBtn.addEventListener('click', sendMessage);
@@ -196,30 +427,85 @@ function setupEventListeners() {
     
     // Create group button
     createGroupBtn.addEventListener('click', createGroupChat);
+    
+    // Emoji button
+    if (openEmojiBtn) {
+        openEmojiBtn.addEventListener('click', toggleEmojiPicker);
+    }
+    
+    // Close emoji picker when clicking outside
+    document.addEventListener('click', (e) => {
+        if (emojiPicker && emojiPicker.style.display === 'block' && 
+            !emojiPicker.contains(e.target) && e.target !== openEmojiBtn) {
+            emojiPicker.style.display = 'none';
+        }
+    });
 }
 
 // Set up Socket.IO event listeners
 function setupSocketListeners() {
+    // Сначала удаляем все существующие слушатели, чтобы избежать дублирования
+    socket.off('new_message');
+    socket.off('messages_read');
+    socket.off('user_typing');
+    socket.off('user_stop_typing');
+    socket.off('lobby_created');
+    socket.off('user_status_change');
+    
     // New message event
     socket.on('new_message', (message) => {
+        console.log("Received new message from server:", message);
+        
+        // Check if this message is already in the DOM (avoid duplicates)
+        if (document.querySelector(`[data-message-id="${message.id}"]`)) {
+            console.log(`Message ${message.id} already in DOM, skipping`);
+            return;
+        }
+        
         if (message.lobby_id === currentLobbyId) {
+            console.log("Message is for current lobby, appending...");
             appendMessage(message);
             
             // Mark message as read if from someone else
             if (message.sender_id !== currentUser.id) {
                 socket.emit('read_messages', { lobby_id: currentLobbyId });
             }
+        } else {
+            // Если сообщение для другого лобби, обновляем только счетчики
+            updateUnreadMessagesTotal();
+            updateLobbiesWithUnread();
+            
+            // Обновляем последнее сообщение в лобби
+            updateLobbyLastMessage(message.lobby_id, message);
         }
-        
-        // Update the last message in the contacts list
-        updateLobbyLastMessage(message.lobby_id, message);
     });
     
     // Messages read event
     socket.on('messages_read', (data) => {
+        console.log("Messages read event:", data);
+        
         if (data.lobby_id === currentLobbyId) {
-            // Update read receipts if needed
+            // Обновляем индикаторы прочтения для сообщений, которые были прочитаны
+            document.querySelectorAll('.message-status').forEach(statusDiv => {
+                // Если у нас только одна галочка, добавляем вторую
+                const firstCheck = statusDiv.querySelector('.message-sent');
+                if (firstCheck) {
+                    firstCheck.classList.remove('message-sent');
+                    firstCheck.classList.add('message-read');
+                    
+                    // Добавляем вторую галочку
+                    if (!statusDiv.querySelector('.second-check')) {
+                        const secondCheck = document.createElement('i');
+                        secondCheck.className = 'fas fa-check message-read second-check';
+                        statusDiv.appendChild(secondCheck);
+                    }
+                }
+            });
         }
+        
+        // Обновляем счетчики в любом случае
+        updateUnreadMessagesTotal();
+        updateLobbiesWithUnread();
     });
     
     // Typing indicator events
@@ -228,7 +514,7 @@ function setupSocketListeners() {
             showTypingIndicator(data.username);
         }
     });
-    
+
     socket.on('user_stop_typing', (data) => {
         if (data.lobby_id === currentLobbyId && data.user_id !== currentUser.id) {
             hideTypingIndicator();
@@ -237,9 +523,194 @@ function setupSocketListeners() {
     
     // New lobby created
     socket.on('lobby_created', (lobby) => {
-        lobbiesList.push(lobby);
-        renderContacts();
+        console.log("New lobby created:", lobby);
+        // Добавляем новое лобби только если его еще нет в списке
+        if (!lobbiesList.some(l => l.id === lobby.id)) {
+            lobbiesList.push(lobby);
+            renderContacts();
+        }
     });
+    
+    // User status change
+    socket.on('user_status_change', (data) => {
+        // Обновляем статус пользователя в списке
+        const userItems = document.querySelectorAll(`.contact-item[data-user-id="${data.user_id}"]`);
+        userItems.forEach(userItem => {
+            const statusIndicator = userItem.querySelector('.status-indicator');
+            if (statusIndicator) {
+                statusIndicator.className = `status-indicator ${data.is_online ? 'status-online' : 'status-offline'}`;
+            }
+        });
+        
+        // Обновляем статус пользователя в активном чате
+        if (currentLobbyId) {
+            const activeLobby = lobbiesList.find(lobby => lobby.id === currentLobbyId);
+            if (activeLobby && !activeLobby.is_group) {
+                const otherUser = activeLobby.users.find(user => user.id !== currentUser.id);
+                if (otherUser && otherUser.id === data.user_id) {
+                    chatStatusIndicator.className = `status-indicator ${data.is_online ? 'status-online' : 'status-offline'}`;
+                    chatStatus.textContent = data.is_online ? 'Online' : 'Offline';
+                }
+            }
+        }
+    });
+
+    // Reconnect handling to prevent message loss
+    socket.on('reconnect', () => {
+        console.log("Socket reconnected");
+        
+        // Если был выбран чат, переподключаемся к его комнате
+        if (currentLobbyId) {
+            socket.emit('join_lobby', { lobby_id: currentLobbyId });
+            
+            // Обновляем сообщения в чате
+            fetch(`/chat/lobby/${currentLobbyId}/messages`)
+                .then(response => response.json())
+                .then(messages => {
+                    displayMessages(messages);
+                })
+                .catch(error => {
+                    console.error('Error loading messages on reconnect:', error);
+                });
+        }
+        
+        // Обновляем счетчики непрочитанных сообщений
+        updateUnreadMessagesTotal();
+        updateLobbiesWithUnread();
+    });
+}
+
+// Обновление контакта в списке с новым последним сообщением
+function updateLobbyLastMessage(lobbyId, message) {
+    // Находим лобби в списке
+    const lobbyIndex = lobbiesList.findIndex(lobby => lobby.id === lobbyId);
+    
+    if (lobbyIndex !== -1) {
+        // Обновляем последнее сообщение
+        lobbiesList[lobbyIndex].last_message = message;
+        
+        // Находим элемент контакта и обновляем его содержимое
+        const contactItem = document.querySelector(`.contact-item[data-lobby-id="${lobbyId}"]`);
+        if (contactItem) {
+            // Получаем элемент для текста последнего сообщения
+            const lastMessageElement = contactItem.querySelector('.contact-message');
+            
+            // Форматируем текст сообщения в зависимости от типа
+            let lastMessageText = '';
+            if (message.message_type === 'text') {
+                lastMessageText = message.text.length > 30 ? message.text.substring(0, 27) + '...' : message.text;
+            } else if (message.message_type === 'image') {
+                lastMessageText = '📷 Image';
+            } else if (message.message_type === 'file') {
+                lastMessageText = '📎 File: ' + message.file_name;
+            } else if (message.message_type === 'audio') {
+                lastMessageText = '🎵 Audio';
+            } else if (message.message_type === 'video') {
+                lastMessageText = '📹 Video';
+            }
+            
+            if (lastMessageElement) {
+                lastMessageElement.textContent = lastMessageText;
+            }
+            
+            // Обновляем время последнего сообщения
+            const timeElement = contactItem.querySelector('.contact-time');
+            if (timeElement) {
+                const messageDate = new Date(message.timestamp);
+                const now = new Date();
+                
+                let formattedTime = '';
+                if (messageDate.toDateString() === now.toDateString()) {
+                    // Today - show time
+                    formattedTime = messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } else if (messageDate.getTime() > now.getTime() - 7 * 24 * 60 * 60 * 1000) {
+                    // Within last week - show day name
+                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    formattedTime = days[messageDate.getDay()];
+                } else {
+                    // Older - show date
+                    formattedTime = messageDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                }
+                
+                timeElement.textContent = formattedTime;
+            }
+            
+            // Сортируем контакты, чтобы чаты с новыми сообщениями были вверху
+            renderContacts();
+        }
+    }
+}
+
+// Emoji picker setup
+function setupEmojiPicker() {
+    if (!emojiPicker) return;
+    
+    emojiPicker.innerHTML = '';
+    
+    // Популярные эмодзи по категориям
+    const emojiCategories = [
+        {
+            name: 'Smileys',
+            emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘']
+        },
+        {
+            name: 'Gestures',
+            emojis: ['👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '✋', '🤚', '🖐️', '👋', '🤏']
+        },
+        {
+            name: 'Objects',
+            emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔', '💯', '💢', '💥', '💫', '💦', '💨', '🕳️', '💣', '💬']
+        }
+    ];
+    
+    // Создаем элементы эмодзи
+    emojiCategories.forEach(category => {
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'emoji-category';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'emoji-category-title';
+        titleDiv.textContent = category.name;
+        
+        const emojiGrid = document.createElement('div');
+        emojiGrid.className = 'emoji-grid';
+        
+        category.emojis.forEach(emoji => {
+            const emojiItem = document.createElement('div');
+            emojiItem.className = 'emoji-item';
+            emojiItem.textContent = emoji;
+            emojiItem.addEventListener('click', () => {
+                insertEmoji(emoji);
+            });
+            
+            emojiGrid.appendChild(emojiItem);
+        });
+        
+        categoryDiv.appendChild(titleDiv);
+        categoryDiv.appendChild(emojiGrid);
+        emojiPicker.appendChild(categoryDiv);
+    });
+}
+
+// Toggle emoji picker
+function toggleEmojiPicker() {
+    if (emojiPicker.style.display === 'none' || emojiPicker.style.display === '') {
+        emojiPicker.style.display = 'block';
+    } else {
+        emojiPicker.style.display = 'none';
+    }
+}
+
+// Insert emoji into message input
+function insertEmoji(emoji) {
+    const cursorPos = messageInput.selectionStart;
+    const textBefore = messageInput.value.substring(0, cursorPos);
+    const textAfter = messageInput.value.substring(cursorPos);
+    
+    messageInput.value = textBefore + emoji + textAfter;
+    messageInput.selectionStart = cursorPos + emoji.length;
+    messageInput.selectionEnd = cursorPos + emoji.length;
+    messageInput.focus();
 }
 
 // Handle search input
@@ -347,7 +818,7 @@ function createGroupChat() {
         groupDescriptionInput.value = '';
         
         // Select the newly created lobby
-        selectLobby(data.id);
+        selectLobby(data.id, true);
     })
     .catch(error => {
         console.error('Error creating group chat:', error);
@@ -371,76 +842,108 @@ function startDirectChat(userId) {
     .then(response => response.json())
     .then(data => {
         // Select the newly created or existing lobby
-        selectLobby(data.id);
-    })
-    .catch(error => {
-        console.error('Error creating direct chat:', error);
-    });
-}
-
-// Render all contacts (lobbies)
-function renderContacts() {
-    // Очищаем список только при первоначальной загрузке
-    if (!contactsList.querySelector('.contacts-separator')) {
-        contactsList.innerHTML = '';
-    } else {
-        // Удаляем только разделы с лобби, оставляя список пользователей
-        const lobbySeparators = contactsList.querySelectorAll('.contacts-separator:not(:first-child)');
-        lobbySeparators.forEach(separator => {
-            // Удаляем все элементы до следующего разделителя или до конца
-            let next = separator.nextElementSibling;
-            while (next && !next.classList.contains('contacts-separator')) {
-                const toRemove = next;
-                next = next.nextElementSibling;
-                contactsList.removeChild(toRemove);
-            }
-            contactsList.removeChild(separator);
+        selectLobby(data.id, true);})
+        .catch(error => {
+            console.error('Error creating direct chat:', error);
         });
     }
     
-    // Group separator
-    let hasGroups = false;
-    let hasDirects = false;
+// Render all contacts (lobbies)
+function renderContacts() {
+    // Очищаем список контактов
+    contactsList.innerHTML = '';
     
-    // Check if we have groups and direct messages
-    lobbiesList.forEach(lobby => {
-        if (lobby.is_group) {
-            hasGroups = true;
+    // Добавляем кнопку для отображения всех пользователей
+    const usersDropdownHeader = document.createElement('div');
+    usersDropdownHeader.className = 'contacts-dropdown-header';
+    usersDropdownHeader.innerHTML = `
+        <div class="contacts-dropdown-title">
+            <i class="fas fa-users"></i>
+            <span>All Users</span>
+        </div>
+        <div class="contacts-dropdown-toggle">
+            <i class="fas fa-chevron-down"></i>
+        </div>
+    `;
+    contactsList.appendChild(usersDropdownHeader);
+    
+    // Создаем контейнер для списка пользователей (скрытый по умолчанию)
+    const usersContainer = document.createElement('div');
+    usersContainer.className = 'users-container';
+    usersContainer.style.display = 'none';
+    contactsList.appendChild(usersContainer);
+    
+    // Добавляем обработчик для выпадающего списка
+    usersDropdownHeader.addEventListener('click', () => {
+        if (usersContainer.style.display === 'none') {
+            usersContainer.style.display = 'block';
+            usersDropdownHeader.querySelector('.contacts-dropdown-toggle i').className = 'fas fa-chevron-up';
         } else {
-            hasDirects = true;
+            usersContainer.style.display = 'none';
+            usersDropdownHeader.querySelector('.contacts-dropdown-toggle i').className = 'fas fa-chevron-down';
         }
     });
     
-    // Sort lobbies by last message timestamp
+    // Заполняем список пользователей
+    usersList.forEach(user => {
+        const userItem = document.createElement('div');
+        userItem.className = 'contact-item user-item';
+        userItem.dataset.userId = user.id;
+        
+        const avatarInitials = getInitials(user.username);
+        
+        userItem.innerHTML = `
+            <div class="avatar">
+                ${user.avatar ? 
+                    `<img src="${user.avatar}" alt="${user.username}" class="avatar-img">` : 
+                    `<span class="avatar-text">${avatarInitials}</span>`
+                }
+                <span class="status-indicator ${user.is_online ? 'status-online' : 'status-offline'}"></span>
+            </div>
+            <div class="contact-info">
+                <div class="contact-name">${user.username}</div>
+            </div>
+        `;
+        
+        userItem.addEventListener('click', () => {
+            startDirectChat(user.id);
+        });
+        
+        usersContainer.appendChild(userItem);
+    });
+    
+    // Добавляем заголовок для чатов
+    const chatsHeader = document.createElement('div');
+    chatsHeader.className = 'contacts-separator';
+    chatsHeader.textContent = 'Chats';
+    contactsList.appendChild(chatsHeader);
+    
+    // Сортируем лобби по последнему сообщению
     lobbiesList.sort((a, b) => {
         const timeA = a.last_message ? new Date(a.last_message.timestamp) : new Date(a.created_at);
         const timeB = b.last_message ? new Date(b.last_message.timestamp) : new Date(b.created_at);
         return timeB - timeA;
     });
     
-    // Render direct messages
-    if (hasDirects) {
-        const directsHeader = document.createElement('div');
-        directsHeader.className = 'contacts-separator';
-        directsHeader.textContent = 'Direct Messages';
-        contactsList.appendChild(directsHeader);
-        
-        lobbiesList.filter(lobby => !lobby.is_group).forEach(lobby => {
-            renderContactItem(lobby);
-        });
+    // Добавляем все чаты без разделения на групповые и личные
+    lobbiesList.forEach(lobby => {
+        renderContactItem(lobby);
+    });
+    
+    // Добавляем кнопку создания группового чата только для администраторов
+    if (currentUser && currentUser.is_admin) {
+        const createGroupBtn = document.createElement('div');
+        createGroupBtn.className = 'create-group-chat-btn';
+        createGroupBtn.innerHTML = `
+            <i class="fas fa-users"></i>
+            <span>Create Group Chat</span>
+        `;
+        createGroupBtn.addEventListener('click', showCreateChatModal);
+        contactsList.appendChild(createGroupBtn);
     }
     
-    // Render group chats
-    if (hasGroups) {
-        const groupsHeader = document.createElement('div');
-        groupsHeader.className = 'contacts-separator';
-        groupsHeader.textContent = 'Group Chats';
-        contactsList.appendChild(groupsHeader);
-        
-        lobbiesList.filter(lobby => lobby.is_group).forEach(lobby => {
-            renderContactItem(lobby);
-        });
-    }
+    // Обновляем индикаторы непрочитанных сообщений
+    updateLobbiesWithUnread();
 }
 
 // Render filtered contacts
@@ -473,7 +976,7 @@ function renderContactsFiltered(filteredLobbies) {
                         `<img src="${user.avatar}" alt="${user.username}" class="avatar-img">` : 
                         `<span class="avatar-text">${avatarInitials}</span>`
                     }
-                    <span class="status-indicator status-online"></span>
+                    <span class="status-indicator ${user.is_online ? 'status-online' : 'status-offline'}"></span>
                 </div>
                 <div class="contact-info">
                     <div class="contact-name-row">
@@ -502,6 +1005,9 @@ function renderContactsFiltered(filteredLobbies) {
         noResults.textContent = 'No conversations found';
         contactsList.appendChild(noResults);
     }
+    
+    // Обновляем индикаторы непрочитанных сообщений
+    updateLobbiesWithUnread();
 }
 
 // Render a single contact item
@@ -514,20 +1020,17 @@ function renderContactItem(lobby) {
     let contactName;
     let avatarUrl;
     let avatarInitials;
-    let statusClass;
     
     if (lobby.is_group) {
         contactName = lobby.name;
         avatarUrl = lobby.avatar;
         avatarInitials = getInitials(contactName);
-        statusClass = 'status-group';
     } else {
         // For direct messages, show the other user's info
         const otherUser = lobby.users.find(user => user.id !== currentUser.id);
         contactName = otherUser ? otherUser.username : 'Unknown User';
         avatarUrl = otherUser ? otherUser.avatar : null;
         avatarInitials = getInitials(contactName);
-        statusClass = 'status-online'; // Assuming online for now
     }
     
     // Format the last message and time
@@ -573,14 +1076,14 @@ function renderContactItem(lobby) {
                 `<img src="${avatarUrl}" alt="${contactName}" class="avatar-img">` : 
                 `<span class="avatar-text">${avatarInitials}</span>`
             }
-            ${lobby.is_group ? 
-                `<div class="group-indicator"><i class="fas fa-users"></i></div>` : 
-                `<span class="status-indicator ${statusClass}"></span>`
-            }
+            <span class="status-indicator ${lobby.is_group ? 'status-group' : 'status-offline'}"></span>
         </div>
         <div class="contact-info">
             <div class="contact-name-row">
-                <div class="contact-name">${contactName}</div>
+                <div class="contact-name">
+                    ${contactName}
+                    ${lobby.is_group ? '<i class="fas fa-users group-chat-icon" title="Group Chat"></i>' : ''}
+                </div>
                 <div class="contact-time">${lastMessageTime}</div>
             </div>
             <div class="contact-message">${lastMessageText}</div>
@@ -588,14 +1091,14 @@ function renderContactItem(lobby) {
     `;
     
     contactItem.addEventListener('click', () => {
-        selectLobby(lobby.id);
+        selectLobby(lobby.id, true); // true indicates user initiated
     });
     
     contactsList.appendChild(contactItem);
 }
 
 // Select a lobby and load its messages
-function selectLobby(lobbyId) {
+function selectLobby(lobbyId, userInitiated = true) {
     // Deselect previously selected lobby in UI
     const previousSelected = document.querySelector('.contact-item.selected');
     if (previousSelected) {
@@ -610,6 +1113,11 @@ function selectLobby(lobbyId) {
     
     // Update current lobby ID
     currentLobbyId = lobbyId;
+    
+    // Save to localStorage ONLY if user explicitly selected this chat
+    if (userInitiated) {
+        localStorage.setItem('currentLobbyId', lobbyId);
+    }
     
     // Join the lobby room via Socket.IO
     socket.emit('join_lobby', { lobby_id: lobbyId });
@@ -631,6 +1139,10 @@ function selectLobby(lobbyId) {
             
             // Mark messages as read
             socket.emit('read_messages', { lobby_id: lobbyId });
+            
+            // Обновляем счетчики непрочитанных сообщений
+            updateUnreadMessagesTotal();
+            updateLobbiesWithUnread();
         })
         .catch(error => {
             console.error('Error loading lobby:', error);
@@ -683,8 +1195,10 @@ function setupChatUI(lobby) {
                 chatAvatarText.textContent = getInitials(otherUser.username);
             }
             
-            chatStatusIndicator.className = 'status-indicator status-online'; // Assuming online
-            chatStatus.textContent = 'Online'; // Placeholder status
+            // Отображаем статус пользователя
+            const isOnline = otherUser.is_online || false;
+            chatStatusIndicator.className = `status-indicator ${isOnline ? 'status-online' : 'status-offline'}`;
+            chatStatus.textContent = isOnline ? 'Online' : 'Offline';
         }
     }
 }
@@ -718,8 +1232,12 @@ function displayMessages(messages) {
             currentGroup = document.createElement('div');
             currentGroup.className = `message-group ${message.sender_id === currentUser.id ? 'own-messages' : ''}`;
             
-            // Add sender avatar for non-own messages
+            // Add sender info (avatar and name) for received messages
             if (message.sender_id !== currentUser.id) {
+                const userInfoDiv = document.createElement('div');
+                userInfoDiv.className = 'message-user-info';
+                
+                // Add avatar
                 const avatarDiv = document.createElement('div');
                 avatarDiv.className = 'message-avatar';
                 
@@ -729,27 +1247,25 @@ function displayMessages(messages) {
                     avatarDiv.innerHTML = `<div class="avatar-text">${getInitials(message.sender_name)}</div>`;
                 }
                 
-                currentGroup.appendChild(avatarDiv);
-            }
-            
-            // Add message container
-            const messageContainer = document.createElement('div');
-            messageContainer.className = 'message-container';
-            
-            // Add sender name for non-own messages
-            if (message.sender_id !== currentUser.id) {
+                userInfoDiv.appendChild(avatarDiv);
+                
+                // Add sender name
                 const senderName = document.createElement('div');
                 senderName.className = 'message-sender';
                 senderName.textContent = message.sender_name;
-                messageContainer.appendChild(senderName);
+                userInfoDiv.appendChild(senderName);
+                
+                currentGroup.appendChild(userInfoDiv);
             }
             
-            currentGroup.appendChild(messageContainer);
             chatMessages.appendChild(currentGroup);
         }
         
-        // Add the message to the current group
-        const messageContainer = currentGroup.querySelector('.message-container');
+        // Create message container for this message
+        const messageContainer = document.createElement('div');
+        messageContainer.className = 'message-container';
+        messageContainer.setAttribute('data-message-id', message.id);
+        currentGroup.appendChild(messageContainer);
         
         // Create message bubble
         const messageBubble = document.createElement('div');
@@ -764,17 +1280,30 @@ function displayMessages(messages) {
             messageBubble.innerHTML = `
                 <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
                 <div class="message-attachment">
-                    <img src="${message.file_path}" alt="Image" class="attachment-image">
+                    <div class="image-container">
+                        <img src="" alt="Image" class="attachment-image">
+                    </div>
                 </div>
             `;
-        } else if (['file', 'audio', 'video'].includes(message.message_type)) {
+            
+            // Добавляем обработчик для открытия изображения
+            setTimeout(() => {
+                const img = messageBubble.querySelector('.attachment-image');
+                if (img) {
+                    // Пробуем загрузить изображение с разных путей
+                    tryLoadImage(img, message.file_path);
+                    
+                    img.addEventListener('click', () => {
+                        openImageModal(img.src);
+                    });
+                }
+            }, 0);
+        } else if (message.message_type === 'file' || message.message_type === 'FILE') {
             // Determine file icon
             let fileIcon = 'fa-file';
-            if (message.message_type === 'audio') fileIcon = 'fa-file-audio';
-            else if (message.message_type === 'video') fileIcon = 'fa-file-video';
-            else if (message.file_type === 'application/pdf') fileIcon = 'fa-file-pdf';
-            else if (message.file_type.includes('word')) fileIcon = 'fa-file-word';
-            else if (message.file_type.includes('excel') || message.file_type.includes('spreadsheet')) fileIcon = 'fa-file-excel';
+            if (message.file_type === 'application/pdf') fileIcon = 'fa-file-pdf';
+            else if (message.file_type && message.file_type.includes('word')) fileIcon = 'fa-file-word';
+            else if (message.file_type && message.file_type.includes('excel')) fileIcon = 'fa-file-excel';
             
             messageBubble.innerHTML = `
                 <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
@@ -785,22 +1314,63 @@ function displayMessages(messages) {
                             <div class="attachment-name">${message.file_name}</div>
                             <div class="attachment-size">${formatFileSize(message.file_size)}</div>
                         </div>
-                        <a href="${message.file_path}" download="${message.file_name}" class="attachment-download">
-                            <i class="fas fa-download"></i>
-                        </a>
+                        <div class="attachment-actions">
+                            <a href="${message.file_path}" target="_blank" class="attachment-view" title="Open">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="${message.file_path}" download="${message.file_name}" class="attachment-download" title="Download">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
                     </div>
+                </div>
+            `;
+        } else if (message.message_type === 'audio' || message.message_type === 'AUDIO') {
+            messageBubble.innerHTML = `
+                <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
+                <div class="message-attachment">
+                    <audio controls src="${message.file_path}" class="audio-player"></audio>
+                </div>
+            `;
+        } else if (message.message_type === 'video' || message.message_type === 'VIDEO') {
+            messageBubble.innerHTML = `
+                <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
+                <div class="message-attachment">
+                    <video controls src="${message.file_path}" class="video-player"></video>
                 </div>
             `;
         }
         
-        // Add timestamp
+        messageContainer.appendChild(messageBubble);
+        
+        // Добавляем метки времени и статуса сообщения
+        const messageTimeContainer = document.createElement('div');
+        messageTimeContainer.className = 'message-time-container';
+        
+        // Добавляем время
         const messageTime = document.createElement('div');
         messageTime.className = 'message-time';
         messageTime.textContent = formatTime(message.timestamp);
+        messageTimeContainer.appendChild(messageTime);
         
-        // Append to container
-        messageContainer.appendChild(messageBubble);
-        messageContainer.appendChild(messageTime);
+        // Добавляем статус сообщения (прочитано/не прочитано) для собственных сообщений
+        if (message.sender_id === currentUser.id) {
+            const messageStatusDiv = document.createElement('div');
+            messageStatusDiv.className = 'message-status';
+            
+            // Проверяем, прочитано ли сообщение другими пользователями
+            const isRead = message.read_by && message.read_by.some(userId => userId !== currentUser.id);
+            
+            // Создаем иконки галочек
+            messageStatusDiv.innerHTML = `
+                <i class="fas fa-check ${isRead ? 'message-read' : 'message-sent'}"></i>
+                ${isRead ? '<i class="fas fa-check message-read second-check"></i>' : ''}
+            `;
+            
+            messageTimeContainer.appendChild(messageStatusDiv);
+        }
+        
+        messageContainer.appendChild(messageTimeContainer);
     });
     
     // Scroll to bottom
@@ -809,6 +1379,14 @@ function displayMessages(messages) {
 
 // Append a single message to the chat
 function appendMessage(message) {
+    console.log("Appending message:", message);
+    
+    // Skip if this message is already in the DOM
+    if (message.id && document.querySelector(`[data-message-id="${message.id}"]`)) {
+        console.log(`Message ${message.id} already in DOM, skipping`);
+        return;
+    }
+    
     // Check if the last message is from the same sender
     const lastGroup = chatMessages.lastElementChild;
     let messageContainer;
@@ -816,15 +1394,24 @@ function appendMessage(message) {
     if (lastGroup && 
         ((message.sender_id === currentUser.id && lastGroup.classList.contains('own-messages')) || 
          (message.sender_id !== currentUser.id && !lastGroup.classList.contains('own-messages')))) {
-        // Use the existing group
-        messageContainer = lastGroup.querySelector('.message-container');
+        // Create a new message container inside existing group
+        messageContainer = document.createElement('div');
+        messageContainer.className = 'message-container';
+        if (message.id) {
+            messageContainer.setAttribute('data-message-id', message.id);
+        }
+        lastGroup.appendChild(messageContainer);
     } else {
         // Create a new message group
         const newGroup = document.createElement('div');
         newGroup.className = `message-group ${message.sender_id === currentUser.id ? 'own-messages' : ''}`;
         
-        // Add sender avatar for non-own messages
+        // Add sender info for received messages
         if (message.sender_id !== currentUser.id) {
+            const userInfoDiv = document.createElement('div');
+            userInfoDiv.className = 'message-user-info';
+            
+            // Add avatar
             const avatarDiv = document.createElement('div');
             avatarDiv.className = 'message-avatar';
             
@@ -834,19 +1421,22 @@ function appendMessage(message) {
                 avatarDiv.innerHTML = `<div class="avatar-text">${getInitials(message.sender_name)}</div>`;
             }
             
-            newGroup.appendChild(avatarDiv);
+            userInfoDiv.appendChild(avatarDiv);
+            
+            // Add sender name
+            const senderName = document.createElement('div');
+            senderName.className = 'message-sender';
+            senderName.textContent = message.sender_name;
+            userInfoDiv.appendChild(senderName);
+            
+            newGroup.appendChild(userInfoDiv);
         }
         
         // Add message container
         messageContainer = document.createElement('div');
         messageContainer.className = 'message-container';
-        
-        // Add sender name for non-own messages
-        if (message.sender_id !== currentUser.id) {
-            const senderName = document.createElement('div');
-            senderName.className = 'message-sender';
-            senderName.textContent = message.sender_name;
-            messageContainer.appendChild(senderName);
+        if (message.id) {
+            messageContainer.setAttribute('data-message-id', message.id);
         }
         
         newGroup.appendChild(messageContainer);
@@ -862,22 +1452,39 @@ function appendMessage(message) {
         messageBubble.innerHTML = `
             <div class="message-text">${formatMessageText(message.text)}</div>
         `;
-    
     } else if (message.message_type === 'image') {
+        console.log("Creating image message with path:", message.file_path);
+        
         messageBubble.innerHTML = `
             <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
             <div class="message-attachment">
-                <img src="${message.file_path}" alt="Image" class="attachment-image">
+                <div class="image-container">
+                    <img src="" alt="Image" class="attachment-image">
+                </div>
             </div>
         `;
-    } else if (['file', 'audio', 'video'].includes(message.message_type)) {
-        // Determine file icon
+        
+        // Use setTimeout to ensure the element is in the DOM
+        setTimeout(() => {
+            const img = messageBubble.querySelector('.attachment-image');
+            if (img) {
+                // Try loading the image with different path combinations
+                tryLoadImage(img, message.file_path);
+                
+                // Add click handler for image modal
+                img.addEventListener('click', () => {
+                    if (img.src) {
+                        openImageModal(img.src);
+                    }
+                });
+            }
+        }, 50);
+    } else if (message.message_type === 'file' || message.message_type === 'FILE') {
+        // File handling
         let fileIcon = 'fa-file';
-        if (message.message_type === 'audio') fileIcon = 'fa-file-audio';
-        else if (message.message_type === 'video') fileIcon = 'fa-file-video';
-        else if (message.file_type === 'application/pdf') fileIcon = 'fa-file-pdf';
-        else if (message.file_type.includes('word')) fileIcon = 'fa-file-word';
-        else if (message.file_type.includes('excel') || message.file_type.includes('spreadsheet')) fileIcon = 'fa-file-excel';
+        if (message.file_type === 'application/pdf') fileIcon = 'fa-file-pdf';
+        else if (message.file_type && message.file_type.includes('word')) fileIcon = 'fa-file-word';
+        else if (message.file_type && message.file_type.includes('excel')) fileIcon = 'fa-file-excel';
         
         messageBubble.innerHTML = `
             <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
@@ -885,64 +1492,129 @@ function appendMessage(message) {
                 <div class="attachment-file">
                     <i class="fas ${fileIcon}"></i>
                     <div class="attachment-details">
-                        <div class="attachment-name">${message.file_name}</div>
-                        <div class="attachment-size">${formatFileSize(message.file_size)}</div>
+                        <div class="attachment-name">${message.file_name || 'File'}</div>
+                        <div class="attachment-size">${formatFileSize(message.file_size || 0)}</div>
                     </div>
-                    <a href="${message.file_path}" download="${message.file_name}" class="attachment-download">
-                        <i class="fas fa-download"></i>
-                    </a>
+                    <div class="attachment-actions">
+                        <a href="${message.file_path}" target="_blank" class="attachment-view" title="Open">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <a href="${message.file_path}" download="${message.file_name || 'file'}" class="attachment-download" title="Download">
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </div>
                 </div>
+            </div>
+        `;
+    } else if (message.message_type === 'audio' || message.message_type === 'AUDIO') {
+        // Audio handling
+        messageBubble.innerHTML = `
+            <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
+            <div class="message-attachment">
+                <audio controls src="${message.file_path}" class="audio-player"></audio>
+            </div>
+        `;
+    } else if (message.message_type === 'video' || message.message_type === 'VIDEO') {
+        // Video handling
+        messageBubble.innerHTML = `
+            <div class="message-text">${message.text ? formatMessageText(message.text) : ''}</div>
+            <div class="message-attachment">
+                <video controls src="${message.file_path}" class="video-player"></video>
             </div>
         `;
     }
     
-    // Add timestamp
+    messageContainer.appendChild(messageBubble);
+    
+    // Add time and status indicators
+    const messageTimeContainer = document.createElement('div');
+    messageTimeContainer.className = 'message-time-container';
+    
+    // Add time
     const messageTime = document.createElement('div');
     messageTime.className = 'message-time';
     messageTime.textContent = formatTime(message.timestamp);
+    messageTimeContainer.appendChild(messageTime);
     
-    // Append to container
-    messageContainer.appendChild(messageBubble);
-    messageContainer.appendChild(messageTime);
+    // Add message status for own messages
+    if (message.sender_id === currentUser.id) {
+        const messageStatusDiv = document.createElement('div');
+        messageStatusDiv.className = 'message-status';
+        
+        // Default new message as not read
+        messageStatusDiv.innerHTML = `
+            <i class="fas fa-check message-sent"></i>
+        `;
+        
+        messageTimeContainer.appendChild(messageStatusDiv);
+    }
+    
+    messageContainer.appendChild(messageTimeContainer);
     
     // Scroll to bottom
     scrollToBottom();
     
     // Hide typing indicator
     hideTypingIndicator();
+    
+    // After displaying message, update counters
+    if (message.sender_id !== currentUser.id) {
+        socket.emit('read_messages', { lobby_id: currentLobbyId });
+    }
 }
 
-// Update the last message of a lobby in the contacts list
-function updateLobbyLastMessage(lobbyId, message) {
-    // Find the lobby in the list
-    const lobbyIndex = lobbiesList.findIndex(lobby => lobby.id === lobbyId);
-    
-    if (lobbyIndex !== -1) {
-        // Update the last message
-        lobbiesList[lobbyIndex].last_message = message;
-        
-        // Re-render contacts to update UI
-        renderContacts();
-    }
+
+// Fetch all users for contacts list
+function fetchAllUsers() {
+    return new Promise((resolve, reject) => {
+        fetch('/chat/api/all_users')
+            .then(response => response.json())
+            .then(data => {
+                usersList = data;
+                renderAllUsers();
+                resolve();
+            })
+            .catch(error => {
+                console.error('Error fetching all users:', error);
+                reject(error);
+            });
+    });
+}
+
+// Render all users in contacts list
+function renderAllUsers() {
+    // Пользователи будут показаны в выпадающем списке при клике на "All Users"
+    renderContacts();
 }
 
 // Send a message
 function sendMessage() {
-    if (!currentLobbyId) return;
+    if (!currentLobbyId) {
+        console.log("No lobby selected");
+        return;
+    }
     
     const messageText = messageInput.value.trim();
     
     // Check if we have text content or attachments
-    if (messageText === '' && pendingAttachments.length === 0) return;
+    if (messageText === '' && pendingAttachments.length === 0) {
+        console.log("No message text or attachments");
+        return;
+    }
+    
+    console.log("Sending message:", messageText);
+    console.log("To lobby:", currentLobbyId);
     
     // Clear input field
     messageInput.value = '';
     
     // Handle file attachments if any
     if (pendingAttachments.length > 0) {
+        console.log("Sending file message");
         sendFileMessage(messageText);
     } else {
         // Send text message via Socket.IO
+        console.log("Emitting send_message event");
         socket.emit('send_message', {
             message: messageText,
             lobby_id: currentLobbyId
@@ -956,41 +1628,108 @@ function sendMessage() {
     socket.emit('stop_typing', {
         lobby_id: currentLobbyId
     });
+    
+    // Автоматически фокусируемся на поле ввода после отправки
+    setTimeout(() => {
+        messageInput.focus();
+    }, 10);
 }
 
 // Send a message with file attachment
 function sendFileMessage(messageText) {
-    const formData = new FormData();
-    formData.append('message', messageText);
-    formData.append('lobby_id', currentLobbyId);
+    if (pendingAttachments.length === 0) {
+        console.error("No attachments to send");
+        return;
+    }
     
-    // Append the first file (currently supporting one file at a time)
-    formData.append('file', pendingAttachments[0].file);
+    const attachment = pendingAttachments[0];
+    console.log("Uploading file:", attachment.name, "Type:", attachment.type);
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('message', messageText || '');
+    formData.append('lobby_id', currentLobbyId);
+    formData.append('file', attachment.file);
+    
+    // Show loading indicator
+    const sendBtn = document.getElementById('sendMessage');
+    if (sendBtn) {
+        sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        sendBtn.disabled = true;
+    }
     
     // Send the request
     fetch('/chat/upload', {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        // Reset the send button regardless of outcome
+        if (sendBtn) {
+            sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            sendBtn.disabled = false;
+        }
+        
+        if (!response.ok) {
+            return response.json().then(errorData => {
+                console.error("Upload error:", errorData);
+                throw new Error(errorData.error || `Server error: ${response.status}`);
+            });
+        }
+        
+        return response.json();
+    })
     .then(data => {
+        console.log("Upload response:", data);
+        
         if (data.success) {
             // Clear attachment preview
             clearAttachmentPreview();
+            
+            // If socket.io emission failed, manually add the message
+            if (!data.socketio_success && data.message) {
+                console.log("Socket.IO failed, manually adding message");
+                appendMessage(data.message);
+            } else {
+                // Otherwise wait a bit to see if socket delivers it
+                setTimeout(() => {
+                    if (data.message && !document.querySelector(`[data-message-id="${data.message.id}"]`)) {
+                        console.log("Message not received via socket, manually adding");
+                        appendMessage(data.message);
+                    }
+                }, 1000);
+            }
         } else {
-            console.error('Error uploading file:', data.error);
+            alert("Failed to send message: " + (data.error || "Unknown error"));
         }
     })
     .catch(error => {
-        console.error('Error sending file message:', error);
+        console.error("Error uploading file:", error);
+        alert("Failed to upload file. Please try again. Error: " + error.message);
     });
 }
 
+
+
 // Handle file selection
 function handleFileSelection(e) {
-    if (!e.target.files || e.target.files.length === 0) return;
+    if (!e.target.files || e.target.files.length === 0) {
+        console.log("No files selected");
+        return;
+    }
     
     const file = e.target.files[0];
+    console.log("File selected:", file.name, "Type:", file.type, "Size:", file.size);
+    
+    // Validate file type and size here if needed
+    if (!file.type.startsWith('image/') && 
+        !file.type.startsWith('audio/') && 
+        !file.type.startsWith('video/') && 
+        !allowedFileTypes.includes(file.type)) {
+        alert('Unsupported file type. Please select an image, audio, video, or document file.');
+        fileInput.value = '';
+        return;
+    }
     
     // Clear existing attachments
     pendingAttachments = [];
@@ -1003,6 +1742,8 @@ function handleFileSelection(e) {
         size: file.size,
         type: file.type
     });
+    
+    console.log("Added attachment to pending list:", pendingAttachments);
     
     // Show attachment preview
     renderAttachmentPreview();
@@ -1120,7 +1861,7 @@ function hideTypingIndicator() {
 
 // Toggle profile panel visibility
 function toggleProfilePanel() {
-    if (profilePanel.style.display === 'none') {
+    if (profilePanel.style.display === 'none' || profilePanel.style.display === '') {
         // Show profile
         if (currentLobbyId) {
             showProfile();
@@ -1162,8 +1903,11 @@ function showProfile() {
         if (otherUser) {
             profileName.textContent = otherUser.username;
             profileTitle.textContent = 'User';
-            profileStatusBadge.className = 'profile-status-badge profile-status-online';
-            profileStatusBadge.textContent = 'Online';
+            
+            // Set status badge
+            const isOnline = otherUser.is_online || false;
+            profileStatusBadge.className = `profile-status-badge ${isOnline ? 'profile-status-online' : 'profile-status-offline'}`;
+            profileStatusBadge.textContent = isOnline ? 'Online' : 'Offline';
             
             profileAbout.textContent = 'No information available';
             
@@ -1266,6 +2010,77 @@ function loadSharedFiles() {
         });
 }
 
+// Получение общего количества непрочитанных сообщений для обновления индикатора в навбаре
+function updateUnreadMessagesTotal() {
+    fetch('/chat/api/unread_messages_total')
+        .then(response => response.json())
+        .then(data => {
+            // Обновляем индикатор в навигационной панели
+            const navChatLink = document.querySelector('a.nav-link[href*="chat"]');
+            if (navChatLink) {
+                // Находим или создаем бейдж для непрочитанных сообщений
+                let unreadBadge = navChatLink.querySelector('.unread-chat-badge');
+                
+                if (data.unread_count > 0) {
+                    if (!unreadBadge) {
+                        unreadBadge = document.createElement('span');
+                        unreadBadge.className = 'unread-chat-badge';
+                        navChatLink.appendChild(unreadBadge);
+                    }
+                    // Обновляем содержимое бейджа
+                    unreadBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                } else if (unreadBadge) {
+                    unreadBadge.remove();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching unread messages count:', error);
+        });
+}
+
+// Обновление списка лобби с количеством непрочитанных сообщений
+function updateLobbiesWithUnread() {
+    fetch('/chat/api/lobbies_with_unread')
+        .then(response => response.json())
+        .then(lobbiesWithUnread => {
+            // Создаем карту лобби с непрочитанными сообщениями для быстрого доступа
+            const unreadCountMap = new Map();
+            lobbiesWithUnread.forEach(item => {
+                unreadCountMap.set(item.lobby_id, item.unread_count);
+            });
+            
+            // Обновляем индикаторы непрочитанных сообщений для каждого контакта
+            document.querySelectorAll('.contact-item[data-lobby-id]').forEach(contactItem => {
+                const lobbyId = parseInt(contactItem.dataset.lobbyId);
+                if (!lobbyId) return;
+                
+                // Находим или создаем бейдж для непрочитанных сообщений
+                let unreadBadge = contactItem.querySelector('.unread-count-badge');
+                
+                if (unreadCountMap.has(lobbyId)) {
+                    const unreadCount = unreadCountMap.get(lobbyId);
+                    
+                    if (!unreadBadge) {
+                        unreadBadge = document.createElement('div');
+                        unreadBadge.className = 'unread-count-badge';
+                        contactItem.querySelector('.contact-info').appendChild(unreadBadge);
+                    }
+                    
+                    unreadBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    // Выделяем контакт с непрочитанными сообщениями
+                    contactItem.classList.add('has-unread');
+                } else if (unreadBadge) {
+                    unreadBadge.remove();
+                    contactItem.classList.remove('has-unread');
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching lobbies with unread messages:', error);
+        });
+}
+
 // Helper Functions
 
 // Get initials from a name
@@ -1322,65 +2137,7 @@ function scrollToBottom() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Fetch all users for contacts list
-function fetchAllUsers() {
-    fetch('/chat/api/all_users')
-        .then(response => response.json())
-        .then(data => {
-            usersList = data;
-            renderAllUsers();
-        })
-        .catch(error => {
-            console.error('Error fetching all users:', error);
-        });
-}
-
-// Render all users in contacts list
-function renderAllUsers() {
-    if (!contactsList) return;
-    
-    // Create users header
-    const usersHeader = document.createElement('div');
-    usersHeader.className = 'contacts-separator';
-    usersHeader.textContent = 'All Users';
-    contactsList.appendChild(usersHeader);
-    
-    // Render each user
-    usersList.forEach(user => {
-        const contactItem = document.createElement('div');
-        contactItem.className = 'contact-item';
-        contactItem.dataset.userId = user.id;
-        
-        const avatarInitials = getInitials(user.username);
-        
-        contactItem.innerHTML = `
-            <div class="avatar">
-                ${user.avatar ? 
-                    `<img src="${user.avatar}" alt="${user.username}" class="avatar-img">` : 
-                    `<span class="avatar-text">${avatarInitials}</span>`
-                }
-                <span class="status-indicator status-online"></span>
-            </div>
-            <div class="contact-info">
-                <div class="contact-name-row">
-                    <div class="contact-name">${user.username}</div>
-                </div>
-                <div class="contact-message">Click to start chatting</div>
-            </div>
-        `;
-        
-        contactItem.addEventListener('click', () => {
-            startDirectChat(user.id);
-        });
-        
-        contactsList.appendChild(contactItem);
-    });
-}
-
-// Initialize the app when DOM is loaded
-document.addEventListener('DOMContentLoaded', initApp);
-// Add this to your existing chat.js file
-
+// Setup Safari-specific fixes
 document.addEventListener('DOMContentLoaded', function() {
     // Get DOM elements
     const appContainer = document.querySelector('.app-container');
@@ -1405,13 +2162,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 100);
     }
     
-    // Safari-specific fix for search bar
-    function setupSafariSearchBarFix() {
-        // This function was referenced but not defined in original code
-        // Adding empty implementation to prevent errors
-        adjustHeight();
-    }
-    
     // Mobile back button handler
     if (mobileChatBack) {
         mobileChatBack.addEventListener('click', function() {
@@ -1428,9 +2178,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const contactItem = e.target.closest('.contact-item');
         if (!contactItem) return;
         
-        // Logic for selecting contact
-        // ... your existing contact selection logic here
-        
         // Show chat container on mobile
         if (window.innerWidth <= 768) {
             // Enable active chat mode
@@ -1442,23 +2189,26 @@ document.addEventListener('DOMContentLoaded', function() {
             activeChat.style.display = 'flex';
             noChatSelected.style.display = 'none';
         }
-        setupSafariSearchBarFix();
     });
     
     // Handle profile panel toggle
-    viewProfileBtn.addEventListener('click', function() {
-        profilePanel.style.display = 'block';
-        setTimeout(() => {
-            profilePanel.classList.add('active');
-        }, 10);
-    });
+    if (viewProfileBtn) {
+        viewProfileBtn.addEventListener('click', function() {
+            profilePanel.style.display = 'block';
+            setTimeout(() => {
+                profilePanel.classList.add('active');
+            }, 10);
+        });
+    }
     
-    closeProfile.addEventListener('click', function() {
-        profilePanel.classList.remove('active');
-        setTimeout(() => {
-            profilePanel.style.display = 'none';
-        }, 300);
-    });
+    if (closeProfile) {
+        closeProfile.addEventListener('click', function() {
+            profilePanel.classList.remove('active');
+            setTimeout(() => {
+                profilePanel.style.display = 'none';
+            }, 300);
+        });
+    }
     
     // Handle window resize events
     window.addEventListener('resize', function() {
@@ -1493,57 +2243,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Call Safari height adjustment on load
     adjustHeight();
+    // Настройка модального окна для изображений
+    setupImageModal();
 });
-// Функция для решения проблемы с поисковой строкой на iOS
-function setupSafariSearchBarFix() {
-    // Проверяем, является ли устройство iOS
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    
-    if (isIOS) {
-      // Добавляем класс для идентификации iOS устройств
-      document.documentElement.classList.add('ios-device');
-      
-      // Устанавливаем высоту документа
-      function setDocumentHeight() {
-        const vh = window.innerHeight * 0.01;
-        document.documentElement.style.setProperty('--vh', `${vh}px`);
-      }
-      
-      // Вызываем функцию сразу и при изменении размера окна
-      setDocumentHeight();
-      window.addEventListener('resize', setDocumentHeight);
-      
-      // Добавляем обработчик для полей ввода
-      const inputFields = document.querySelectorAll('input, textarea');
-      inputFields.forEach(input => {
-        input.addEventListener('focus', function() {
-          // Прокручиваем страницу после небольшой задержки
-          setTimeout(() => {
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            const inputTop = this.getBoundingClientRect().top + scrollTop;
-            window.scrollTo(0, inputTop - 100);
-          }, 300);
-        });
-      });
-    }
-  }
-  function adjustLayoutForSafari() {
-    // Обновляем высоту контента при изменении размера окна
-    function updateHeight() {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
-      
-      // Перерасчет высоты контейнера контента
-      const contentWrapper = document.querySelector('.content-wrapper');
-      if (contentWrapper) {
-        contentWrapper.style.height = `calc(${vh * 100}px - env(safe-area-inset-bottom, 50px) - 60px)`;
-      }
-    }
-    
-    // Вызываем сразу и при изменении размера окна
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-  }
-  
-  // Добавьте вызов функции в документ
-  document.addEventListener('DOMContentLoaded', adjustLayoutForSafari);

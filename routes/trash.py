@@ -134,7 +134,7 @@ trash_manager = TrashManager(BASE_UPLOAD_FOLDER)
 def view_trash():
     """View trash contents"""
     trash_contents = trash_manager.get_trash_contents(current_user.id)
-    return render_template('trash.html', files=trash_contents)
+    return render_template('documents/trash.html', files=trash_contents)
 
 @trash_bp.route('/trash/restore/<filename>')
 @login_required
