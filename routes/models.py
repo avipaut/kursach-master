@@ -318,3 +318,65 @@ class PendingFile(db.Model):
     
     def __repr__(self):
         return f'<PendingFile {self.original_filename}>'
+# Add to models.py
+
+# Association table for CalendarEvent-User (participants) many-to-many relationship
+event_participants = db.Table(
+    'event_participants',
+    db.Column('event_id', db.Integer, db.ForeignKey('calendar_events.id', ondelete="CASCADE"), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
+)
+
+class EventType(PyEnum):
+    TASK = "task"
+    ZOOM = "zoom"
+    PERSONAL = "personal"  # For personal tasks
+
+class CalendarEvent(db.Model):
+    __tablename__ = 'calendar_events'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False)
+    end_time = db.Column(db.DateTime, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    event_type = db.Column(db.String(20), nullable=False, default='task')  # 'task', 'zoom', 'personal'
+    color = db.Column(db.String(20), nullable=True)
+    all_day = db.Column(db.Boolean, default=False)
+    
+    # Creator of the event
+    creator_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    creator = db.relationship('User', foreign_keys=[creator_id], backref='created_events')
+    
+    # For Zoom meetings
+    zoom_url = db.Column(db.String(500), nullable=True)
+    zoom_meeting_id = db.Column(db.String(100), nullable=True)
+    zoom_password = db.Column(db.String(50), nullable=True)
+    zoom_host_key = db.Column(db.String(50), nullable=True)
+    is_recorded = db.Column(db.Boolean, default=False)
+    recording_url = db.Column(db.String(500), nullable=True)
+    
+    # Participants (for zoom meetings or shared tasks)
+    participants = db.relationship('User', secondary=event_participants, backref='participating_events')
+    
+    # For visibility control
+    is_private = db.Column(db.Boolean, default=False)  # True for personal tasks
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'start': self.start_time.isoformat(),
+            'end': self.end_time.isoformat(),
+            'description': self.description,
+            'type': self.event_type,
+            'color': self.color,
+            'allDay': self.all_day,
+            'creator_id': self.creator_id,
+            'creator_name': self.creator.username if self.creator else None,
+            'zoom_url': self.zoom_url,
+            'zoom_meeting_id': self.zoom_meeting_id,
+            'is_recorded': self.is_recorded,
+            'recording_url': self.recording_url if self.is_recorded else None,
+            'participants': [user.to_dict() for user in self.participants],
+            'is_private': self.is_private
+        }

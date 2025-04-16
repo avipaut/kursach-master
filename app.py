@@ -12,7 +12,7 @@ from routes.models import Role, User
 from werkzeug.security import generate_password_hash
 from routes.documents import documents_bp
 from routes.chat import chat_bp, socketio
-from routes.zoom import zoom_bp
+from routes.calendar import calendar_bp
 from routes.reports import reports_bp
 from routes.kpi import kpi_bp
 from routes.auth import auth_bp, init_login_manager
@@ -113,7 +113,7 @@ def admin_required(f):
 # Регистрация Blueprints
 app.register_blueprint(documents_bp, url_prefix='/documents')
 app.register_blueprint(chat_bp, url_prefix='/chat')
-app.register_blueprint(zoom_bp, url_prefix='/zoom')
+app.register_blueprint(calendar_bp, url_prefix='/calendar')
 app.register_blueprint(reports_bp, url_prefix='/reports')
 app.register_blueprint(kpi_bp, url_prefix='/kpi')
 app.register_blueprint(auth_bp, url_prefix='/auth')  # Без url_prefix
