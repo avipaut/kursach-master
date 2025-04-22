@@ -403,9 +403,6 @@ def upload_file():
                                 notification_text = "📹 Video"
                             elif message_type == MessageType.FILE:
                                 notification_text = f"📎 File: {original_filename}"
-                            
-                            from routes.notifications import create_message_notification
-                            create_message_notification(user.id, current_user.id, lobby_id, notification_text)
                 except Exception as emit_error:
                     print(f"Socket.IO emit error: {str(emit_error)}")
                     socketio_success = False
@@ -672,12 +669,7 @@ def handle_send_message(data):
         for user in lobby.users:
             print(f"Emitting message to user {user.id}")
             emit('new_message', message_data, room=f'user_{user.id}')
-            
-            # Создаем уведомление для других пользователей
-            if user.id != current_user.id:
-                from routes.notifications import create_message_notification
-                create_message_notification(user.id, current_user.id, lobby_id, message_text)
-        
+
         print("Message sent successfully")
     except Exception as e:
         print(f"Error sending message: {str(e)}")

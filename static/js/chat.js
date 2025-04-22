@@ -47,6 +47,65 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+document.addEventListener('DOMContentLoaded', function() {
+    // Добавляем стили для диалогов подтверждения
+    if (!document.getElementById('confirmation-dialog-styles')) {
+        const style = document.createElement('style');
+        style.id = 'confirmation-dialog-styles';
+        style.textContent = `
+            .confirmation-dialog {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 2000;
+            }
+            
+            .confirmation-content {
+                background: white;
+                border-radius: 8px;
+                width: 90%;
+                max-width: 350px;
+                padding: 1.25rem;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            }
+            
+            .confirmation-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                margin-bottom: 0.75rem;
+            }
+            
+            .confirmation-message {
+                margin-bottom: 1.25rem;
+                color: var(--text-secondary);
+                font-size: 0.9rem;
+            }
+            
+            .confirmation-buttons {
+                display: flex;
+                justify-content: flex-end;
+                gap: 0.75rem;
+            }
+            
+            .btn-cancel,
+            .btn-confirm {
+                padding: 0.4rem 0.8rem;
+                border-radius: 4px;
+                font-size: 0.85rem;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+});
+
 let imageModal = null;
 let modalImage = null;
 
@@ -501,6 +560,8 @@ function setupEventListeners() {
 
 // Set up Socket.IO event listeners
 function setupSocketListeners() {
+    console.log("Setting up socket listeners with fixed online status functionality");
+    
     // Сначала удаляем все существующие слушатели, чтобы избежать дублирования
     socket.off('new_message');
     socket.off('messages_read');
@@ -517,6 +578,11 @@ function setupSocketListeners() {
         if (document.querySelector(`[data-message-id="${message.id}"]`)) {
             console.log(`Message ${message.id} already in DOM, skipping`);
             return;
+        }
+        
+        // Воспроизводим звук уведомления если сообщение от другого пользователя
+        if (message.sender_id !== currentUser.id) {
+            playNotificationSound();
         }
         
         if (message.lobby_id === currentLobbyId) {
@@ -588,25 +654,91 @@ function setupSocketListeners() {
         }
     });
     
-    // User status change
+    // User status change - ПОЛНОСТЬЮ ПЕРЕПИСАННЫЙ ОБРАБОТЧИК
     socket.on('user_status_change', (data) => {
-        // Обновляем статус пользователя в списке
-        const userItems = document.querySelectorAll(`.contact-item[data-user-id="${data.user_id}"]`);
-        userItems.forEach(userItem => {
-            const statusIndicator = userItem.querySelector('.status-indicator');
-            if (statusIndicator) {
-                statusIndicator.className = `status-indicator ${data.is_online ? 'status-online' : 'status-offline'}`;
+        console.log("Received user status change:", data);
+        
+        // 1. Обновляем статус в списке пользователей
+        usersList.forEach(user => {
+            if (user.id === data.user_id) {
+                user.is_online = data.is_online;
+                console.log(`Updated user ${user.username} online status to ${data.is_online}`);
             }
         });
         
-        // Обновляем статус пользователя в активном чате
+        // 2. Обновляем статус во всех лобби
+        lobbiesList.forEach(lobby => {
+            lobby.users.forEach(user => {
+                if (user.id === data.user_id) {
+                    user.is_online = data.is_online;
+                }
+            });
+        });
+        
+        archivedLobbiesList.forEach(lobby => {
+            if (lobby && lobby.users) {
+                lobby.users.forEach(user => {
+                    if (user.id === data.user_id) {
+                        user.is_online = data.is_online;
+                    }
+                });
+            }
+        });
+        
+        // 3. Обновляем UI элементы
+        
+        // 3.1 Обновляем индикаторы в списке контактов
+        document.querySelectorAll('.contact-item').forEach(contactItem => {
+            const lobbyId = parseInt(contactItem.dataset.lobbyId);
+            if (!lobbyId) return;
+            
+            const lobby = lobbiesList.find(l => l.id === lobbyId) || 
+                         archivedLobbiesList.find(l => l.id === lobbyId);
+            
+            if (lobby && !lobby.is_group) {
+                const otherUser = lobby.users.find(user => user.id !== currentUser.id);
+                if (otherUser && otherUser.id === data.user_id) {
+                    const statusIndicator = contactItem.querySelector('.status-indicator');
+                    if (statusIndicator) {
+                        statusIndicator.className = `status-indicator ${data.is_online ? 'status-online' : 'status-offline'}`;
+                        console.log(`Updated contact list status indicator for user ${otherUser.username}`);
+                    }
+                }
+            }
+        });
+        
+        // 3.2 Обновляем статус в активном чате
         if (currentLobbyId) {
-            const activeLobby = lobbiesList.find(lobby => lobby.id === currentLobbyId);
+            const activeLobby = lobbiesList.find(lobby => lobby.id === currentLobbyId) ||
+                               archivedLobbiesList.find(lobby => lobby.id === currentLobbyId);
+                               
             if (activeLobby && !activeLobby.is_group) {
                 const otherUser = activeLobby.users.find(user => user.id !== currentUser.id);
                 if (otherUser && otherUser.id === data.user_id) {
-                    chatStatusIndicator.className = `status-indicator ${data.is_online ? 'status-online' : 'status-offline'}`;
-                    chatStatus.textContent = data.is_online ? 'Online' : 'Offline';
+                    if (chatStatusIndicator) {
+                        chatStatusIndicator.className = `status-indicator ${data.is_online ? 'status-online' : 'status-offline'}`;
+                        console.log(`Updated active chat status indicator for user ${otherUser.username}`);
+                    }
+                    
+                    if (chatStatus) {
+                        chatStatus.textContent = data.is_online ? 'Online' : 'Offline';
+                        console.log(`Updated active chat status text for user ${otherUser.username}`);
+                    }
+                }
+            }
+        }
+        
+        // 3.3 Обновляем статус в профиле, если он открыт
+        if (profilePanel && profilePanel.style.display === 'flex' && currentLobbyId) {
+            const profileLobby = lobbiesList.find(lobby => lobby.id === currentLobbyId) ||
+                                archivedLobbiesList.find(lobby => lobby.id === currentLobbyId);
+                                
+            if (profileLobby && !profileLobby.is_group) {
+                const otherUser = profileLobby.users.find(user => user.id !== currentUser.id);
+                if (otherUser && otherUser.id === data.user_id && profileStatusBadge) {
+                    profileStatusBadge.className = `profile-status-badge ${data.is_online ? 'profile-status-online' : 'profile-status-offline'}`;
+                    profileStatusBadge.textContent = data.is_online ? 'Online' : 'Offline';
+                    console.log(`Updated profile status for user ${otherUser.username}`);
                 }
             }
         }
@@ -1212,6 +1344,8 @@ function selectLobby(lobbyId, userInitiated = true) {
 
 // Set up the chat UI for a selected lobby
 function setupChatUI(lobby) {
+    console.log("Setting up chat UI with fixed online status display");
+    
     // Hide the empty state, show the active chat
     noChatSelected.style.display = 'none';
     activeChat.style.display = 'flex';
@@ -1256,10 +1390,13 @@ function setupChatUI(lobby) {
                 chatAvatarText.textContent = getInitials(otherUser.username);
             }
             
-            // Отображаем статус пользователя
-            const isOnline = otherUser.is_online || false;
+            // Отображаем статус пользователя - ИСПРАВЛЕНО
+            // Теперь используем проверку на явное значение (true) для is_online
+            const isOnline = otherUser.is_online === true;
             chatStatusIndicator.className = `status-indicator ${isOnline ? 'status-online' : 'status-offline'}`;
             chatStatus.textContent = isOnline ? 'Online' : 'Offline';
+            
+            console.log(`Setup Chat UI: User ${otherUser.username} has online status:`, isOnline, otherUser.is_online);
         }
     }
 }
@@ -1935,10 +2072,16 @@ function toggleProfilePanel() {
 
 // Show user profile
 function showProfile() {
-    // Get selected lobby
-    const lobby = lobbiesList.find(l => l.id === currentLobbyId);
+    console.log("Showing profile with fixed online status display");
     
-    if (!lobby) return;
+    // Get selected lobby
+    const lobby = lobbiesList.find(l => l.id === currentLobbyId) ||
+                 archivedLobbiesList.find(l => l.id === currentLobbyId);
+    
+    if (!lobby) {
+        console.warn("No lobby found for profile display");
+        return;
+    }
     
     if (lobby.is_group) {
         // Show group profile
@@ -1965,17 +2108,20 @@ function showProfile() {
             profileName.textContent = otherUser.username;
             profileTitle.textContent = 'User';
             
-            // Set status badge
-            const isOnline = otherUser.is_online || false;
+            // Set status badge - ИСПРАВЛЕНО
+            // Теперь используем проверку на явное значение (true) для is_online
+            const isOnline = otherUser.is_online === true;
             profileStatusBadge.className = `profile-status-badge ${isOnline ? 'profile-status-online' : 'profile-status-offline'}`;
             profileStatusBadge.textContent = isOnline ? 'Online' : 'Offline';
+            
+            console.log(`Show Profile: User ${otherUser.username} has online status:`, isOnline, otherUser.is_online);
             
             profileAbout.textContent = 'No information available';
             
             profileEmail.parentElement.style.display = 'flex';
             profileUsername.parentElement.style.display = 'flex';
             
-            profileEmail.textContent = otherUser.email;
+            profileEmail.textContent = otherUser.email || 'Not available';
             profileUsername.textContent = otherUser.username;
             
             if (otherUser.avatar) {
@@ -2424,77 +2570,87 @@ function showDeleteConfirmation(lobbyId) {
 
 // Archive a lobby
 function archiveLobby(lobbyId) {
-    fetch(`/chat/lobby/${lobbyId}/archive`, {
-        method: 'POST'
+    // Используем другой endpoint для персональной архивации
+    fetch(`/chat/lobby/${lobbyId}/archive?personal=true`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        // Передаем параметр, чтобы чаты архивировались только у текущего пользователя
+        body: JSON.stringify({ personal: true })
     })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update the in-memory lists
-                const lobby = lobbiesList.find(l => l.id == lobbyId);
-                if (lobby) {
-                    // Remove from active lobbies
-                    lobbiesList = lobbiesList.filter(l => l.id != lobbyId);
-                    
-                    // Add to archived lobbies
-                    archivedLobbiesList.push(data.lobby);
-                    
-                    // Re-render both lists
-                    renderContacts();
-                    renderArchivedChats();
-                    updateArchivedCount();
-                    
-                    // Show success message
-                    showToast('Chat archived successfully');
-                    
-                    // If this was the active chat, show "No chat selected"
-                    if (currentLobbyId === parseInt(lobbyId)) {
-                        showNoChatSelectedView();
-                    }
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Обновляем списки только в локальном интерфейсе
+            const lobby = lobbiesList.find(l => l.id == lobbyId);
+            if (lobby) {
+                // Удаляем из активных лобби
+                lobbiesList = lobbiesList.filter(l => l.id != lobbyId);
+                
+                // Добавляем в архивированные лобби
+                archivedLobbiesList.push(data.lobby);
+                
+                // Обновляем интерфейс
+                renderContacts();
+                renderArchivedChats();
+                updateArchivedCount();
+                
+                // Показываем уведомление об успехе
+                showToast('Chat archived successfully');
+                
+                // Если это был активный чат, показываем "No chat selected"
+                if (currentLobbyId === parseInt(lobbyId)) {
+                    showNoChatSelectedView();
                 }
-            } else {
-                showToast('Failed to archive chat: ' + data.error, 'error');
             }
-        })
-        .catch(error => {
-            console.error('Error archiving lobby:', error);
-            showToast('Failed to archive chat. Please try again.', 'error');
-        });
+        } else {
+            showToast('Failed to archive chat: ' + (data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error archiving lobby:', error);
+        showToast('Failed to archive chat. Please try again.', 'error');
+    });
 }
 
 // Unarchive a lobby
 function unarchiveLobby(lobbyId) {
-    fetch(`/chat/lobby/${lobbyId}/archive`, {
-        method: 'POST'
+    fetch(`/chat/lobby/${lobbyId}/archive?personal=true`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ personal: true })
     })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update the in-memory lists
-                const lobby = archivedLobbiesList.find(l => l.id == lobbyId);
-                if (lobby) {
-                    // Remove from archived lobbies
-                    archivedLobbiesList = archivedLobbiesList.filter(l => l.id != lobbyId);
-                    
-                    // Add to active lobbies
-                    lobbiesList.push(data.lobby);
-                    
-                    // Re-render both lists
-                    renderContacts();
-                    renderArchivedChats();
-                    updateArchivedCount();
-                    
-                    // Show success message
-                    showToast('Chat unarchived successfully');
-                }
-            } else {
-                showToast('Failed to unarchive chat: ' + data.error, 'error');
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Обновляем только локальный интерфейс
+            const lobby = archivedLobbiesList.find(l => l.id == lobbyId);
+            if (lobby) {
+                // Удаляем из архивированных лобби
+                archivedLobbiesList = archivedLobbiesList.filter(l => l.id != lobbyId);
+                
+                // Добавляем в активные лобби
+                lobbiesList.push(data.lobby);
+                
+                // Обновляем интерфейс
+                renderContacts();
+                renderArchivedChats();
+                updateArchivedCount();
+                
+                // Показываем уведомление об успехе
+                showToast('Chat unarchived successfully');
             }
-        })
-        .catch(error => {
-            console.error('Error unarchiving lobby:', error);
-            showToast('Failed to unarchive chat. Please try again.', 'error');
-        });
+        } else {
+            showToast('Failed to unarchive chat: ' + (data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error unarchiving lobby:', error);
+        showToast('Failed to unarchive chat. Please try again.', 'error');
+    });
 }
 
 // Delete a lobby
@@ -2705,6 +2861,10 @@ function createContactItemElement(lobby, isArchived) {
     // Архивный индикатор (если чат в архиве)
     const archiveIndicator = isArchived ? '<i class="fas fa-archive archive-indicator" title="Archived"></i>' : '';
     
+    // Индикатор отключения уведомлений
+    const isMuted = isChatMuted(lobby.id);
+    const muteIndicator = isMuted ? '<i class="fas fa-bell-slash mute-indicator" title="Уведомления отключены"></i>' : '';
+    
     contactItem.innerHTML = `
         <div class="avatar">
             ${avatarUrl ? 
@@ -2719,6 +2879,7 @@ function createContactItemElement(lobby, isArchived) {
                     ${contactName}
                     ${lobby.is_group ? '<i class="fas fa-users group-chat-icon" title="Group Chat"></i>' : ''}
                     ${archiveIndicator}
+                    ${muteIndicator}
                 </div>
                 <div class="contact-time">${lastMessageTime}</div>
             </div>
@@ -2728,6 +2889,17 @@ function createContactItemElement(lobby, isArchived) {
             <i class="fas fa-ellipsis-v"></i>
         </div>
     `;
+    
+    // Обновляем статус онлайн для контакта
+    if (!lobby.is_group) {
+        const otherUser = lobby.users.find(user => user.id !== currentUser.id);
+        if (otherUser) {
+            const statusIndicator = contactItem.querySelector('.status-indicator');
+            if (statusIndicator && otherUser.is_online === true) {
+                statusIndicator.className = 'status-indicator status-online';
+            }
+        }
+    }
     
     // Добавляем обработчик для выбора чата
     contactItem.addEventListener('click', (e) => {
@@ -2810,10 +2982,13 @@ function setupConfirmationDialogs() {
 
 // Функция для отображения контекстного меню
 function showContextMenu(event, lobbyId, isArchived) {
-    // Закрываем предыдущее контекстное меню, если оно открыто
+    // Закрываем предыдущее контекстное меню
     if (activeContextMenu) {
         closeContextMenu();
     }
+    
+    // Останавливаем всплытие события
+    event.stopPropagation();
     
     // Клонируем шаблон меню
     const contextMenu = document.getElementById('contextMenuTemplate').cloneNode(true);
@@ -2821,6 +2996,10 @@ function showContextMenu(event, lobbyId, isArchived) {
     contextMenu.style.display = 'block';
     document.body.appendChild(contextMenu);
     
+    // Находим лобби в массивах
+    const lobby = lobbiesList.find(l => l.id === parseInt(lobbyId)) || 
+                 archivedLobbiesList.find(l => l.id === parseInt(lobbyId));
+                 
     // Настраиваем пункты меню в зависимости от статуса архивирования
     if (isArchived) {
         contextMenu.querySelector('.archive-option').style.display = 'none';
@@ -2830,7 +3009,17 @@ function showContextMenu(event, lobbyId, isArchived) {
         contextMenu.querySelector('.unarchive-option').style.display = 'none';
     }
     
-    // Добавляем обработчики событий
+    // Настраиваем пункт меню отключения уведомлений
+    const muteOption = contextMenu.querySelector('.mute-option');
+    if (muteOption && lobby) {
+        const isMuted = isChatMuted(lobbyId);
+        muteOption.innerHTML = `
+            <i class="fas ${isMuted ? 'fa-bell' : 'fa-bell-slash'}"></i>
+            <span>${isMuted ? 'Включить уведомления' : 'Отключить уведомления'}</span>
+        `;
+    }
+    
+    // Добавляем обработчики событий для пунктов меню
     contextMenu.querySelector('.archive-option').addEventListener('click', () => {
         showArchiveConfirmation(lobbyId);
         closeContextMenu();
@@ -2846,26 +3035,137 @@ function showContextMenu(event, lobbyId, isArchived) {
         closeContextMenu();
     });
     
-    // Получаем позицию кнопки меню
-    const rect = event.target.closest('.chat-context-menu-trigger').getBoundingClientRect();
-    
-    // Определяем положение меню (справа от кнопки меню)
-    contextMenu.style.position = 'absolute';
-    contextMenu.style.top = `${rect.top}px`;
-    
-    // Проверяем, есть ли место справа, иначе размещаем слева
-    if (rect.right + 180 > window.innerWidth) {
-        contextMenu.style.left = `${rect.left - 180}px`; // Слева от кнопки
-    } else {
-        contextMenu.style.left = `${rect.right + 5}px`; // Справа от кнопки
+    // Добавляем обработчик для опции отключения уведомлений
+    if (muteOption) {
+        muteOption.addEventListener('click', () => {
+            toggleChatMute(lobbyId);
+            closeContextMenu();
+            renderContacts(); // Обновляем список контактов для отображения иконки отключения
+        });
     }
+    
+    // Позиционируем меню рядом с курсором, но в рамках окна
+    const rect = event.target.getBoundingClientRect();
+    
+    // Получаем размеры меню
+    const menuWidth = 180; // Примерная ширина меню
+    const menuHeight = 160; // Примерная высота меню
+    
+    // Определяем позицию так, чтобы меню оставалось в пределах окна
+    let left = rect.right + 5;
+    let top = rect.top;
+    
+    // Проверяем, выходит ли меню за правый край
+    if (left + menuWidth > window.innerWidth) {
+        left = rect.left - menuWidth - 5;
+    }
+    
+    // Проверяем, выходит ли меню за нижний край
+    if (top + menuHeight > window.innerHeight) {
+        top = window.innerHeight - menuHeight - 10;
+    }
+    
+    // Убеждаемся, что меню не выходит за верхний край
+    if (top < 0) {
+        top = 10;
+    }
+    
+    // Устанавливаем позицию
+    contextMenu.style.position = 'fixed'; // Используем fixed вместо absolute
+    contextMenu.style.left = `${left}px`;
+    contextMenu.style.top = `${top}px`;
+    contextMenu.style.zIndex = '9999'; // Высокий z-index, чтобы меню было поверх остальных элементов
     
     // Сохраняем ссылку на активное меню
     activeContextMenu = contextMenu;
     
-    // Предотвращаем закрытие меню при клике на него
-    contextMenu.addEventListener('click', (e) => {
-        e.stopPropagation();
+    // Добавляем обработчик для закрытия меню при клике вне его
+    document.addEventListener('click', closeContextMenuOnClickOutside);
+}
+
+// Функция для закрытия меню при клике вне его
+function closeContextMenuOnClickOutside(event) {
+    if (activeContextMenu && !activeContextMenu.contains(event.target) && 
+        !event.target.closest('.chat-context-menu-trigger')) {
+        closeContextMenu();
+        document.removeEventListener('click', closeContextMenuOnClickOutside);
+    }
+}
+
+// Закрытие контекстного меню
+function closeContextMenu() {
+    if (activeContextMenu) {
+        activeContextMenu.remove();
+        activeContextMenu = null;
+        document.removeEventListener('click', closeContextMenuOnClickOutside);
+    }
+}
+
+// 2. Функции для управления отключением уведомлений для чатов
+
+// Получаем список отключенных чатов из localStorage
+function getMutedChats() {
+    const mutedChats = localStorage.getItem('mutedChats');
+    return mutedChats ? JSON.parse(mutedChats) : [];
+}
+
+// Проверяем, отключены ли уведомления для конкретного чата
+function isChatMuted(lobbyId) {
+    const mutedChats = getMutedChats();
+    return mutedChats.includes(parseInt(lobbyId));
+}
+
+// Переключаем статус отключения уведомлений для чата
+function toggleChatMute(lobbyId) {
+    const mutedChats = getMutedChats();
+    const lobbyIdInt = parseInt(lobbyId);
+    
+    if (isChatMuted(lobbyIdInt)) {
+        // Включаем уведомления обратно
+        const index = mutedChats.indexOf(lobbyIdInt);
+        if (index > -1) {
+            mutedChats.splice(index, 1);
+        }
+        showToast('Уведомления включены');
+    } else {
+        // Отключаем уведомления
+        mutedChats.push(lobbyIdInt);
+        showToast('Уведомления отключены');
+    }
+    
+    // Сохраняем обновленный список
+    localStorage.setItem('mutedChats', JSON.stringify(mutedChats));
+    
+    // Обновляем интерфейс
+    updateMuteIndicators();
+}
+
+// Обновляем индикаторы отключения уведомлений в списке чатов
+function updateMuteIndicators() {
+    const contactItems = document.querySelectorAll('.contact-item[data-lobby-id]');
+    
+    contactItems.forEach(item => {
+        const lobbyId = parseInt(item.dataset.lobbyId);
+        const isMuted = isChatMuted(lobbyId);
+        
+        // Находим или создаем индикатор отключения уведомлений
+        let muteIndicator = item.querySelector('.mute-indicator');
+        
+        if (isMuted) {
+            if (!muteIndicator) {
+                muteIndicator = document.createElement('i');
+                muteIndicator.className = 'fas fa-bell-slash mute-indicator';
+                muteIndicator.title = 'Уведомления отключены';
+                
+                // Добавляем индикатор после имени контакта
+                const contactName = item.querySelector('.contact-name');
+                if (contactName) {
+                    contactName.appendChild(muteIndicator);
+                }
+            }
+        } else if (muteIndicator) {
+            muteIndicator.remove();
+        }
     });
 }
 
@@ -2912,4 +3212,450 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error("Error setting up confirmation dialogs:", e);
         }
     }, 500);
+});
+
+function updateUserOnlineStatus() {
+    // Обновляем статусы пользователей в списке контактов
+    document.querySelectorAll('.contact-item').forEach(contactItem => {
+        const lobbyId = parseInt(contactItem.dataset.lobbyId);
+        if (!lobbyId) return;
+        
+        const lobby = lobbiesList.find(l => l.id === lobbyId) || 
+                     archivedLobbiesList.find(l => l.id === lobbyId);
+        
+        if (lobby && !lobby.is_group) {
+            // Находим другого пользователя в лобби
+            const otherUser = lobby.users.find(user => user.id !== currentUser.id);
+            if (otherUser) {
+                // Обновляем индикатор статуса
+                const statusIndicator = contactItem.querySelector('.status-indicator');
+                if (statusIndicator) {
+                    statusIndicator.className = `status-indicator ${otherUser.is_online ? 'status-online' : 'status-offline'}`;
+                }
+            }
+        }
+    });
+    
+    // Обновляем статус пользователя в активном чате, если открыт
+    if (currentLobbyId) {
+        const activeLobby = lobbiesList.find(lobby => lobby.id === currentLobbyId) ||
+                           archivedLobbiesList.find(lobby => lobby.id === currentLobbyId);
+                           
+        if (activeLobby && !activeLobby.is_group) {
+            const otherUser = activeLobby.users.find(user => user.id !== currentUser.id);
+            if (otherUser && chatStatusIndicator && chatStatus) {
+                chatStatusIndicator.className = `status-indicator ${otherUser.is_online ? 'status-online' : 'status-offline'}`;
+                chatStatus.textContent = otherUser.is_online ? 'Online' : 'Offline';
+            }
+        }
+    }
+}
+
+function setupImprovedSocketListeners() {
+    // Сначала удаляем все существующие слушатели
+    socket.off('new_message');
+    socket.off('messages_read');
+    socket.off('user_typing');
+    socket.off('user_stop_typing');
+    socket.off('lobby_created');
+    socket.off('user_status_change');
+    
+    // Заново устанавливаем слушатели
+    
+    // Обработка события изменения статуса пользователя
+    socket.on('user_status_change', (data) => {
+        console.log('Received user status change:', data);
+        
+        // Обновляем статус в списке пользователей
+        usersList.forEach(user => {
+            if (user.id === data.user_id) {
+                user.is_online = data.is_online;
+            }
+        });
+        
+        // Обновляем статус в списке лобби
+        lobbiesList.forEach(lobby => {
+            lobby.users.forEach(user => {
+                if (user.id === data.user_id) {
+                    user.is_online = data.is_online;
+                }
+            });
+        });
+        
+        archivedLobbiesList.forEach(lobby => {
+            lobby.users.forEach(user => {
+                if (user.id === data.user_id) {
+                    user.is_online = data.is_online;
+                }
+            });
+        });
+        
+        // Обновляем визуальное отображение
+        updateUserOnlineStatus();
+    });
+    
+    // Все остальные слушатели из вашего кода
+    // New message event
+    socket.on('new_message', (message) => {
+        console.log("Received new message from server:", message);
+        
+        // Проверяем, есть ли это сообщение уже в DOM (избегаем дубликатов)
+        if (document.querySelector(`[data-message-id="${message.id}"]`)) {
+            console.log(`Message ${message.id} already in DOM, skipping`);
+            return;
+        }
+        
+        // Воспроизводим звук уведомления если сообщение от другого пользователя
+        if (message.sender_id !== currentUser.id) {
+            playNotificationSound();
+        }
+        
+        if (message.lobby_id === currentLobbyId) {
+            console.log("Message is for current lobby, appending...");
+            appendMessage(message);
+            
+            // Отмечаем сообщение как прочитанное, если оно от кого-то другого
+            if (message.sender_id !== currentUser.id) {
+                socket.emit('read_messages', { lobby_id: currentLobbyId });
+            }
+        } else {
+            // Если сообщение для другого лобби, обновляем только счетчики
+            updateUnreadMessagesTotal();
+            updateLobbiesWithUnread();
+            
+            // Обновляем последнее сообщение в лобби
+            updateLobbyLastMessage(message.lobby_id, message);
+        }
+    });
+    
+    // Messages read event
+    socket.on('messages_read', (data) => {
+        console.log("Messages read event:", data);
+        
+        if (data.lobby_id === currentLobbyId) {
+            // Обновляем индикаторы прочтения для сообщений, которые были прочитаны
+            document.querySelectorAll('.message-status').forEach(statusDiv => {
+                // Если у нас только одна галочка, добавляем вторую
+                const firstCheck = statusDiv.querySelector('.message-sent');
+                if (firstCheck) {
+                    firstCheck.classList.remove('message-sent');
+                    firstCheck.classList.add('message-read');
+                    
+                    // Добавляем вторую галочку
+                    if (!statusDiv.querySelector('.second-check')) {
+                        const secondCheck = document.createElement('i');
+                        secondCheck.className = 'fas fa-check message-read second-check';
+                        statusDiv.appendChild(secondCheck);
+                    }
+                }
+            });
+        }
+        
+        // Обновляем счетчики в любом случае
+        updateUnreadMessagesTotal();
+        updateLobbiesWithUnread();
+    });
+    
+    // Typing indicator events
+    socket.on('user_typing', (data) => {
+        if (data.lobby_id === currentLobbyId && data.user_id !== currentUser.id) {
+            showTypingIndicator(data.username);
+        }
+    });
+
+    socket.on('user_stop_typing', (data) => {
+        if (data.lobby_id === currentLobbyId && data.user_id !== currentUser.id) {
+            hideTypingIndicator();
+        }
+    });
+    
+    // New lobby created
+    socket.on('lobby_created', (lobby) => {
+        console.log("New lobby created:", lobby);
+        // Добавляем новое лобби только если его еще нет в списке
+        if (!lobbiesList.some(l => l.id === lobby.id)) {
+            lobbiesList.push(lobby);
+            renderContacts();
+        }
+    });
+}
+
+// Объявляем звук уведомления
+let notificationSound = null;
+
+// Функция для инициализации звука уведомлений
+function initNotificationSound() {
+    try {
+        notificationSound = new Audio('/static/sounds/notification_chats.mp3');
+        notificationSound.volume = 0.5; // Уровень громкости
+        
+        // Предзагружаем звук
+        notificationSound.load();
+        console.log('Notification sound initialized');
+    } catch (e) {
+        console.error('Error initializing notification sound:', e);
+    }
+}
+
+// Функция для воспроизведения звука уведомления с минимальной задержкой
+function playNotificationSound(message) {
+    // Проверяем, отключены ли уведомления для этого чата
+    if (message && message.lobby_id && isChatMuted(message.lobby_id)) {
+        console.log(`Skipping notification sound for muted chat ${message.lobby_id}`);
+        return;
+    }
+    
+    if (!notificationSound) {
+        initNotificationSound();
+    }
+    
+    // Маленькая задержка для избежания проблем с браузером
+    setTimeout(() => {
+        try {
+            // Сбрасываем позицию, чтобы можно было воспроизвести звук повторно
+            notificationSound.currentTime = 0;
+            
+            // Воспроизводим звук
+            const playPromise = notificationSound.play();
+            
+            // Обрабатываем ошибки воспроизведения (обычно из-за политики браузера)
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.warn('Audio playback was prevented by browser policy:', error);
+                    
+                    // Пробуем использовать вибрацию на мобильных устройствах как альтернативу
+                    if (navigator.vibrate) {
+                        navigator.vibrate(200);
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Failed to play notification sound:', e);
+        }
+    }, 50); // Минимальная задержка в 50мс
+}
+
+// Инициализируем звук при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализируем звук
+    initNotificationSound();
+    
+    // Также добавляем обработчик клика для разблокировки воспроизведения звука
+    // (многие браузеры требуют взаимодействия с пользователем перед воспроизведением звука)
+    document.addEventListener('click', function() {
+        if (notificationSound && notificationSound.paused) {
+            // Загружаем и сразу ставим на паузу, чтобы разблокировать будущее воспроизведение
+            notificationSound.load();
+            notificationSound.pause();
+        }
+    }, { once: true });
+    
+    // Переопределяем обработчики сокетов для добавления звуковых уведомлений
+    if (typeof socket !== 'undefined' && socket) {
+        setupImprovedSocketListeners();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Добавляем стили, если их еще нет
+    if (!document.getElementById('chat-custom-styles')) {
+        const style = document.createElement('style');
+        style.id = 'chat-custom-styles';
+        style.textContent = `
+            /* Стили для контекстного меню */
+            .chat-context-menu {
+                position: fixed;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
+                min-width: 160px;
+                z-index: 9999;
+                overflow: hidden;
+            }
+            
+            .chat-context-menu-item {
+                padding: 8px 12px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+            
+            .chat-context-menu-item:hover {
+                background-color: #f5f5f5;
+            }
+            
+            .chat-context-menu-item.danger {
+                color: #e53935;
+            }
+            
+            .chat-context-menu-item.danger:hover {
+                background-color: rgba(229, 57, 53, 0.1);
+            }
+            
+            /* Стили для индикатора отключения уведомлений */
+            .mute-indicator {
+                margin-left: 6px;
+                color: #888;
+                font-size: 0.8rem;
+            }
+            
+            /* Стили для кнопки контекстного меню */
+            .chat-context-menu-trigger {
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0;
+                transition: opacity 0.2s, background-color 0.2s;
+                background-color: var(--secondary-color);
+                cursor: pointer;
+                z-index: 5;
+            }
+            
+            .contact-item {
+                position: relative;
+            }
+            
+            .contact-item:hover .chat-context-menu-trigger {
+                opacity: 1;
+            }
+            
+            .chat-context-menu-trigger:hover {
+                background-color: var(--border-color);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    // Обновляем индикаторы отключения уведомлений при загрузке страницы
+    setTimeout(updateMuteIndicators, 1000);
+});
+
+// Обновляем инициализацию страницы чата
+const originalInitApp = window.initApp || function() {};
+window.initApp = function() {
+    // Вызываем оригинальную функцию
+    originalInitApp.apply(this, arguments);
+    
+    // Дополнительные настройки
+    initNotificationSound();
+    
+    // Устанавливаем улучшенные слушатели сокетов
+    if (typeof socket !== 'undefined' && socket) {
+        setupImprovedSocketListeners();
+    }
+    
+    // Обновляем статусы пользователей
+    updateUserOnlineStatus();
+};
+
+// Вызываем обновленную функцию setupSocketListeners, если страница уже загружена
+if (document.readyState !== 'loading') {
+    if (typeof socket !== 'undefined' && socket) {
+        setupImprovedSocketListeners();
+    }
+    updateUserOnlineStatus();
+}
+
+// 5. Функция для ручного обновления всех статусов онлайн
+function refreshAllOnlineStatuses() {
+    console.log("Manually refreshing all online statuses");
+    
+    // Запрашиваем актуальные данные с сервера
+    fetch('/chat/api/all_users')
+        .then(response => response.json())
+        .then(users => {
+            // Обновляем данные в массиве пользователей
+            users.forEach(serverUser => {
+                const localUser = usersList.find(u => u.id === serverUser.id);
+                if (localUser) {
+                    localUser.is_online = serverUser.is_online;
+                }
+            });
+            
+            // Обновляем данные в лобби
+            lobbiesList.forEach(lobby => {
+                lobby.users.forEach(lobbyUser => {
+                    const serverUser = users.find(u => u.id === lobbyUser.id);
+                    if (serverUser) {
+                        lobbyUser.is_online = serverUser.is_online;
+                    }
+                });
+            });
+            
+            // Обновляем отображение во всем интерфейсе
+            updateUserOnlineStatus();
+            
+            console.log("Online statuses refreshed from server");
+        })
+        .catch(error => {
+            console.error("Failed to refresh online statuses:", error);
+        });
+}
+
+// Вызываем инициализацию звука и обновление статусов при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализируем звук
+    initNotificationSound();
+    
+    // Обновляем все статусы онлайн через некоторое время после загрузки
+    setTimeout(refreshAllOnlineStatuses, 1000);
+    
+    // Установим периодическое обновление статусов онлайн
+    setInterval(refreshAllOnlineStatuses, 60000); // Каждую минуту
+});
+
+// 6. Обновляем обработчик события нового сообщения в setupSocketListeners
+function updateSocketNewMessageHandler() {
+    socket.off('new_message'); // Удаляем текущий обработчик
+    
+    // Добавляем новый обработчик с учетом отключенных уведомлений
+    socket.on('new_message', (message) => {
+        console.log("Received new message from server:", message);
+        
+        // Check if this message is already in the DOM (avoid duplicates)
+        if (document.querySelector(`[data-message-id="${message.id}"]`)) {
+            console.log(`Message ${message.id} already in DOM, skipping`);
+            return;
+        }
+        
+        // Воспроизводим звук уведомления если сообщение от другого пользователя
+        // и уведомления не отключены для этого чата
+        if (message.sender_id !== currentUser.id && !isChatMuted(message.lobby_id)) {
+            playNotificationSound(message);
+        }
+        
+        if (message.lobby_id === currentLobbyId) {
+            console.log("Message is for current lobby, appending...");
+            appendMessage(message);
+            
+            // Mark message as read if from someone else
+            if (message.sender_id !== currentUser.id) {
+                socket.emit('read_messages', { lobby_id: currentLobbyId });
+            }
+        } else {
+            // Если сообщение для другого лобби, обновляем только счетчики
+            updateUnreadMessagesTotal();
+            updateLobbiesWithUnread();
+            
+            // Обновляем последнее сообщение в лобби
+            updateLobbyLastMessage(message.lobby_id, message);
+        }
+    });
+}
+
+// Вызываем обновление обработчика сокета при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof socket !== 'undefined' && socket) {
+        // Задержка, чтобы дать время другим скриптам инициализироваться
+        setTimeout(updateSocketNewMessageHandler, 1000);
+    }
 });
