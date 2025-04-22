@@ -17,7 +17,7 @@ def notifications_page():
         notification.read = True
     db.session.commit()
 
-    return render_template('notifications.html', notifications=notifications)
+    return render_template('navbar/notifications.html', notifications=notifications)
 
 @notifications_bp.route('/get_unread_count')
 @login_required

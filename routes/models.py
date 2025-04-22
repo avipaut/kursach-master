@@ -134,26 +134,19 @@ class Lobby(db.Model):
     description = Column(Text, nullable=True)
     is_group = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    created_by = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=True)  # Can be null for system-created lobbies
+    created_by = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=True)
+    
+    # New fields for archiving functionality
+    is_archived = Column(Boolean, default=False)
+    archived_at = Column(DateTime, nullable=True)
+    archived_by = Column(Integer, ForeignKey('users.id', ondelete="SET NULL"), nullable=True)
     
     # Relationships
     users = db.relationship('User', secondary=user_lobby, back_populates='lobbies')
     messages = db.relationship('Message', backref='lobby', lazy=True, cascade="all, delete-orphan")
+    archiver = db.relationship('User', foreign_keys=[archived_by], backref='archived_lobbies', lazy=True)
     
-    def get_unread_count_for_user(self, user_id):
-        """Получить количество непрочитанных сообщений для пользователя"""
-        from sqlalchemy import and_, not_
-        
-        # Запрос для подсчета сообщений, которые не были прочитаны пользователем
-        # и были отправлены другими пользователями
-        unread_count = Message.query.filter(
-            Message.lobby_id == self.id,
-            Message.sender_id != user_id,
-            ~Message.read_by.any(ReadReceipt.user_id == user_id)
-        ).count()
-        
-        return unread_count
-    
+    # Update the to_dict method to include archive info
     def to_dict(self):
         return {
             'id': self.id,
@@ -164,7 +157,10 @@ class Lobby(db.Model):
             'created_at': self.created_at.isoformat(),
             'created_by': self.created_by,
             'users': [user.to_dict() for user in self.users],
-            'last_message': self.get_last_message()
+            'last_message': self.get_last_message(),
+            'is_archived': self.is_archived,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': self.archived_by
         }
     
     def get_last_message(self):

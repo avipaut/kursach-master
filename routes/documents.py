@@ -2,11 +2,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, send_f
 import os
 import unicodedata
 import chardet
-from googletrans import Translator
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import mimetypes
+from deep_translator import GoogleTranslator
 import re
 from .config import BASE_UPLOAD_FOLDER 
 documents_bp = Blueprint('documents', __name__)
@@ -55,8 +55,7 @@ def get_important_folder():
     os.makedirs(important_folder, exist_ok=True)
     return important_folder
 
-translator = Translator()
-
+translated = GoogleTranslator(source='auto', target='en').translate("Привет")
 def allowed_file(filename):
     """Check if the file extension is allowed"""
     ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt', 'doc', 'rtf', 'odt'}
@@ -83,92 +82,186 @@ def detect_file_encoding(filepath):
     return result['encoding'] or 'utf-8'
 
 def translate_file(filepath, direction='ky-ru'):
-    """
-    Translate file content synchronously
-    
-    Args:
-        filepath (str): Path to the file to translate
-        direction (str): Translation direction ('ky-ru' or 'ru-ky')
-    
-    Returns:
-        str: Translated content or None if translation fails
-    """
+    """Улучшенный перевод файлов с обработкой ошибок"""
     try:
-        # Detect file encoding
-        file_encoding = detect_file_encoding(filepath)
+        # Проверка размера файла
+        if os.path.getsize(filepath) == 0:
+            return None, "Файл пуст"
         
-        # Read file with detected encoding
-        with open(filepath, 'r', encoding=file_encoding) as f:
-            content = f.read()
+        # Извлечение текста
+        content = extract_text_from_file(filepath)
+        if not content or not content.strip():
+            return None, "Не удалось извлечь текст или файл пуст"
         
-        # Translate content
-        if direction == 'ky-ru':
-            translated_content = translator.translate(content, src='ky', dest='ru').text
-        elif direction == 'ru-ky':
-            translated_content = translator.translate(content, src='ru', dest='ky').text
-        else:
-            return None
-
-        return translated_content
+        # Настройки перевода
+        lang_map = {
+            'ky-ru': ('ky', 'ru'),
+            'ru-ky': ('ru', 'ky')
+        }
+        
+        if direction not in lang_map:
+            return None, "Неверное направление перевода"
+        
+        source, target = lang_map[direction]
+        translator = GoogleTranslator(source=source, target=target)
+        
+        # Разделение на части для больших файлов
+        max_chunk_size = 4000
+        chunks = [content[i:i+max_chunk_size] for i in range(0, len(content), max_chunk_size)]
+        translated = []
+        
+        for chunk in chunks:
+            try:
+                if chunk.strip():
+                    translated.append(translator.translate(chunk))
+            except Exception as e:
+                return None, f"Ошибка перевода: {str(e)}"
+        
+        return ' '.join(translated), None
+    
     except Exception as e:
-        print(f"Error during translation: {e}")
-        return None
-
-
-
-
+        return None, f"Ошибка обработки файла: {str(e)}"
+def extract_text_from_file(filepath):
+    """Универсальное извлечение текста из разных форматов файлов"""
+    ext = os.path.splitext(filepath)[1].lower()
+    
+    try:
+        # TXT файлы
+        if ext == '.txt':
+            with open(filepath, 'rb') as f:
+                encoding = chardet.detect(f.read())['encoding']
+            with open(filepath, 'r', encoding=encoding or 'utf-8', errors='replace') as f:
+                return f.read()
+        
+        # PDF файлы
+        elif ext == '.pdf':
+            try:
+                from pdfminer.high_level import extract_text
+                return extract_text(filepath)
+            except ImportError:
+                from PyPDF2 import PdfReader
+                return '\n'.join([page.extract_text() or '' for page in PdfReader(filepath).pages])
+        
+        # DOCX файлы
+        elif ext == '.docx':
+            try:
+                from docx import Document
+                return '\n'.join([p.text for p in Document(filepath).paragraphs if p.text])
+            except ImportError:
+                import zipfile
+                from xml.etree.ElementTree import XML
+                with zipfile.ZipFile(filepath) as z:
+                    with z.open('word/document.xml') as f:
+                        return ' '.join([n.text for n in XML(f.read()).iter() if n.text])
+        
+        # DOC файлы (требует win32com или antiword)
+        elif ext == '.doc':
+            try:
+                from win32com.client import Dispatch
+                word = Dispatch('Word.Application')
+                doc = word.Documents.Open(os.path.abspath(filepath))
+                text = doc.Content.Text
+                word.Quit()
+                return text
+            except:
+                import subprocess
+                return subprocess.check_output(['antiword', filepath]).decode('utf-8', 'ignore')
+        
+        else:
+            raise ValueError(f"Unsupported file format: {ext}")
+    
+    except Exception as e:
+        raise Exception(f"Failed to extract text: {str(e)}")
+def split_text_for_translation(text, max_length=5000):
+    """Разделение текста на части для перевода"""
+    paragraphs = text.split('\n')
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for para in paragraphs:
+        para_length = len(para)
+        if current_length + para_length > max_length and current_chunk:
+            chunks.append('\n'.join(current_chunk))
+            current_chunk = []
+            current_length = 0
+            
+        current_chunk.append(para)
+        current_length += para_length
+    
+    if current_chunk:
+        chunks.append('\n'.join(current_chunk))
+    
+    return chunks
 
 
 
 @documents_bp.route('/translate_upload', methods=['GET', 'POST'])
 @login_required
 def translate_upload():
-    if request.method == 'POST':
-        if 'file' not in request.files:
-            flash('No file part', 'error')
-            return redirect(request.url)
+    if request.method == 'GET':
+        return render_template('documents/translate_upload.html')
+    
+    # Обработка POST запроса
+    if 'file' not in request.files:
+        flash('No file selected', 'error')
+        return redirect(request.url)
 
-        file = request.files['file']
-        translation_direction = request.form.get('direction', 'ky-ru')
-        doc_category = request.form.get('category', 'personal')
+    file = request.files['file']
+    translation_direction = request.form.get('direction', 'ky-ru')
+    doc_category = request.form.get('category', 'personal')
 
-        if file and allowed_file(file.filename):
-            # Use normalized filename with Unicode support
-            filename = normalize_filename(file.filename)
+    if not file or file.filename == '':
+        flash('No file selected', 'error')
+        return redirect(request.url)
+        
+    if not allowed_file(file.filename):
+        flash('Unsupported file type', 'error')
+        return redirect(request.url)
+
+    # Нормализация имени файла
+    filename = normalize_filename(file.filename)
+    
+    # Выбор папки для сохранения
+    if doc_category == 'common':
+        folder = get_common_folder()
+    elif doc_category == 'important':
+        folder = get_important_folder()
+    else:
+        folder = get_user_upload_folder(current_user.id)
+        
+    # Сохраняем оригинальный файл
+    original_path = os.path.join(folder, filename)
+    file.save(original_path)
+    
+    # Выполняем перевод
+    translated_content, error = translate_file(original_path, direction=translation_direction)
+    
+    if error:
+        flash(f'Translation failed: {error}', 'error')
+        return redirect(url_for('documents.view_file', filename=filename, category=doc_category))
+    
+    # Сохраняем переведенный файл
+    name, ext = os.path.splitext(filename)
+    translated_filename = f"{name}_translated_{translation_direction}{ext}"
+    translated_path = os.path.join(folder, translated_filename)
+    
+    try:
+        if ext == '.txt':
+            with open(translated_path, 'w', encoding='utf-8') as f:
+                f.write(translated_content)
+        elif ext == '.docx':
+            save_as_docx(translated_content, translated_path)
+        elif ext == '.pdf':
+            save_as_pdf(translated_content, translated_path)
             
-            # Select the appropriate folder based on category
-            if doc_category == 'common':
-                folder = get_common_folder()
-            elif doc_category == 'important':
-                folder = get_important_folder()
-            else:
-                folder = get_user_upload_folder(current_user.id)
-                
-            filepath = os.path.join(folder, filename)
-            file.save(filepath)
-
-            try:
-                translated_content = translate_file(filepath, direction=translation_direction)
-                if translated_content:
-                    # Add translation suffix while preserving original extension
-                    name, ext = os.path.splitext(filename)
-                    translated_filename = f"translated_{name}{ext}"
-                    translated_filepath = os.path.join(folder, translated_filename)
-                    
-                    # Write translated content with UTF-8 encoding
-                    with open(translated_filepath, 'w', encoding='utf-8') as f:
-                        f.write(translated_content)
-                    
-                    flash('File translated successfully!', 'success')
-                    return redirect(url_for('documents.view_file', filename=translated_filename, category=doc_category))
-                else:
-                    flash('Translation failed', 'error')
-            except Exception as e:
-                flash(f'Error during translation: {str(e)}', 'error')
-        else:
-            flash('Unsupported file type', 'error')
-
-    return redirect(url_for('documents.documents'))
+        flash('File translated successfully!', 'success')
+        return redirect(url_for('documents.view_file', 
+                             filename=translated_filename, 
+                             category=doc_category))
+    except Exception as e:
+        flash(f'Error saving translated file: {str(e)}', 'error')
+        return redirect(url_for('documents.view_file', filename=filename, category=doc_category))
 
 @documents_bp.route('/')
 @login_required
@@ -465,37 +558,23 @@ def download_file(filename):
     
     return send_from_directory(folder, filename, as_attachment=True)
 
-@documents_bp.route('/translate/<filename>', methods=['GET', 'POST'])
-@login_required
-def translate_file_route(filename):
-    category = request.args.get('category', 'personal')
-    
-    if category == 'personal':
-        folder = get_user_upload_folder(current_user.id)
-    elif category == 'common':
-        folder = get_common_folder()
-    elif category == 'important':
-        folder = get_important_folder()
-    else:
-        folder = get_user_upload_folder(current_user.id)
-    
-    filepath = os.path.join(folder, filename)
 
-    if not os.path.exists(filepath):
-        return "File not found", 404
-    if not filename.endswith('.txt'):
-        return "Only text files can be translated", 400
 
-    translated_content = translate_file(filepath)
+def save_as_docx(content, filepath):
+    """Сохранение текста как DOCX файла"""
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph(content)
+    doc.save(filepath)
 
-    if translated_content:
-        translated_filepath = os.path.join(folder, f"translated_{filename}")
-        with open(translated_filepath, 'w', encoding='utf-8') as file:
-            file.write(translated_content)
-        return redirect(url_for('documents.view_file', filename=f"translated_{filename}", category=category))
-    else:
-        return f"Translation failed", 500
-    
+def save_as_pdf(content, filepath):
+    """Сохранение текста как PDF файла"""
+    from fpdf import FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, txt=content)
+    pdf.output(filepath)
 @documents_bp.route('/temp/preview/<filename>')
 @login_required
 @role_required('admin')

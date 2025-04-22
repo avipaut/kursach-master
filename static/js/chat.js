@@ -356,12 +356,22 @@ function fetchCurrentUser() {
 // Fetch all lobbies for the current user
 function fetchLobbies() {
     return new Promise((resolve, reject) => {
+        // Fetch non-archived lobbies by default
         fetch('/chat/lobbies')
             .then(response => response.json())
             .then(data => {
                 lobbiesList = data;
-                renderContacts();
-                resolve();
+                
+                // Also fetch archived lobbies
+                fetchArchivedLobbies()
+                    .then(() => {
+                        renderContacts();
+                        resolve();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching archived lobbies:', error);
+                        reject(error);
+                    });
             })
             .catch(error => {
                 console.error('Error fetching lobbies:', error);
@@ -918,16 +928,20 @@ function renderContacts() {
     chatsHeader.textContent = 'Chats';
     contactsList.appendChild(chatsHeader);
     
+    // Фильтруем и сортируем неархивированные лобби
+    const activeLobbies = lobbiesList.filter(lobby => !lobby.is_archived);
+    
     // Сортируем лобби по последнему сообщению
-    lobbiesList.sort((a, b) => {
+    activeLobbies.sort((a, b) => {
         const timeA = a.last_message ? new Date(a.last_message.timestamp) : new Date(a.created_at);
         const timeB = b.last_message ? new Date(b.last_message.timestamp) : new Date(b.created_at);
         return timeB - timeA;
     });
     
-    // Добавляем все чаты без разделения на групповые и личные
-    lobbiesList.forEach(lobby => {
-        renderContactItem(lobby);
+    // Добавляем все активные чаты
+    activeLobbies.forEach(lobby => {
+        const contactItem = createContactItemElement(lobby, false);
+        contactsList.appendChild(contactItem);
     });
     
     // Добавляем кнопку создания группового чата только для администраторов
@@ -2245,4 +2259,320 @@ document.addEventListener('DOMContentLoaded', function() {
     adjustHeight();
     // Настройка модального окна для изображений
     setupImageModal();
+});
+
+// Global variables for archive functionality
+let archivedLobbiesList = [];
+let activeContextMenu = null;
+let pendingActionLobbyId = null;
+
+function initArchiveFeatures() {
+    const archivedHeader = document.getElementById('archivedHeader');
+    const archivedChats = document.getElementById('archivedChats');
+    const archivedCount = document.getElementById('archivedCount');
+    
+    // Fetch archived lobbies
+    fetchArchivedLobbies();
+    
+    // Toggle archived chats section
+    archivedHeader.addEventListener('click', function() {
+        this.classList.toggle('collapsed');
+        archivedChats.classList.toggle('expanded');
+    });
+    
+    // Setup confirmation dialogs
+    setupConfirmationDialogs();
+    
+    // Setup drag-to-archive functionality
+    setupDragToArchive();
+    
+    // Close context menu when clicking outside
+    document.addEventListener('click', function(e) {
+        if (activeContextMenu && !activeContextMenu.contains(e.target) && 
+            !e.target.closest('.chat-context-menu-trigger')) {
+            closeContextMenu();
+        }
+    });
+}
+
+// Fetch archived lobbies
+function fetchArchivedLobbies() {
+    fetch('/chat/lobbies/archived')
+        .then(response => response.json())
+        .then(data => {
+            archivedLobbiesList = data;
+            updateArchivedCount();
+            renderArchivedChats();
+        })
+        .catch(error => {
+            console.error('Error fetching archived lobbies:', error);
+        });
+}
+
+// Update archived count badge
+function updateArchivedCount() {
+    const archivedCount = document.getElementById('archivedCount');
+    archivedCount.textContent = archivedLobbiesList.length;
+    
+    // Show/hide the archived section based on count
+    const archivedHeader = document.getElementById('archivedHeader');
+    archivedHeader.style.display = archivedLobbiesList.length > 0 ? 'flex' : 'none';
+}
+
+// Render archived chats
+function renderArchivedChats() {
+    const archivedChats = document.getElementById('archivedChats');
+    archivedChats.innerHTML = '';
+    
+    if (archivedLobbiesList.length === 0) {
+        return;
+    }
+    
+    // Sort archived lobbies by archive date (newest first)
+    archivedLobbiesList.sort((a, b) => {
+        return new Date(b.archived_at) - new Date(a.archived_at);
+    });
+    
+    // Render each archived lobby
+    archivedLobbiesList.forEach(lobby => {
+        const contactItem = createContactItemElement(lobby, true);
+        archivedChats.appendChild(contactItem);
+    });
+}
+
+// Show archive confirmation dialog
+function showArchiveConfirmation(lobbyId) {
+    pendingActionLobbyId = lobbyId;
+    document.getElementById('archiveConfirmation').style.display = 'flex';
+}
+
+// Show unarchive confirmation dialog
+function showUnarchiveConfirmation(lobbyId) {
+    pendingActionLobbyId = lobbyId;
+    document.getElementById('unarchiveConfirmation').style.display = 'flex';
+}
+
+// Show delete confirmation dialog
+function showDeleteConfirmation(lobbyId) {
+    pendingActionLobbyId = lobbyId;
+    document.getElementById('deleteConfirmation').style.display = 'flex';
+}
+
+// Archive a lobby
+function archiveLobby(lobbyId) {
+    fetch(`/chat/lobby/${lobbyId}/archive`, {
+        method: 'POST'
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the in-memory lists
+                const lobby = lobbiesList.find(l => l.id == lobbyId);
+                if (lobby) {
+                    // Remove from active lobbies
+                    lobbiesList = lobbiesList.filter(l => l.id != lobbyId);
+                    
+                    // Add to archived lobbies
+                    archivedLobbiesList.push(data.lobby);
+                    
+                    // Re-render both lists
+                    renderContacts();
+                    renderArchivedChats();
+                    updateArchivedCount();
+                    
+                    // Show success message
+                    showToast('Chat archived successfully');
+                    
+                    // If this was the active chat, show "No chat selected"
+                    if (currentLobbyId === parseInt(lobbyId)) {
+                        showNoChatSelectedView();
+                    }
+                }
+            } else {
+                showToast('Failed to archive chat: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error archiving lobby:', error);
+            showToast('Failed to archive chat. Please try again.', 'error');
+        });
+}
+
+// Unarchive a lobby
+function unarchiveLobby(lobbyId) {
+    fetch(`/chat/lobby/${lobbyId}/archive`, {
+        method: 'POST'
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the in-memory lists
+                const lobby = archivedLobbiesList.find(l => l.id == lobbyId);
+                if (lobby) {
+                    // Remove from archived lobbies
+                    archivedLobbiesList = archivedLobbiesList.filter(l => l.id != lobbyId);
+                    
+                    // Add to active lobbies
+                    lobbiesList.push(data.lobby);
+                    
+                    // Re-render both lists
+                    renderContacts();
+                    renderArchivedChats();
+                    updateArchivedCount();
+                    
+                    // Show success message
+                    showToast('Chat unarchived successfully');
+                }
+            } else {
+                showToast('Failed to unarchive chat: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error unarchiving lobby:', error);
+            showToast('Failed to unarchive chat. Please try again.', 'error');
+        });
+}
+
+// Delete a lobby
+function deleteLobby(lobbyId) {
+    fetch(`/chat/lobby/${lobbyId}/delete`, {
+        method: 'DELETE'
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove from both lists
+                lobbiesList = lobbiesList.filter(l => l.id != lobbyId);
+                archivedLobbiesList = archivedLobbiesList.filter(l => l.id != lobbyId);
+                
+                // Re-render both lists
+                renderContacts();
+                renderArchivedChats();
+                updateArchivedCount();
+                
+                // Show success message
+                showToast('Chat deleted successfully');
+                
+                // If this was the active chat, show "No chat selected"
+                if (currentLobbyId === parseInt(lobbyId)) {
+                    showNoChatSelectedView();
+                }
+            } else {
+                showToast('Failed to delete chat: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting lobby:', error);
+            showToast('Failed to delete chat. Please try again.', 'error');
+        });
+}
+
+// Setup drag to archive functionality
+function setupDragToArchive() {
+    const archiveDropZone = document.getElementById('archiveDropZone');
+    
+    // Show drop zone when dragging starts
+    function showArchiveDropZone() {
+        archiveDropZone.style.display = 'flex';
+    }
+    
+    // Hide drop zone when dragging ends
+    function hideArchiveDropZone() {
+        archiveDropZone.style.display = 'none';
+        archiveDropZone.classList.remove('active');
+    }
+    
+    // Setup drop zone event listeners
+    archiveDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        archiveDropZone.classList.add('active');
+    });
+    
+    archiveDropZone.addEventListener('dragleave', () => {
+        archiveDropZone.classList.remove('active');
+    });
+    
+    archiveDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const lobbyId = e.dataTransfer.getData('text/plain');
+        
+        // Process the drop (archive the chat)
+        if (lobbyId) {
+            showArchiveConfirmation(lobbyId);
+        }
+        
+        hideArchiveDropZone();
+    });
+    
+    // Make these functions available
+    window.showArchiveDropZone = showArchiveDropZone;
+    window.hideArchiveDropZone = hideArchiveDropZone;
+}
+
+// Show a toast notification
+function showToast(message, type = 'success') {
+    // Create toast element if it doesn't exist
+    let toast = document.getElementById('toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-notification';
+        document.body.appendChild(toast);
+        
+        // Add toast styles if not already in CSS
+        if (!document.getElementById('toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'toast-styles';
+            style.textContent = `
+                #toast-notification {
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    min-width: 250px;
+                    padding: 15px 20px;
+                    border-radius: 8px;
+                    color: white;
+                    font-weight: 500;
+                    z-index: 2000;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    transition: opacity 0.3s, transform 0.3s;
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                #toast-notification.visible {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+                #toast-notification.success {
+                    background-color: #4caf50;
+                }
+                #toast-notification.error {
+                    background-color: #f44336;
+                }
+                #toast-notification.info {
+                    background-color: #2196f3;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+    
+    // Set message and type
+    toast.textContent = message;
+    toast.className = type;
+    
+    // Show the toast
+    setTimeout(() => toast.classList.add('visible'), 10);
+    
+    // Hide after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        setTimeout(() => {
+            toast.textContent = '';
+        }, 300);
+    }, 3000);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait a bit to ensure other chat.js code has run
+    setTimeout(initArchiveFeatures, 500);
 });

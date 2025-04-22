@@ -34,7 +34,7 @@
                 <i class="fas fa-chart-line"></i>
                 <span>KPI</span>
             </a>
-            <a href="{{ url_for('calendar.calendar_page') }}" class="nav-link {% if active_page == 'zoom' %}active{% endif %}">
+            <a href="{{ url_for('calendar.calendar_page') }}" class="nav-link {% if active_page == 'calendar' %}active{% endif %}">
                 <i class="fas fa-video"></i>
                 <span>Zoom</span>
             </a>
@@ -45,7 +45,7 @@
         {% if 'admin' in current_user.roles|map(attribute='name')|list %}
         <div class="admin-badge nav-link" onclick="location.href='{{ url_for('auth.admin_panel') }}'">
             <i class="fas fa-shield-alt"></i>
-            <span class="admin-text">Admin</span>
+            <strong>{{ current_user.username }}</strong>
         </div>
         {% endif %}
         

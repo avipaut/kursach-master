@@ -1379,3 +1379,262 @@ body.ios-device .chat-input-container {
         width: 100%; 
     }
 }
+
+/* Chat Archive Feature Styles */
+
+/* Archived section header */
+.archived-header {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    background-color: var(--secondary-color);
+    border-radius: 8px;
+    margin: 0.5rem;
+    transition: background-color 0.2s;
+}
+
+.archived-header:hover {
+    background-color: var(--border-color);
+}
+
+.archived-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.archived-title i {
+    font-size: 0.9rem;
+}
+
+.archived-count {
+    background-color: var(--text-secondary);
+    color: white;
+    font-size: 0.7rem;
+    border-radius: 10px;
+    padding: 0.2rem 0.5rem;
+    margin-left: 0.5rem;
+}
+
+.archived-toggle i {
+    transition: transform 0.3s;
+}
+
+.archived-header.collapsed .archived-toggle i {
+    transform: rotate(-90deg);
+}
+
+/* Archived chats container */
+.archived-chats {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s;
+}
+
+.archived-chats.expanded {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Archived chat item */
+.contact-item.archived {
+    background-color: rgba(0, 0, 0, 0.03);
+    opacity: 0.85;
+    border-left: 3px solid var(--text-secondary);
+}
+
+.contact-item.archived:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    opacity: 1;
+}
+
+/* Context menu styles */
+.chat-context-menu-trigger {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, background-color 0.2s;
+    background-color: var(--secondary-color);
+    z-index: 1;
+}
+
+.contact-item:hover .chat-context-menu-trigger {
+    opacity: 1;
+}
+
+.chat-context-menu-trigger:hover {
+    background-color: var(--border-color);
+}
+
+.chat-context-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--shadow-medium);
+    min-width: 180px;
+    overflow: hidden;
+    z-index: 1000;
+    transform-origin: top right;
+    animation: menu-appear 0.2s ease;
+}
+
+@keyframes menu-appear {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.chat-context-menu-item {
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.chat-context-menu-item:hover {
+    background-color: var(--secondary-color);
+}
+
+.chat-context-menu-item.danger {
+    color: #e53935;
+}
+
+.chat-context-menu-item.danger:hover {
+    background-color: rgba(229, 57, 53, 0.1);
+}
+
+/* Confirmation dialog */
+.confirmation-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.confirmation-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow-lg);
+}
+
+.confirmation-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.confirmation-message {
+    margin-bottom: 1.5rem;
+    color: var(--text-secondary);
+}
+
+.confirmation-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+.btn-cancel {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-cancel:hover {
+    background-color: var(--secondary-color);
+}
+
+.btn-confirm {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: none;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-confirm.danger {
+    background-color: #e53935;
+}
+
+.btn-confirm.danger:hover {
+    background-color: #c62828;
+}
+
+.btn-confirm.primary {
+    background-color: var(--primary-color);
+}
+
+.btn-confirm.primary:hover {
+    background-color: #e43c56;
+}
+
+/* Drag to archive styles */
+.contact-item.dragging {
+    opacity: 0.6;
+    position: relative;
+}
+
+.archive-drop-zone {
+    height: 60px;
+    margin: 0.5rem;
+    border: 2px dashed var(--text-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background-color: rgba(0, 0, 0, 0.05);
+    transition: all 0.3s;
+}
+
+.archive-drop-zone.active {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.archive-drop-zone i {
+    margin-right: 0.5rem;
+}
+
+/* Archive icon in chat */
+.archive-indicator {
+    margin-left: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}

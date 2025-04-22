@@ -39,7 +39,7 @@ def view_reports():
     category_filter = request.args.get('category_filter')
 
     reports = get_reports(date_filter, author_filter, category_filter)
-    return render_template('reports.html', reports=reports)
+    return render_template('reports/reports.html', reports=reports)
 
 @reports_bp.route('/add', methods=['GET', 'POST'])
 def add_report():
@@ -57,7 +57,7 @@ def add_report():
         flash('Отчет успешно добавлен!', 'success')
         return redirect(url_for('reports.view_reports'))
 
-    return render_template('add_report.html')
+    return render_template('reports/add_report.html')
 
 @reports_bp.route('/edit/<int:report_id>', methods=['GET', 'POST'])
 def edit_report(report_id):
@@ -75,7 +75,7 @@ def edit_report(report_id):
         flash('Отчет успешно обновлен!', 'success')
         return redirect(url_for('reports.view_reports'))
 
-    return render_template('edit_report.html', report=report)
+    return render_template('reports/edit_report.html', report=report)
 
 @reports_bp.route('/delete/<int:report_id>', methods=['POST'])
 def delete_report(report_id):

@@ -1,6 +1,6 @@
-from flask import Blueprint, request, render_template, jsonify, redirect, url_for
+from flask import Blueprint, abort, request, render_template, jsonify, redirect, url_for
 from flask_login import current_user, login_required
-from routes.models import db, KPI, User
+from routes.models import KPITemplateHistory, db, KPI, User
 import logging
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Dict, Any
@@ -272,7 +272,7 @@ def kpi_constructor():
             if selected_user_id:
                 kpi_data, columns = get_kpi_data_from_db(user_id=selected_user_id)
                 return render_template(
-                    'kpi_constructor.html',
+                    'kpi/kpi_constructor.html',
                     kpi_columns=columns,
                     kpi_data=kpi_data,
                     users=users,
@@ -282,7 +282,7 @@ def kpi_constructor():
             
             # Если пользователь не выбран - показываем список
             return render_template(
-                'kpi_constructor.html',
+                'kpi/kpi_constructor.html',
                 users=users,
                 is_admin=True
             )
@@ -290,7 +290,7 @@ def kpi_constructor():
             # Для обычного пользователя
             kpi_data, columns = get_kpi_data_from_db(user_id=current_user.id)
             return render_template(
-                'kpi_constructor.html',
+                'kpi/kpi_constructor.html',
                 kpi_columns=columns,
                 kpi_data=kpi_data,
                 user_id=current_user.id,

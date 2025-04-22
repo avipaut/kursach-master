@@ -32,7 +32,7 @@ def kanban_board():
     is_admin = False
     if hasattr(current_user, 'is_admin'):
         is_admin = current_user.is_admin
-    return render_template('kanban.html', username=current_user.username, is_admin=is_admin)
+    return render_template('kanban/kanban.html', username=current_user.username, is_admin=is_admin)
 @kanban_bp.route('kanban/api/current_user', methods=['GET'])
 @login_required
 def get_current_user():

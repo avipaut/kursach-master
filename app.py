@@ -20,7 +20,7 @@ from routes.models import db, User, Role
 from routes.kanban import kanban_bp  # Импортируем Kanban Blueprint
 from routes.trash import trash_bp
 from routes.notifications import notifications_bp, add_notification
-
+from routes.admin_panel import admin_bp
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
@@ -132,6 +132,7 @@ app.register_blueprint(auth_bp, url_prefix='/auth')  # Без url_prefix
 app.register_blueprint(kanban_bp, url_prefix='/kanban')  # Без url_prefix
 app.register_blueprint(trash_bp, url_prefix='/trash')
 app.register_blueprint(notifications_bp, url_prefix='/notifications')
+app.register_blueprint(admin_bp, url_prefix='/admin')
 
 # Главный маршрут
 @app.route('/')

@@ -90,7 +90,7 @@ def register():
         flash('Регистрация прошла успешно! Войдите в систему.', 'success')
         return redirect(url_for('auth.login'))
         
-    return render_template('register.html')
+    return render_template('dashboard/register.html')
 from routes.models import db, User  # Импортируй свою модель
 
 
@@ -137,7 +137,7 @@ def login():
             
         flash('Неверное имя пользователя/email или пароль!', 'danger')
     
-    return render_template('login.html')
+    return render_template('dashboard/login.html')
 # === Выход ===
 @auth_bp.route('/logout')
 @login_required
@@ -161,7 +161,7 @@ def admin_panel():
     users = User.query.all()
     roles = Role.query.all()
     # Добавляем текущую дату и время
-    return render_template('admin_panel.html', users=users, roles=roles, now=datetime.now())
+    return render_template('dashboard/admin_panel.html', users=users, roles=roles, now=datetime.now())
 
 # === Получение всех пользователей (JSON, только для админов) ===
 @auth_bp.route('/users')
