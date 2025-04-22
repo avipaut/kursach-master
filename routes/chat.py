@@ -27,7 +27,6 @@ def allowed_file(filename):
     ext = filename.rsplit('.', 1)[1].lower()
     return ext in ALLOWED_EXTENSIONS
 
-
 def get_file_type(filename):
     """Determine file type based on extension"""
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
@@ -89,7 +88,6 @@ def get_lobbies():
     lobbies = query.all()
     
     return jsonify([lobby.to_dict() for lobby in lobbies])
-
 
 @chat_bp.route('/create_lobby', methods=['POST'])
 @login_required
@@ -222,7 +220,6 @@ def toggle_archive_lobby(lobby_id):
         lobby.archived_at = None
         lobby.archived_by = None
         message = "Lobby unarchived successfully"
-    
     db.session.commit()
     
     return jsonify({
@@ -271,7 +268,6 @@ def get_archived_lobbies():
     ).all()
     
     return jsonify([lobby.to_dict() for lobby in archived_lobbies])
-
 
 @chat_bp.route('/upload', methods=['POST'])
 @login_required
@@ -458,7 +454,6 @@ def get_file_type(filename):
     else:
         print("File type: FILE")
         return MessageType.FILE
-
 
 @chat_bp.route('/upload_avatar', methods=['POST'])
 @login_required

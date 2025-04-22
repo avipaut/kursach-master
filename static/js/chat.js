@@ -1,5 +1,52 @@
 // chat.js
 
+document.addEventListener('DOMContentLoaded', function() {
+    // Добавляем стили для контекстного меню чатов, если их еще нет
+    if (!document.getElementById('chat-context-menu-styles')) {
+        const style = document.createElement('style');
+        style.id = 'chat-context-menu-styles';
+        style.textContent = `
+            .chat-context-menu-trigger {
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0;
+                transition: opacity 0.2s, background-color 0.2s;
+                background-color: var(--secondary-color);
+                cursor: pointer;
+                z-index: 5;
+            }
+            
+            .contact-item {
+                position: relative;
+            }
+            
+            .contact-item:hover .chat-context-menu-trigger {
+                opacity: 1;
+            }
+            
+            .chat-context-menu-trigger:hover {
+                background-color: var(--border-color);
+            }
+            
+            /* Фиксируем позицию контекстного меню относительно документа */
+            #activeContextMenu {
+                position: fixed;
+                z-index: 1000;
+                box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+});
+
 let imageModal = null;
 let modalImage = null;
 
@@ -2261,6 +2308,14 @@ document.addEventListener('DOMContentLoaded', function() {
     setupImageModal();
 });
 
+// Функция для закрытия контекстного меню
+function closeContextMenu() {
+    if (activeContextMenu) {
+        activeContextMenu.remove();
+        activeContextMenu = null;
+    }
+}
+
 // Global variables for archive functionality
 let archivedLobbiesList = [];
 let activeContextMenu = null;
@@ -2297,17 +2352,26 @@ function initArchiveFeatures() {
 
 // Fetch archived lobbies
 function fetchArchivedLobbies() {
-    fetch('/chat/lobbies/archived')
-        .then(response => response.json())
-        .then(data => {
-            archivedLobbiesList = data;
-            updateArchivedCount();
-            renderArchivedChats();
-        })
-        .catch(error => {
-            console.error('Error fetching archived lobbies:', error);
-        });
+    return new Promise((resolve, reject) => {
+        fetch('/chat/lobbies/archived')
+            .then(response => response.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    archivedLobbiesList = data;
+                    // Не вызываем функции здесь, чтобы избежать повторных вызовов
+                    resolve(data);
+                } else {
+                    console.error('Invalid archived lobbies data:', data);
+                    reject(new Error('Invalid data format'));
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching archived lobbies:', error);
+                reject(error);
+            });
+    });
 }
+
 
 // Update archived count badge
 function updateArchivedCount() {
@@ -2575,4 +2639,277 @@ function showToast(message, type = 'success') {
 document.addEventListener('DOMContentLoaded', function() {
     // Wait a bit to ensure other chat.js code has run
     setTimeout(initArchiveFeatures, 500);
+});
+
+// Функция для создания элемента контакта (отсутствует в текущем коде)
+function createContactItemElement(lobby, isArchived) {
+    const contactItem = document.createElement('div');
+    contactItem.className = `contact-item ${isArchived ? 'archived' : ''} ${currentLobbyId === lobby.id ? 'selected' : ''}`;
+    contactItem.dataset.lobbyId = lobby.id;
+    contactItem.draggable = !isArchived; // Только неархивированные чаты можно перетаскивать
+    
+    // Определяем имя контакта и аватар
+    let contactName;
+    let avatarUrl;
+    let avatarInitials;
+    
+    if (lobby.is_group) {
+        contactName = lobby.name;
+        avatarUrl = lobby.avatar;
+        avatarInitials = getInitials(contactName);
+    } else {
+        // Для прямых сообщений показываем информацию о другом пользователе
+        const otherUser = lobby.users.find(user => user.id !== currentUser.id);
+        contactName = otherUser ? otherUser.username : 'Unknown User';
+        avatarUrl = otherUser ? otherUser.avatar : null;
+        avatarInitials = getInitials(contactName);
+    }
+    
+    // Форматируем последнее сообщение и время
+    let lastMessageText = 'No messages yet';
+    let lastMessageTime = '';
+    
+    if (lobby.last_message) {
+        const message = lobby.last_message;
+        
+        // Формат текста в зависимости от типа сообщения
+        if (message.message_type === 'text') {
+            lastMessageText = message.text.length > 30 ? message.text.substring(0, 27) + '...' : message.text;
+        } else if (message.message_type === 'image') {
+            lastMessageText = '📷 Image';
+        } else if (message.message_type === 'file') {
+            lastMessageText = '📎 File: ' + message.file_name;
+        } else if (message.message_type === 'audio') {
+            lastMessageText = '🎵 Audio';
+        } else if (message.message_type === 'video') {
+            lastMessageText = '📹 Video';
+        }
+        
+        // Форматирование времени
+        const messageDate = new Date(message.timestamp);
+        const now = new Date();
+        
+        if (messageDate.toDateString() === now.toDateString()) {
+            // Сегодня - показываем время
+            lastMessageTime = messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else if (messageDate.getTime() > now.getTime() - 7 * 24 * 60 * 60 * 1000) {
+            // В течение последней недели - показываем день недели
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            lastMessageTime = days[messageDate.getDay()];
+        } else {
+            // Старые сообщения - показываем дату
+            lastMessageTime = messageDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+    }
+    
+    // Архивный индикатор (если чат в архиве)
+    const archiveIndicator = isArchived ? '<i class="fas fa-archive archive-indicator" title="Archived"></i>' : '';
+    
+    contactItem.innerHTML = `
+        <div class="avatar">
+            ${avatarUrl ? 
+                `<img src="${avatarUrl}" alt="${contactName}" class="avatar-img">` : 
+                `<span class="avatar-text">${avatarInitials}</span>`
+            }
+            <span class="status-indicator ${lobby.is_group ? 'status-group' : 'status-offline'}"></span>
+        </div>
+        <div class="contact-info">
+            <div class="contact-name-row">
+                <div class="contact-name">
+                    ${contactName}
+                    ${lobby.is_group ? '<i class="fas fa-users group-chat-icon" title="Group Chat"></i>' : ''}
+                    ${archiveIndicator}
+                </div>
+                <div class="contact-time">${lastMessageTime}</div>
+            </div>
+            <div class="contact-message">${lastMessageText}</div>
+        </div>
+        <div class="chat-context-menu-trigger" data-lobby-id="${lobby.id}">
+            <i class="fas fa-ellipsis-v"></i>
+        </div>
+    `;
+    
+    // Добавляем обработчик для выбора чата
+    contactItem.addEventListener('click', (e) => {
+        // Проверяем, что клик был не по контекстному меню
+        if (!e.target.closest('.chat-context-menu-trigger')) {
+            selectLobby(lobby.id, true); // true означает, что действие инициировано пользователем
+        }
+    });
+    
+    // Добавляем обработчик для контекстного меню
+    const menuTrigger = contactItem.querySelector('.chat-context-menu-trigger');
+    if (menuTrigger) {
+        menuTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showContextMenu(e, lobby.id, isArchived);
+        });
+    }
+    
+    // Добавляем обработчики для Drag & Drop (только для неархивированных чатов)
+    if (!isArchived) {
+        contactItem.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', lobby.id);
+            contactItem.classList.add('dragging');
+            showArchiveDropZone();
+        });
+        
+        contactItem.addEventListener('dragend', () => {
+            contactItem.classList.remove('dragging');
+            hideArchiveDropZone();
+        });
+    }
+    
+    return contactItem;
+}
+
+// Функция для настройки диалогов подтверждения
+function setupConfirmationDialogs() {
+    // Архивирование
+    document.getElementById('cancelArchive').addEventListener('click', () => {
+        document.getElementById('archiveConfirmation').style.display = 'none';
+        pendingActionLobbyId = null;
+    });
+    
+    document.getElementById('confirmArchive').addEventListener('click', () => {
+        document.getElementById('archiveConfirmation').style.display = 'none';
+        if (pendingActionLobbyId) {
+            archiveLobby(pendingActionLobbyId);
+            pendingActionLobbyId = null;
+        }
+    });
+    
+    // Разархивирование
+    document.getElementById('cancelUnarchive').addEventListener('click', () => {
+        document.getElementById('unarchiveConfirmation').style.display = 'none';
+        pendingActionLobbyId = null;
+    });
+    
+    document.getElementById('confirmUnarchive').addEventListener('click', () => {
+        document.getElementById('unarchiveConfirmation').style.display = 'none';
+        if (pendingActionLobbyId) {
+            unarchiveLobby(pendingActionLobbyId);
+            pendingActionLobbyId = null;
+        }
+    });
+    
+    // Удаление
+    document.getElementById('cancelDelete').addEventListener('click', () => {
+        document.getElementById('deleteConfirmation').style.display = 'none';
+        pendingActionLobbyId = null;
+    });
+    
+    document.getElementById('confirmDelete').addEventListener('click', () => {
+        document.getElementById('deleteConfirmation').style.display = 'none';
+        if (pendingActionLobbyId) {
+            deleteLobby(pendingActionLobbyId);
+            pendingActionLobbyId = null;
+        }
+    });
+}
+
+// Функция для отображения контекстного меню
+function showContextMenu(event, lobbyId, isArchived) {
+    // Закрываем предыдущее контекстное меню, если оно открыто
+    if (activeContextMenu) {
+        closeContextMenu();
+    }
+    
+    // Клонируем шаблон меню
+    const contextMenu = document.getElementById('contextMenuTemplate').cloneNode(true);
+    contextMenu.id = 'activeContextMenu';
+    contextMenu.style.display = 'block';
+    document.body.appendChild(contextMenu);
+    
+    // Настраиваем пункты меню в зависимости от статуса архивирования
+    if (isArchived) {
+        contextMenu.querySelector('.archive-option').style.display = 'none';
+        contextMenu.querySelector('.unarchive-option').style.display = 'flex';
+    } else {
+        contextMenu.querySelector('.archive-option').style.display = 'flex';
+        contextMenu.querySelector('.unarchive-option').style.display = 'none';
+    }
+    
+    // Добавляем обработчики событий
+    contextMenu.querySelector('.archive-option').addEventListener('click', () => {
+        showArchiveConfirmation(lobbyId);
+        closeContextMenu();
+    });
+    
+    contextMenu.querySelector('.unarchive-option').addEventListener('click', () => {
+        showUnarchiveConfirmation(lobbyId);
+        closeContextMenu();
+    });
+    
+    contextMenu.querySelector('.delete-option').addEventListener('click', () => {
+        showDeleteConfirmation(lobbyId);
+        closeContextMenu();
+    });
+    
+    // Получаем позицию кнопки меню
+    const rect = event.target.closest('.chat-context-menu-trigger').getBoundingClientRect();
+    
+    // Определяем положение меню (справа от кнопки меню)
+    contextMenu.style.position = 'absolute';
+    contextMenu.style.top = `${rect.top}px`;
+    
+    // Проверяем, есть ли место справа, иначе размещаем слева
+    if (rect.right + 180 > window.innerWidth) {
+        contextMenu.style.left = `${rect.left - 180}px`; // Слева от кнопки
+    } else {
+        contextMenu.style.left = `${rect.right + 5}px`; // Справа от кнопки
+    }
+    
+    // Сохраняем ссылку на активное меню
+    activeContextMenu = contextMenu;
+    
+    // Предотвращаем закрытие меню при клике на него
+    contextMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
+
+// Исправление функции fetchLobbies для решения проблемы с промисами
+function fetchLobbiesFixed() {
+    return new Promise((resolve, reject) => {
+        // Fetch non-archived lobbies by default
+        fetch('/chat/lobbies')
+            .then(response => response.json())
+            .then(data => {
+                lobbiesList = data;
+                
+                // Также получаем архивированные лобби
+                fetchArchivedLobbies()
+                    .then(() => {
+                        renderContacts();
+                        resolve(data);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching archived lobbies:', error);
+                        // Всё равно рендерим контакты с имеющимися данными
+                        renderContacts();
+                        resolve(data);
+                    });
+            })
+            .catch(error => {
+                console.error('Error fetching lobbies:', error);
+                reject(error);
+            });
+    });
+}
+
+// Перезаписываем fetchLobbies, чтобы использовать исправленную версию
+window.fetchLobbies = fetchLobbiesFixed;
+
+// Вызываем инициализацию чата после загрузки DOM
+document.addEventListener('DOMContentLoaded', function() {
+    // Установка обработчиков для архивирования
+    setTimeout(function() {
+        try {
+            setupConfirmationDialogs();
+            console.log("Confirmation dialogs setup complete");
+        } catch (e) {
+            console.error("Error setting up confirmation dialogs:", e);
+        }
+    }, 500);
 });
