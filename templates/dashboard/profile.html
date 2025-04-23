@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.0/mammoth.browser.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+</head>
+<body>
+    {% include 'navbar/navbar.html' %}
+
+<style>
+    .profile-section {
+        background-color: #1e2333;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        color: #fff;
+    }
+    
+    .avatar-container {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .avatar-image {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background-color: #f0ad4e;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 36px;
+        font-weight: bold;
+        color: white;
+        overflow: hidden;
+    }
+    
+    .avatar-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .avatar-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .avatar-actions a {
+        color: #3b82f6;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    
+    .avatar-actions a:hover {
+        text-decoration: underline;
+    }
+    
+    .section-title {
+        margin-bottom: 20px;
+        font-size: 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .logout-btn {
+        color: #dc3545;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .logout-btn:hover {
+        text-decoration: underline;
+    }
+    
+    .profile-form {
+        margin-bottom: 15px;
+    }
+    
+    .profile-form-username {
+        background-color: #333;
+        color: #fff;
+        border: 1px solid #444;
+        border-radius: 5px;
+        padding: 8px 12px;
+        width: 100%;
+        margin-bottom: 15px;
+    }
+    
+    .profile-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #3b82f6;
+        margin-bottom: 15px;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    
+    .profile-link:hover {
+        text-decoration: underline;
+    }
+    
+    .profile-link i {
+        font-size: 16px;
+    }
+    
+    .theme-selector {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .theme-option {
+        width: 60px;
+        height: 60px;
+        border-radius: 8px;
+        border: 2px solid transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+    }
+    
+    .theme-option.dark {
+        background-color: #121212;
+        color: white;
+    }
+    
+    .theme-option.light {
+        background-color: #f5f5f5;
+        color: #333;
+    }
+    
+    .theme-option.selected {
+        border-color: #3b82f6;
+    }
+    
+    .form-row {
+        margin-bottom: 15px;
+    }
+    
+    .form-label {
+        color: #999;
+        display: block;
+        margin-bottom: 5px;
+    }
+    
+    .form-control {
+        background-color: #333;
+        color: #fff;
+        border: 1px solid #444;
+        border-radius: 5px;
+        padding: 8px 12px;
+        width: 100%;
+    }
+    
+    .btn {
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        border: none;
+    }
+    
+    .btn-primary {
+        background-color: #3b82f6;
+        color: white;
+    }
+    
+    .btn-danger {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .bg-selector {
+        margin-top: 15px;
+    }
+    
+    .bg-images {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 10px;
+        margin-top: 15px;
+    }
+    
+    .bg-image {
+        height: 80px;
+        border-radius: 5px;
+        overflow: hidden;
+        cursor: pointer;
+        border: 2px solid transparent;
+    }
+    
+    .bg-image:hover {
+        border-color: #3b82f6;
+    }
+    
+    .bg-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .bg-image.selected {
+        border-color: #3b82f6;
+    }
+    
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+    }
+
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #555;
+        transition: .4s;
+        border-radius: 34px;
+    }
+
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+        background-color: #3b82f6;
+    }
+
+    input:checked + .toggle-slider:before {
+        transform: translateX(26px);
+    }
+    
+    .sidebar-option {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .language-selector {
+        background-color: #333;
+        color: #fff;
+        border: 1px solid #444;
+        border-radius: 5px;
+        padding: 8px 12px;
+    }
+    
+    /* Модальные окна */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+    }
+    
+    .modal-content {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #1e2333;
+        padding: 20px;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 400px;
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .modal-title {
+        font-size: 18px;
+        color: #fff;
+    }
+    
+    .close-modal {
+        background: none;
+        border: none;
+        color: #999;
+        font-size: 22px;
+        cursor: pointer;
+    }
+    
+    /* Медиа запросы */
+    @media (max-width: 768px) {
+        .container {
+            padding: 10px;
+        }
+        
+        .avatar-container {
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .theme-selector {
+            justify-content: center;
+        }
+        
+        .bg-images {
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        }
+    }
+</style>
+
+
+
+<div class="container mt-4">
+    <!-- Секция профиля -->
+    <div class="profile-section">
+        <div class="section-title">
+            <h2>Профиль</h2>
+            <a href="{{ url_for('auth.logout') }}" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Выход из аккаунта
+            </a>
+        </div>
+        
+        <div class="avatar-container">
+            <div class="avatar-image">
+                {% if current_user.avatar %}
+                    <img src="{{ current_user.avatar }}" alt="{{ current_user.username }}">
+                {% else %}
+                    {{ current_user.username[0]|upper }}
+                {% endif %}
+            </div>
+            
+            <div class="avatar-actions">
+                <a href="#" id="uploadAvatarBtn">Загрузить фото</a>
+                <a href="#" id="removeAvatarBtn">Удалить фото</a>
+                
+                <form id="uploadAvatarForm" action="{{ url_for('profile.upload_avatar') }}" method="POST" enctype="multipart/form-data" style="display: none;">
+                    <input type="file" name="avatar" id="avatarInput" accept="image/*">
+                </form>
+                
+                <form id="removeAvatarForm" action="{{ url_for('profile.remove_avatar') }}" method="POST" style="display: none;"></form>
+            </div>
+        </div>
+        
+        <div class="profile-form">
+            <input type="text" class="profile-form-username" value="{{ current_user.username }}" readonly>
+        </div>
+        
+        <a href="#" class="profile-link" id="changePasswordBtn">
+            <i class="fas fa-key"></i> Сменить пароль
+        </a>
+        
+        <a href="#" class="profile-link" id="changeEmailBtn">
+            <i class="fas fa-envelope"></i> Сменить e-mail
+        </a>
+        
+        <a href="#" class="profile-link" id="notificationSettingsBtn">
+            <i class="fas fa-bell"></i> Настройки оповещений
+        </a>
+        
+    </div>
+    
+    <!-- Настройки внешнего вида -->
+    <div class="profile-section">
+        <div class="section-title">
+            <h2>Внешний вид системы</h2>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-label">Выберите цветовую схему:</div>
+            <div class="theme-selector">
+                <div class="theme-option dark selected" data-theme="dark">
+                    <i class="fas fa-moon"></i>
+                </div>
+                <div class="theme-option light" data-theme="light">
+                    <i class="fas fa-sun"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-label">Выберите фон доски:</div>
+            <div class="bg-selector">
+                <a href="#" class="profile-link" id="uploadBackgroundBtn">
+                    <i class="fas fa-upload"></i> Загрузить свой фон
+                </a>
+                
+                <div class="bg-images">
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg1.jpg" alt="Background">
+                    </div>
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg2.jpg" alt="Background">
+                    </div>
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg3.jpg" alt="Background">
+                    </div>
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg4.jpg" alt="Background">
+                    </div>
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg5.jpg" alt="Background">
+                    </div>
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg6.jpg" alt="Background">
+                    </div>
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg7.jpg" alt="Background">
+                    </div>
+                    <div class="bg-image">
+                        <img src="/static/img/backgrounds/bg8.jpg" alt="Background">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Модальное окно смены пароля -->
+<div class="modal" id="changePasswordModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Сменить пароль</h3>
+            <button class="close-modal">&times;</button>
+        </div>
+        <form action="{{ url_for('profile.change_password') }}" method="POST">
+            <div class="form-row">
+                <label class="form-label">Текущий пароль</label>
+                <input type="password" name="current_password" class="form-control" required>
+            </div>
+            <div class="form-row">
+                <label class="form-label">Новый пароль</label>
+                <input type="password" name="new_password" class="form-control" required>
+            </div>
+            <div class="form-row">
+                <label class="form-label">Подтвердите новый пароль</label>
+                <input type="password" name="confirm_password" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Изменить пароль</button>
+        </form>
+    </div>
+</div>
+
+<!-- Модальное окно смены email -->
+<div class="modal" id="changeEmailModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Сменить e-mail</h3>
+            <button class="close-modal">&times;</button>
+        </div>
+        <form action="{{ url_for('profile.change_email') }}" method="POST">
+            <div class="form-row">
+                <label class="form-label">Новый e-mail</label>
+                <input type="email" name="email" class="form-control" value="{{ current_user.email or '' }}" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Изменить e-mail</button>
+        </form>
+    </div>
+</div>
+
+<!-- Модальное окно настроек оповещений -->
+<div class="modal" id="notificationSettingsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Настройки e-mail оповещений</h3>
+            <button class="close-modal">&times;</button>
+        </div>
+        <form action="{{ url_for('profile.notification_settings') }}" method="POST">
+            <div class="form-row">
+                <div class="sidebar-option">
+                    <span>Уведомления о новых сообщениях</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" name="message_notifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="sidebar-option">
+                    <span>Уведомления о задачах</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" name="task_notifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="sidebar-option">
+                    <span>Уведомления о встречах</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" name="meeting_notifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Загрузка аватара
+        const uploadAvatarBtn = document.getElementById('uploadAvatarBtn');
+        const avatarInput = document.getElementById('avatarInput');
+        const uploadAvatarForm = document.getElementById('uploadAvatarForm');
+        
+        uploadAvatarBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            avatarInput.click();
+        });
+        
+        avatarInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                uploadAvatarForm.submit();
+            }
+        });
+        
+        // Удаление аватара
+        const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+        const removeAvatarForm = document.getElementById('removeAvatarForm');
+        
+        removeAvatarBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (confirm('Вы уверены, что хотите удалить фото профиля?')) {
+                removeAvatarForm.submit();
+            }
+        });
+        
+        // Модальные окна
+        const modals = document.querySelectorAll('.modal');
+        const modalBtns = {
+            'changePasswordBtn': 'changePasswordModal',
+            'changeEmailBtn': 'changeEmailModal',
+            'notificationSettingsBtn': 'notificationSettingsModal'
+        };
+        
+        // Открытие модальных окон
+        Object.keys(modalBtns).forEach(btnId => {
+            const btn = document.getElementById(btnId);
+            const modalId = modalBtns[btnId];
+            const modal = document.getElementById(modalId);
+            
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                modal.style.display = 'block';
+            });
+        });
+        
+        // Закрытие модальных окон
+        document.querySelectorAll('.close-modal').forEach(closeBtn => {
+            closeBtn.addEventListener('click', function() {
+                const modal = this.closest('.modal');
+                modal.style.display = 'none';
+            });
+        });
+        
+        // Закрытие модальных окон при клике вне их области
+        window.addEventListener('click', function(e) {
+            modals.forEach(modal => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+        
+        // Выбор темы
+        const themeOptions = document.querySelectorAll('.theme-option');
+        themeOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                themeOptions.forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+                // В будущем, можно добавить логику для изменения темы
+            });
+        });
+        
+        // Выбор фона
+        const bgImages = document.querySelectorAll('.bg-image');
+        bgImages.forEach(bg => {
+            bg.addEventListener('click', function() {
+                bgImages.forEach(img => img.classList.remove('selected'));
+                this.classList.add('selected');
+                // В будущем, можно добавить логику для изменения фона
+            });
+        });
+    });
+</script>
+</body>
+</html>

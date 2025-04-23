@@ -27,7 +27,6 @@ def allowed_file(filename):
     ext = filename.rsplit('.', 1)[1].lower()
     return ext in ALLOWED_EXTENSIONS
 
-
 def get_file_type(filename):
     """Determine file type based on extension"""
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
@@ -53,7 +52,7 @@ def messenger_page():
     # Можно передавать lobby_id в шаблон для его использования в JavaScript
     lobby_id = request.args.get('lobby_id')
     
-    return render_template('chat.html', users=users, lobbies=lobbies, initial_lobby_id=lobby_id)
+    return render_template('chats/chat.html', users=users, lobbies=lobbies, initial_lobby_id=lobby_id)
 
 @chat_bp.route('/api/user/current')
 @login_required
@@ -78,9 +77,17 @@ def get_users():
 @chat_bp.route('/lobbies')
 @login_required
 def get_lobbies():
-    """Get all lobbies for the current user"""
-    lobbies = [lobby.to_dict() for lobby in current_user.lobbies]
-    return jsonify(lobbies)
+    """Get all non-archived lobbies for the current user"""
+    include_archived = request.args.get('include_archived', 'false').lower() == 'true'
+    
+    query = Lobby.query.filter(Lobby.users.contains(current_user))
+    
+    if not include_archived:
+        query = query.filter(Lobby.is_archived == False)
+    
+    lobbies = query.all()
+    
+    return jsonify([lobby.to_dict() for lobby in lobbies])
 
 @chat_bp.route('/create_lobby', methods=['POST'])
 @login_required
@@ -188,6 +195,79 @@ def get_lobby_messages(lobby_id):
                 }, room=f'user_{user.id}', namespace='/')
     
     return jsonify([message.to_dict() for message in messages])
+
+# Archive/unarchive lobby route
+@chat_bp.route('/lobby/<int:lobby_id>/archive', methods=['POST'])
+@login_required
+def toggle_archive_lobby(lobby_id):
+    """Archive or unarchive a lobby"""
+    lobby = Lobby.query.get_or_404(lobby_id)
+    
+    # Check if user is a member of this lobby
+    if current_user not in lobby.users:
+        return jsonify({'success': False, 'error': 'Unauthorized access to lobby'}), 403
+    
+    # Toggle archive status
+    lobby.is_archived = not lobby.is_archived
+    
+    if lobby.is_archived:
+        # Update archive info
+        lobby.archived_at = datetime.utcnow()
+        lobby.archived_by = current_user.id
+        message = "Lobby archived successfully"
+    else:
+        # Reset archive info
+        lobby.archived_at = None
+        lobby.archived_by = None
+        message = "Lobby unarchived successfully"
+    db.session.commit()
+    
+    return jsonify({
+        'success': True, 
+        'is_archived': lobby.is_archived,
+        'message': message,
+        'lobby': lobby.to_dict()
+    })
+
+# Delete lobby route
+@chat_bp.route('/lobby/<int:lobby_id>/delete', methods=['DELETE'])
+@login_required
+def delete_lobby(lobby_id):
+    """Delete a lobby and all its messages"""
+    lobby = Lobby.query.get_or_404(lobby_id)
+    
+    # Check if user is a member of this lobby
+    if current_user not in lobby.users:
+        return jsonify({'success': False, 'error': 'Unauthorized access to lobby'}), 403
+    
+    # Additional check for group chats - only creator or admin can delete
+    if lobby.is_group and lobby.created_by != current_user.id and not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Only the creator or an admin can delete group chats'}), 403
+    
+    try:
+        # Delete the lobby
+        db.session.delete(lobby)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Lobby deleted successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Get archived lobbies
+@chat_bp.route('/lobbies/archived')
+@login_required
+def get_archived_lobbies():
+    """Get all archived lobbies for the current user"""
+    archived_lobbies = Lobby.query.filter(
+        Lobby.users.contains(current_user),
+        Lobby.is_archived == True
+    ).all()
+    
+    return jsonify([lobby.to_dict() for lobby in archived_lobbies])
 
 @chat_bp.route('/upload', methods=['POST'])
 @login_required
@@ -323,9 +403,6 @@ def upload_file():
                                 notification_text = "📹 Video"
                             elif message_type == MessageType.FILE:
                                 notification_text = f"📎 File: {original_filename}"
-                            
-                            from routes.notifications import create_message_notification
-                            create_message_notification(user.id, current_user.id, lobby_id, notification_text)
                 except Exception as emit_error:
                     print(f"Socket.IO emit error: {str(emit_error)}")
                     socketio_success = False
@@ -374,7 +451,6 @@ def get_file_type(filename):
     else:
         print("File type: FILE")
         return MessageType.FILE
-
 
 @chat_bp.route('/upload_avatar', methods=['POST'])
 @login_required
@@ -593,12 +669,7 @@ def handle_send_message(data):
         for user in lobby.users:
             print(f"Emitting message to user {user.id}")
             emit('new_message', message_data, room=f'user_{user.id}')
-            
-            # Создаем уведомление для других пользователей
-            if user.id != current_user.id:
-                from routes.notifications import create_message_notification
-                create_message_notification(user.id, current_user.id, lobby_id, message_text)
-        
+
         print("Message sent successfully")
     except Exception as e:
         print(f"Error sending message: {str(e)}")

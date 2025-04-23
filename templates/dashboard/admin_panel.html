@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Управление пользователями</title>
+</head>
+<body>
+    {% include 'navbar/navbar.html' %}
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Основной контент -->
+            <div class="w-full pt-3">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h4 class="mb-0">Управление пользователями</h4>
+                        <p class="text-muted mb-0">Просмотр и управление учетными записями пользователей</p>
+                    </div>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newUserModal">
+                        <i class="fas fa-plus me-1"></i> Новый пользователь
+                    </button>
+                </div>
+                
+                <!-- Статистика -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="text-muted mb-1">Всего пользователей</p>
+                                        <h3 class="mb-0">{{ users|length }}</h3>
+                                    </div>
+                                    <div class="icon-bg rounded-circle d-flex align-items-center justify-content-center" style="background-color: #e3f2fd; width: 50px; height: 50px;">
+                                        <i class="fas fa-users text-primary"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="text-muted mb-1">Активных</p>
+                                        <h3 class="mb-0">{{ users|selectattr('active', 'equalto', true)|list|length }}</h3>
+                                    </div>
+                                    <div class="icon-bg rounded-circle d-flex align-items-center justify-content-center" style="background-color: #e8f5e9; width: 50px; height: 50px;">
+                                        <i class="fas fa-user-check text-success"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="text-muted mb-1">Администраторов</p>
+                                        <h3 class="mb-0">{{ users|selectattr('is_admin', 'equalto', true)|list|length }}</h3>
+                                    </div>
+                                    <div class="icon-bg rounded-circle d-flex align-items-center justify-content-center" style="background-color: #ffebee; width: 50px; height: 50px;">
+                                        <i class="fas fa-user-shield text-danger"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="text-muted mb-1">Ролей</p>
+                                        <h3 class="mb-0">{{ roles|length }}</h3>
+                                    </div>
+                                    <div class="icon-bg rounded-circle d-flex align-items-center justify-content-center" style="background-color: #fff8e1; width: 50px; height: 50px;">
+                                        <i class="fas fa-user-tag text-warning"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Таблица пользователей -->
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>Список пользователей</div>
+                        <div class="d-flex">
+                            <input type="text" class="form-control form-control-sm me-2" id="userSearch" placeholder="Поиск пользователя...">
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="filterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-filter me-1"></i> Фильтр
+                                </button>
+                                <ul class="dropdown-menu" aria-labelledby="filterDropdown">
+                                    <li><a class="dropdown-item" href="#" data-filter="all">Все пользователи</a></li>
+                                    <li><a class="dropdown-item" href="#" data-filter="active">Активные</a></li>
+                                    <li><a class="dropdown-item" href="#" data-filter="inactive">Неактивные</a></li>
+                                    <li><a class="dropdown-item" href="#" data-filter="admin">Администраторы</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Имя пользователя</th>
+                                        <th scope="col">Email</th>
+                                        <th scope="col">Роли</th>
+                                        <th scope="col">Статус</th>
+                                        <th scope="col" class="text-end">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="userTableBody">
+                                    {% for user in users %}
+                                    <tr data-status="{{ 'active' if user.active else 'inactive' }}" 
+                                        data-roles="{{ user.roles|map(attribute='name')|join(',') }}">
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <div class="{% if loop.index is divisibleby 5 %}bg-danger{% elif loop.index is divisibleby 4 %}bg-warning{% elif loop.index is divisibleby 3 %}bg-success{% elif loop.index is divisibleby 2 %}bg-info{% else %}bg-primary{% endif %} text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
+                                                    {{ user.username[0]|upper }}
+                                                </div>
+                                                <div>{{ user.username }}</div>
+                                            </div>
+                                        </td>
+                                        <td>{{ user.email or 'Не указан' }}</td>
+                                        <td>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                {% for role in user.roles %}
+                                                <span class="tag">{{ role.name }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="status-badge {{ 'status-active' if user.active else 'status-inactive' }}"></span>
+                                            {{ 'Активен' if user.active else 'Неактивен' }}
+                                        </td>
+                                        <td class="text-end">
+                                            <button type="button" class="icon-button me-1" title="Редактировать" 
+                                                    onclick="openEditModal({{ user.id }}, '{{ user.username }}', '{{ user.email }}', {{ user.active|lower }}, [{% for role in user.roles %}'{{ role.id }}'{% if not loop.last %},{% endif %}{% endfor %}])">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="icon-button me-1" title="{{ 'Блокировать' if user.active else 'Активировать' }}"
+                                                    onclick="toggleUserStatus({{ user.id }}, {{ 'true' if user.active else 'false' }})">
+                                                <i class="fas fa-{{ 'ban' if user.active else 'check' }}"></i>
+                                            </button>
+                                            <form action="{{ url_for('admin.reset_password', user_id=user.id) }}" method="post" class="d-inline me-1">
+                                                <button type="button" class="icon-button" title="Сбросить пароль"
+                                                        onclick="resetPassword(this)">
+                                                    <i class="fas fa-key"></i>
+                                                </button>
+                                            </form>
+                                            <form action="{{ url_for('admin.delete_user') }}" method="POST" class="d-inline">
+                                                <input type="hidden" name="user_id" value="{{ user.id }}">
+                                                <button type="button" class="icon-button text-danger" title="Удалить"
+                                                        onclick="confirmDelete(this)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>Показано <span id="shown-users">{{ users|length }}</span> из <span id="total-users">{{ users|length }}</span> пользователей</div>
+                            <nav aria-label="Page navigation example">
+                                <ul class="pagination pagination-sm mb-0">
+                                    <li class="page-item disabled">
+                                        <a class="page-link" href="#" aria-label="Previous">
+                                            <span aria-hidden="true">&laquo;</span>
+                                        </a>
+                                    </li>
+                                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                                    <li class="page-item"><a class="page-link" href="#">2</a></li>
+                                    <li class="page-item"><a class="page-link" href="#">3</a></li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="#" aria-label="Next">
+                                            <span aria-hidden="true">&raquo;</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Управление ролями и действия -->
+                <div class="row">
+                    <!-- Управление ролями -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>Управление ролями</div>
+                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newRoleModal">
+                                    <i class="fas fa-plus me-1"></i> Добавить роль
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Название</th>
+                                                <th scope="col">Описание</th>
+                                                <th scope="col">Пользователей</th>
+                                                <th scope="col" class="text-end">Действия</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for role in roles %}
+                                            <tr>
+                                                <td><span class="tag">{{ role.name }}</span></td>
+                                                <td>{{ role.description or 'Нет описания' }}</td>
+                                                <td>{{ role.users.count() }}</td>
+                                                <td class="text-end">
+                                                    <button type="button" class="icon-button me-1" title="Редактировать">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button type="button" class="icon-button" title="Удалить">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Последняя активность -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>Последние действия</div>
+                                <button class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-sync-alt me-1"></i> Обновить
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="list-container">
+                                    <div class="card-item">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="priority-tag priority-high">Важно</span>
+                                            <small class="text-muted">{{ now.strftime('%d.%m.%Y %H:%M') }}</small>
+                                        </div>
+                                        <p class="mb-1">Администратор <strong>{{ current_user.username }}</strong> просматривает панель администратора</p>
+                                    </div>
+                                    
+                                    {% if roles|length > 0 %}
+                                    <div class="card-item">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="priority-tag priority-medium">Средний</span>
+                                            <small class="text-muted">{{ now.strftime('%d.%m.%Y %H:%M') }}</small>
+                                        </div>
+                                        <p class="mb-1">В системе настроено <strong>{{ roles|length }}</strong> ролей пользователей</p>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if users|length > 0 %}
+                                    <div class="card-item">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="priority-tag priority-low">Обычный</span>
+                                            <small class="text-muted">{{ now.strftime('%d.%m.%Y %H:%M') }}</small>
+                                        </div>
+                                        <p class="mb-1">В системе зарегистрировано <strong>{{ users|length }}</strong> пользователей</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно редактирования пользователя -->
+    <div class="modal fade" id="editUserModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Редактирование пользователя</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="editUserForm" method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" id="editUserId" name="user_id">
+                        <div class="mb-3">
+                            <label for="editUsername" class="form-label">Имя пользователя</label>
+                            <input type="text" class="form-control" id="editUsername" name="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editEmail" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="editEmail" name="email">
+                        </div>
+                        <div class="mb-3">
+                            <label for="editPassword" class="form-label">Новый пароль (оставьте пустым, чтобы не менять)</label>
+                            <input type="password" class="form-control" id="editPassword" name="password">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editActive" name="active">
+                                <label class="form-check-label" for="editActive">Активен</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Роли</label>
+                            <div id="rolesContainer" class="row">
+                                {% for role in roles %}
+                                <div class="col-md-6 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input role-checkbox" type="checkbox" 
+                                            name="roles" value="{{ role.id }}" id="role{{ role.id }}">
+                                        <label class="form-check-label" for="role{{ role.id }}">
+                                            {{ role.name }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания нового пользователя -->
+    <div class="modal fade" id="newUserModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Новый пользователь</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('auth.register') }}" method="post">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Имя пользователя</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email">
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Пароль</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Роли</label>
+                            <div class="row">
+                                {% for role in roles %}
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="roles[]" value="{{ role.id }}" id="newUserRole{{ role.id }}">
+                                        <label class="form-check-label" for="newUserRole{{ role.id }}">
+                                            {{ role.name }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-plus-circle me-1"></i> Создать</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно для создания новой роли -->
+    <div class="modal fade" id="newRoleModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Новая роль</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('auth.create_role') }}" method="post">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="roleName" class="form-label">Название</label>
+                            <input type="text" class="form-control" id="roleName" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="roleDescription" class="form-label">Описание</label>
+                            <textarea class="form-control" id="roleDescription" name="description" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Создать</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript для управления пользователями -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Поиск пользователей
+        const userSearch = document.getElementById('userSearch');
+        const userTableBody = document.getElementById('userTableBody');
+        const userRows = userTableBody.querySelectorAll('tr');
+        const shownUsersEl = document.getElementById('shown-users');
+        const totalUsersEl = document.getElementById('total-users');
+        
+        // Текущий фильтр
+        let currentFilter = 'all';
+        
+        // Функция фильтрации
+        function filterUsers() {
+            const searchValue = userSearch.value.toLowerCase();
+            let visibleCount = 0;
+            
+            userRows.forEach(row => {
+                const username = row.querySelector('td:nth-child(1)').textContent.toLowerCase();
+                const email = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
+                const status = row.dataset.status;
+                const roles = row.dataset.roles.split(',');
+                
+                // Применяем фильтр
+                let showByFilter = false;
+                if (currentFilter === 'all') {
+                    showByFilter = true;
+                } else if (currentFilter === 'active' && status === 'active') {
+                    showByFilter = true;
+                } else if (currentFilter === 'inactive' && status === 'inactive') {
+                    showByFilter = true;
+                } else if (currentFilter === 'admin' && roles.includes('admin')) {
+                    showByFilter = true;
+                }
+                
+                // Применяем поиск
+                const matchesSearch = username.includes(searchValue) || email.includes(searchValue);
+                
+                if (showByFilter && matchesSearch) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Обновляем счетчик
+            shownUsersEl.textContent = visibleCount;
+        }
+        
+        // Слушатели событий
+        userSearch.addEventListener('input', filterUsers);
+        
+        // Фильтры
+        const filterLinks = document.querySelectorAll('[data-filter]');
+        filterLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                currentFilter = this.dataset.filter;
+                filterUsers();
+                
+                // Обновляем текст кнопки фильтра
+                const filterDropdown = document.getElementById('filterDropdown');
+                let filterText = 'Все пользователи';
+                if (currentFilter === 'active') filterText = 'Активные';
+                if (currentFilter === 'inactive') filterText = 'Неактивные';
+                if (currentFilter === 'admin') filterText = 'Администраторы';
+                
+                filterDropdown.innerHTML = `<i class="fas fa-filter me-1"></i> ${filterText}`;
+            });
+        });
+    });
+    document.getElementById('editUserForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const userId = formData.get('user_id');
+        
+        fetch(this.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Данные пользователя успешно обновлены');
+                window.location.reload();
+            } else {
+                alert(data.error || 'Произошла ошибка');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Произошла ошибка при обновлении данных');
+        });
+    });
+    function openEditModal(userId, username, email, isActive, userRoles) {
+        const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+        
+        // Заполняем форму данными пользователя
+        document.getElementById('editUserId').value = userId;
+        document.getElementById('editUsername').value = username;
+        document.getElementById('editEmail').value = email;
+        document.getElementById('editActive').checked = isActive;
+        
+        // Сбрасываем все чекбоксы ролей
+        document.querySelectorAll('.role-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        // Устанавливаем роли пользователя
+        userRoles.forEach(roleId => {
+            const checkbox = document.querySelector(`.role-checkbox[value="${roleId}"]`);
+            if (checkbox) checkbox.checked = true;
+        });
+        
+        // Настраиваем форму
+        const form = document.getElementById('editUserForm');
+        form.action = `/admin/users/${userId}/edit`;
+        
+        // Открываем модальное окно
+        modal.show();
+    }
+    // Подтверждение удаления
+    function confirmDelete(button) {
+        if (confirm('Вы уверены, что хотите удалить этого пользователя? Это действие нельзя отменить.')) {
+            const form = button.closest('form');
+            
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Пользователь успешно удален');
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Ошибка при удалении пользователя');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Произошла ошибка при удалении пользователя');
+            });
+        }
+    }
+    
+    // Сброс пароля
+    function resetPassword(button) {
+        const newPassword = prompt('Введите новый пароль для пользователя:');
+        if (newPassword && newPassword.length >= 6) {
+            const form = button.closest('form');
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'new_password';
+            input.value = newPassword;
+            form.appendChild(input);
+            form.submit();
+        } else if (newPassword !== null) {
+            alert('Пароль должен содержать не менее 6 символов');
+        }
+    }
+    
+    // Переключение статуса пользователя
+    function toggleUserStatus(userId, isActive) {
+        if (confirm(`Вы уверены, что хотите ${isActive ? 'заблокировать' : 'активировать'} этого пользователя?`)) {
+            fetch(`/admin/users/${userId}/toggle-active`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    alert(data.message);
+                    window.location.reload();
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    }
+    </script>
+    
+    <style>
+        :root {
+            --primary-bg: #f8f9fa;
+            --sidebar-bg: #f1f1fb;
+            --sidebar-active: #e9ecff;
+            --primary-color: #333;
+            --border-color: #e9ecef;
+            --highlight: #6c5ce7;
+            --tag-bg: #e3f2fd;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--primary-bg);
+            color: var(--primary-color);
+        }
+        
+        .sidebar {
+            background-color: var(--sidebar-bg);
+            min-height: calc(100vh - 56px);
+            border-right: 1px solid var(--border-color);
+        }
+        
+        .sidebar-item {
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin: 5px 0;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+        }
+        
+        .sidebar-item:hover, .sidebar-item.active {
+            background-color: var(--sidebar-active);
+        }
+        
+        .sidebar-item.active {
+            font-weight: 500;
+            color: var(--highlight);
+        }
+        
+        .sidebar-item i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .card {
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border-radius: 8px;
+        }
+        
+        .card-header {
+            background-color: white;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background-color: var(--highlight);
+            border-color: var(--highlight);
+        }
+        
+        .btn-outline-primary {
+            color: var(--highlight);
+            border-color: var(--highlight);
+        }
+        
+        .btn-outline-primary:hover {
+            background-color: var(--highlight);
+            border-color: var(--highlight);
+        }
+        
+        .tag {
+            background-color: var(--tag-bg);
+            color: var(--highlight);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+        
+        .table th {
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .status-badge {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        
+        .status-active {
+            background-color: #2ecc71;
+        }
+        
+        .status-inactive {
+            background-color: #e74c3c;
+        }
+        
+        .modal-content {
+            border-radius: 8px;
+            border: none;
+        }
+        
+        .modal-header {
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .modal-footer {
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .form-control, .form-select {
+            border-color: var(--border-color);
+        }
+        
+        .list-container {
+            border: 1px dashed #ccc;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .card-item {
+            background-color: white;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .priority-tag {
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+        
+        .priority-low {
+            background-color: #e3f2fd;
+            color: #2196f3;
+        }
+        
+        .priority-medium {
+            background-color: #fff3e0;
+            color: #ff9800;
+        }
+        
+        .priority-high {
+            background-color: #ffebee;
+            color: #f44336;
+        }
+        
+        .icon-button {
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            background: none;
+            border: none;
+        }
+        
+        .icon-button:hover {
+            background-color: #f1f1f1;
+            color: var(--highlight);
+        }
+        
+        .icon-button.text-danger:hover {
+            color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+    </style>
+</body>
+</html>

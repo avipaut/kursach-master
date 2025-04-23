@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, render_template, request, redirect, url_fo
 from flask_login import login_required, current_user
 from routes.models import PriorityLevel, User, db, Board, List, Card, Todo  # Make sure this import works with your project structure
 from functools import wraps
+from sqlalchemy import case
 
 kanban_bp = Blueprint('kanban', __name__)
 
@@ -32,7 +33,7 @@ def kanban_board():
     is_admin = False
     if hasattr(current_user, 'is_admin'):
         is_admin = current_user.is_admin
-    return render_template('kanban.html', username=current_user.username, is_admin=is_admin)
+    return render_template('kanban/kanban.html', username=current_user.username, is_admin=is_admin)
 @kanban_bp.route('kanban/api/current_user', methods=['GET'])
 @login_required
 def get_current_user():
@@ -135,8 +136,28 @@ def get_lists(board_id):
     if has_admin_only and not is_admin:
         return jsonify({"error": "You don't have permission to view this board's lists"}), 403
     
-    lists = List.query.filter_by(board_id=board_id).all()
-    return jsonify([{"id": l.id, "name": l.name} for l in lists])
+    # Получаем списки, сортируя их по полю position
+    lists = List.query.filter_by(board_id=board_id).order_by(List.position).all()
+    
+    # Формируем ответ с учетом новых полей color и text_color
+    result = []
+    for l in lists:
+        list_data = {
+            "id": l.id, 
+            "name": l.name, 
+            "position": getattr(l, 'position', 0)
+        }
+        
+        # Добавляем цвета, если они есть
+        if hasattr(l, 'color') and l.color:
+            list_data["color"] = l.color
+        
+        if hasattr(l, 'text_color') and l.text_color:
+            list_data["textColor"] = l.text_color
+        
+        result.append(list_data)
+    
+    return jsonify(result)
 
 @kanban_bp.route('/boards/<int:board_id>/lists', methods=['POST'])
 @login_required
@@ -147,11 +168,27 @@ def create_list(board_id):
         return jsonify({"error": "Board not found"}), 404
     
     data = request.json
-    new_list = List(name=data['name'], board_id=board_id)
+    
+    # Получаем максимальную текущую позицию списков в этой доске
+    max_position = db.session.query(db.func.max(List.position)).filter(List.board_id == board_id).scalar()
+    if max_position is None:
+        max_position = -1  # Если списков еще нет
+    
+    # Создаем новый список с позицией в конце
+    new_list = List(
+        name=data['name'], 
+        board_id=board_id,
+        position=max_position + 1
+    )
+    
     db.session.add(new_list)
     db.session.commit()
     
-    return jsonify({"id": new_list.id, "name": new_list.name}), 201
+    return jsonify({
+        "id": new_list.id, 
+        "name": new_list.name, 
+        "position": new_list.position
+    }), 201
 
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>', methods=['PUT'])
 @login_required
@@ -556,3 +593,203 @@ def move_card(board_id, source_list_id, card_id, target_list_id):
     db.session.commit()
 
     return jsonify({"id": card.id, "title": card.title, "description": card.description, "list_id": card.list_id}), 200
+
+@kanban_bp.route('/boards/<int:board_id>/lists/reorder', methods=['PUT'])
+@login_required
+@admin_required  # Только администраторы могут изменять порядок списков
+def reorder_lists(board_id):
+    """Изменение порядка списков на доске"""
+    
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    
+    # Получаем данные из запроса
+    data = request.json
+    if not data or 'list_ids' not in data:
+        return jsonify({"error": "Missing list_ids parameter"}), 400
+    
+    list_ids = data['list_ids']
+    
+    try:
+        # Проверяем, что все списки существуют и принадлежат этой доске
+        lists_to_update = List.query.filter(
+            List.id.in_(list_ids), 
+            List.board_id == board_id
+        ).all()
+        
+        if len(lists_to_update) != len(list_ids):
+            return jsonify({"error": "Some lists not found or do not belong to this board"}), 400
+        
+        # Добавим поле position в таблицу List, если его еще нет
+        if not hasattr(List, 'position'):
+            from sqlalchemy import Column, Integer
+            List.position = Column(Integer, default=0)
+            db.create_all()
+        
+        # Обновляем позиции списков согласно полученному порядку
+        for index, list_id in enumerate(list_ids):
+            list_obj = next((l for l in lists_to_update if l.id == list_id), None)
+            if list_obj:
+                list_obj.position = index
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Lists reordered successfully",
+            "lists": [list_obj.to_dict() for list_obj in lists_to_update]
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error reordering lists: {str(e)}")
+        return jsonify({"error": f"Failed to reorder lists: {str(e)}"}), 500
+    
+# Маршрут для установки цвета списка
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/color', methods=['PUT'])
+@login_required
+@admin_required  # Только администраторы могут изменять цвета списков
+def set_list_color(board_id, list_id):
+    """Установка цвета для списка"""
+    # Проверяем, существуют ли доска и список
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    
+    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
+    if not list_obj:
+        return jsonify({"error": "List not found or does not belong to this board"}), 404
+    
+    # Получаем данные из запроса
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    # Извлекаем цвета
+    color = data.get('color')
+    text_color = data.get('text_color', 'black')
+    
+    try:
+        # Добавляем поля color и text_color в модель List, если их нет
+        has_color = hasattr(list_obj, 'color')
+        has_text_color = hasattr(list_obj, 'text_color')
+        
+        if not has_color or not has_text_color:
+            from sqlalchemy import Column, String
+            if not has_color:
+                List.color = Column(String(50), nullable=True)
+            if not has_text_color:
+                List.text_color = Column(String(50), nullable=True)
+            
+            # Применяем изменения к схеме БД
+            try:
+                db.create_all()
+            except Exception as e:
+                print(f"Warning: Could not automatically create columns: {str(e)}")
+                # В случае ошибки создаем временные атрибуты (не сохранятся в БД)
+                if not has_color:
+                    setattr(List, 'color', None)
+                if not has_text_color:
+                    setattr(List, 'text_color', None)
+        
+        # Устанавливаем цвета
+        list_obj.color = color
+        list_obj.text_color = text_color
+        
+        # Сохраняем изменения
+        db.session.commit()
+        
+        # Обновляем метод to_dict для включения цветов
+        if not hasattr(List, '_original_to_dict'):
+            List._original_to_dict = List.to_dict
+            
+            def new_to_dict(self):
+                result = self._original_to_dict()
+                result['color'] = getattr(self, 'color', None)
+                result['text_color'] = getattr(self, 'text_color', None)
+                return result
+            
+            List.to_dict = new_to_dict
+        
+        return jsonify({
+            "success": True,
+            "message": "List color updated successfully",
+            "list": list_obj.to_dict()
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error setting list color: {str(e)}")
+        return jsonify({"error": f"Failed to set list color: {str(e)}"}), 500
+    
+# Маршрут для установки цвета карточки
+@kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/color', methods=['PUT'])
+@login_required
+def set_card_color(board_id, list_id, card_id):
+    """Установка цвета для карточки"""
+    # Проверяем существование доски
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    
+    # Проверяем существование списка
+    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
+    if not list_obj:
+        return jsonify({"error": "List not found or does not belong to this board"}), 404
+    
+    # Проверяем существование карточки
+    card = Card.query.filter_by(id=card_id, list_id=list_id).first()
+    if not card:
+        return jsonify({"error": "Card not found or does not belong to this list"}), 404
+    
+    # Получаем данные из запроса
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    color = data.get('color')  # Может быть None, если цвет сбрасывается
+    
+    try:
+        # Добавляем поле custom_color в модель Card, если его нет
+        has_custom_color = hasattr(card, 'custom_color')
+        
+        if not has_custom_color:
+            from sqlalchemy import Column, String
+            Card.custom_color = Column(String(50), nullable=True)
+            
+            # Применяем изменения к схеме БД
+            try:
+                db.create_all()
+            except Exception as e:
+                print(f"Warning: Could not automatically create column: {str(e)}")
+                # В случае ошибки создаем временный атрибут
+                setattr(Card, 'custom_color', None)
+        
+        # Устанавливаем цвет
+        card.custom_color = color
+        
+        # Сохраняем изменения
+        db.session.commit()
+        
+        # Обновляем метод to_dict для включения цвета
+        if not hasattr(Card, '_original_to_dict'):
+            Card._original_to_dict = Card.to_dict
+            
+            def new_to_dict(self):
+                result = self._original_to_dict()
+                result['custom_color'] = getattr(self, 'custom_color', None)
+                return result
+            
+            Card.to_dict = new_to_dict
+        
+        return jsonify({
+            "success": True,
+            "message": "Card color updated successfully",
+            "card": card.to_dict()
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error setting card color: {str(e)}")
+        return jsonify({"error": f"Failed to set card color: {str(e)}"}), 500

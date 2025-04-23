@@ -44,10 +44,11 @@ def user_management():
     users = User.query.all()
     roles = Role.query.all()
     
-    return render_template('admin/users.html', 
+    return render_template('dashboard/admin_panel.html',  # или ваш шаблон
                          users=users, 
                          roles=roles,
-                         current_user=current_user)
+                         current_user=current_user,
+                         now=datetime.now())  # Добавляем текущее время
 
 # API для управления пользователями
 @admin_bp.route('/api/users', methods=['GET'])
@@ -234,7 +235,7 @@ def role_api(role_id):
         return jsonify({'message': 'Роль удалена'})
 
 # Дополнительные маршруты
-@admin_bp.route('/api/users/<int:user_id>/toggle-active', methods=['POST'])
+@admin_bp.route('/users/<int:user_id>/toggle-active', methods=['POST'])
 @login_required
 def toggle_user_active(user_id):
     if not user_has_role(current_user, 'admin'):
@@ -246,13 +247,16 @@ def toggle_user_active(user_id):
     if user.id == current_user.id:
         return jsonify({'error': 'Нельзя деактивировать самого себя'}), 400
     
-    user.active = not user.active
-    db.session.commit()
-    
-    return jsonify({
-        'message': f'Пользователь {"активирован" if user.active else "деактивирован"}',
-        'active': user.active
-    })
+    try:
+        user.active = not user.active
+        db.session.commit()
+        return jsonify({
+            'message': f'Пользователь {"активирован" if user.active else "деактивирован"}',
+            'active': user.active
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/api/users/<int:user_id>/reset-password', methods=['POST'])
 @login_required
@@ -269,3 +273,80 @@ def reset_user_password(user_id):
     db.session.commit()
     
     return jsonify({'message': 'Пароль пользователя изменен'})
+
+@admin_bp.route('/users/delete', methods=['POST'])
+@login_required
+def delete_user():
+    if not user_has_role(current_user, 'admin'):
+        return jsonify({'success': False, 'error': 'Доступ запрещен'}), 403
+    
+    user_id = request.form.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Не указан ID пользователя'}), 400
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Пользователь не найден'}), 404
+    
+    # Нельзя удалить себя
+    if user.id == current_user.id:
+        return jsonify({'success': False, 'error': 'Нельзя удалить самого себя'}), 400
+    
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+@admin_bp.route('/users/<int:user_id>/reset_password', methods=['POST'])
+@login_required
+def reset_password(user_id):
+    if not user_has_role(current_user, 'admin'):
+        flash('Доступ запрещен: требуется роль администратора', 'danger')
+        return redirect(url_for('admin.user_management'))
+    
+    user = User.query.get_or_404(user_id)
+    new_password = request.form.get('new_password')
+    
+    if not new_password or len(new_password) < 6:
+        flash('Пароль должен содержать не менее 6 символов', 'danger')
+        return redirect(url_for('admin.user_management'))
+    
+    try:
+        user.password = generate_password_hash(new_password)
+        db.session.commit()
+        flash('Пароль пользователя успешно изменен', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка при изменении пароля: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin.user_management'))
+@admin_bp.route('/users/<int:user_id>/edit', methods=['POST'])
+@login_required
+def edit_user(user_id):
+    if not user_has_role(current_user, 'admin'):
+        return jsonify({'success': False, 'error': 'Доступ запрещен'}), 403
+    
+    user = User.query.get_or_404(user_id)
+    
+    try:
+        # Обновляем основные данные
+        user.username = request.form.get('username')
+        user.email = request.form.get('email')
+        user.active = request.form.get('active') == 'on'
+        
+        # Обновляем роли
+        selected_role_ids = request.form.getlist('roles')
+        selected_roles = Role.query.filter(Role.id.in_(selected_role_ids)).all()
+        user.roles = selected_roles
+        
+        # Если указан новый пароль
+        if request.form.get('password'):
+            user.password = generate_password_hash(request.form.get('password'))
+        
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500

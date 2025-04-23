@@ -466,16 +466,36 @@ a {
   text-align: center;
 }
 
-/* Enhanced Lists Container */
+/* Контейнер для списков с дополнительными стилями */
 .lists-container {
   display: flex;
   gap: 20px;
   overflow-x: auto;
   height: 100%;
   padding-bottom: 16px;
+  padding-top: 16px;
+  align-items: flex-start; /* Выравнивание списков по верхнему краю */
 }
 
-/* Enhanced List Styling */
+.lists-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.lists-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.lists-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.lists-container::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Определяем различные стили для перетаскивания списков и карточек */
 .list {
   background-color: #f0f2f5;
   border-radius: 8px;
@@ -483,9 +503,31 @@ a {
   min-width: 300px;
   display: flex;
   flex-direction: column;
+  height: fit-content;
   max-height: 100%;
   box-shadow: var(--shadow);
   border: 1px solid var(--border-color);
+  transition: box-shadow 0.3s, transform 0.2s, opacity 0.2s;
+  position: relative;
+}
+
+/* Делаем весь список НЕ перетаскиваемым по умолчанию */
+.list {
+  user-select: none;
+}
+
+/* Стили для списка при перетаскивании */
+.list.dragging-list {
+  opacity: 0.7;
+  transform: rotate(1deg) scale(1.01);
+  z-index: 100;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  pointer-events: none; /* Отключаем события для перетаскиваемого списка */
+}
+
+.list-cards.drag-over {
+  background-color: #e3f2fd;
+  border: 2px dashed #2196F3;
 }
 
 .list.highlight {
@@ -497,6 +539,7 @@ a {
   50% { box-shadow: 0 0 0 3px var(--primary-color); }
 }
 
+/* Стили для заголовка списка с курсором перетаскивания */
 .list-header {
   display: flex;
   justify-content: space-between;
@@ -506,6 +549,35 @@ a {
   border-bottom: 2px solid var(--border-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
+  cursor: grab; /* Указатель перетаскивания только на заголовке */
+}
+
+/* Изменение курсора при активном захвате заголовка списка */
+.list-header:active {
+  cursor: grabbing;
+}
+
+/* Стили для индикации зоны сброса списка */
+.list.list-drop-zone::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  background-color: var(--primary-color);
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  z-index: 10;
+  box-shadow: 0 0 10px var(--primary-color);
+}
+
+/* Индикатор для позиции "до" */
+.list.list-drop-zone[data-drop-position="before"]::before {
+  left: -8px;
+}
+
+/* Индикатор для позиции "после" */
+.list.list-drop-zone[data-drop-position="after"]::before {
+  right: -8px;
 }
 
 .list-title {
@@ -551,11 +623,24 @@ a {
   color: var(--danger-color);
 }
 
+/* Стили для карточек внутри списков */
 .list-cards {
   padding: 12px;
   overflow-y: auto;
   flex: 1;
   background-color: #f0f2f5;
+  min-height: 50px;
+  max-height: calc(100vh - 230px);
+  cursor: default; /* Обычный курсор для зоны карточек */
+}
+
+/* Явные стили для карточек при перетаскивании */
+.card.dragging {
+  opacity: 0.7;
+  transform: rotate(1deg) scale(1.01);
+  z-index: 99;
+  box-shadow: var(--shadow-md);
+  pointer-events: none; /* Отключаем события для перетаскиваемой карточки */
 }
 
 /* Enhanced Card Styling with Priority Colors */
@@ -568,6 +653,8 @@ a {
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 50px; /* Минимальная высота карточки */
+  height: fit-content; /* Адаптивная высота */
 }
 
 .card:hover {
@@ -657,6 +744,7 @@ a {
   margin-bottom: 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -777,6 +865,8 @@ a {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  border-radius: 0 0 8px 8px;
+  border-top: 1px solid var(--border-color);
 }
 
 .btn-add-card:hover {
@@ -1409,4 +1499,251 @@ select:focus {
 .btn-new-meeting:hover {
   background-color: #2196F3;
   color: white;
+}
+
+/* Стилизация заголовка списка с цветной полосой */
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  background-color: white;
+  border-bottom: 2px solid var(--border-color);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  cursor: grab; /* Указатель перетаскивания */
+}
+
+/* Стили для цветного индикатора */
+.list-color-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 8px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Стили для заголовка с цветным фоном */
+.list-title-container {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.list-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.list-title span {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+/* Стили для кнопок действий списков */
+.list-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-list-color,
+.btn-edit,
+.btn-delete {
+  padding: 4px;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.list-header:hover .list-actions button {
+  opacity: 1;
+}
+
+.btn-list-color:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-edit:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-delete:hover {
+  background-color: rgba(255, 0, 0, 0.2);
+}
+
+/* Модальное окно выбора цвета */
+.color-picker-container {
+  padding: 16px;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.color-option {
+  height: 40px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.color-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Адаптация для темного фона заголовков */
+.list-header[style*="background-color"] .list-title span {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Стили для карточек в цветных списках */
+.list[data-color] .card {
+  border-top: 4px solid;
+  border-top-color: attr(data-color);
+}
+
+/* Позиционирование элементов заголовка карточки */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Контейнер для кнопки меню и выпадающего списка */
+.card-menu-container {
+  position: relative;
+  margin-left: 4px;
+  display: none; /* По умолчанию скрыт, появляется при наведении */
+}
+
+/* При наведении на карточку показываем кнопку меню */
+.card:hover .card-menu-container {
+  display: block;
+}
+
+/* Стиль кнопки с тремя точками */
+.card-menu-button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.card-menu-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+
+/* Стили для выпадающего меню */
+.card-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 200px;
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  display: none;
+  overflow: hidden;
+}
+
+.card-menu-dropdown.active {
+  display: block;
+  animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Стили для пунктов меню */
+.card-menu-item {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.card-menu-item:hover {
+  background-color: var(--bg-color);
+}
+
+.card-menu-item i {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.card-menu-item span {
+  font-size: 14px;
+  flex: 1;
+}
+
+/* Стили для палитры цветов */
+.card-color-picker {
+  padding: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.card-color-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.card-color-option {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-color-option:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Стили для карточек с пользовательским цветом */
+.card[style*="background-color"] .card-description,
+.card[style*="background-color"] .card-info {
+  background-color: rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  padding: 6px;
+  margin: 0 -6px;
 }

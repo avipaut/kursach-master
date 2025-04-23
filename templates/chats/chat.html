@@ -166,7 +166,7 @@
     
     <!-- Include navbar with active page set to 'chat' -->
     {% set active_page = 'chat' %}
-    {% include 'navbar.html' %}
+    {% include 'navbar/navbar.html' %}
 
     <div class="app-container">
         <!-- Contacts List -->
@@ -175,6 +175,84 @@
                 <div class="search-container">
                     <i class="fas fa-search"></i>
                     <input type="text" class="search-input" placeholder="Search users..." id="searchContacts">
+                </div>
+            </div>
+            <!-- Archived Chats Section -->
+            <div class="archived-header collapsed" id="archivedHeader">
+                <div class="archived-title">
+                    <i class="fas fa-archive"></i>
+                    <span>Archived Chats</span>
+                    <span class="archived-count" id="archivedCount">0</span>
+                </div>
+                <div class="archived-toggle">
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+            </div>
+            <div class="archived-chats" id="archivedChats">
+                <!-- Archived chats will be populated here -->
+            </div>
+            <!-- Archive Drop Zone (initially hidden) -->
+            <div class="archive-drop-zone" id="archiveDropZone" style="display: none;">
+                <i class="fas fa-archive"></i>
+                <span>Drop to archive</span>
+            </div>
+
+            <!-- Confirmation Dialog Templates (initially hidden) -->
+            <div class="confirmation-dialog" id="archiveConfirmation" style="display: none;">
+                <div class="confirmation-content">
+                    <div class="confirmation-title">Archive Chat</div>
+                    <div class="confirmation-message">
+                        Are you sure you want to archive this chat? It will be moved to the archived chats section.
+                    </div>
+                    <div class="confirmation-buttons">
+                        <button class="btn-cancel" id="cancelArchive">Cancel</button>
+                        <button class="btn-confirm primary" id="confirmArchive">Archive</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="confirmation-dialog" id="unarchiveConfirmation" style="display: none;">
+                <div class="confirmation-content">
+                    <div class="confirmation-title">Unarchive Chat</div>
+                    <div class="confirmation-message">
+                        Do you want to restore this chat to your main chat list?
+                    </div>
+                    <div class="confirmation-buttons">
+                        <button class="btn-cancel" id="cancelUnarchive">Cancel</button>
+                        <button class="btn-confirm primary" id="confirmUnarchive">Unarchive</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="confirmation-dialog" id="deleteConfirmation" style="display: none;">
+                <div class="confirmation-content">
+                    <div class="confirmation-title">Delete Chat</div>
+                    <div class="confirmation-message">
+                        Are you sure you want to permanently delete this chat and all its messages? This action cannot be undone.
+                    </div>
+                    <div class="confirmation-buttons">
+                        <button class="btn-cancel" id="cancelDelete">Cancel</button>
+                        <button class="btn-confirm danger" id="confirmDelete">Delete</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Context Menu Template (will be cloned and positioned when needed) -->
+            <div class="chat-context-menu" id="contextMenuTemplate" style="display: none;">
+                <div class="chat-context-menu-item archive-option">
+                    <i class="fas fa-archive"></i>
+                    <span>Archive chat</span>
+                </div>
+                <div class="chat-context-menu-item unarchive-option" style="display: none;">
+                    <i class="fas fa-inbox"></i>
+                    <span>Unarchive chat</span>
+                </div>
+                <div class="chat-context-menu-item mute-option">
+                    <i class="fas fa-bell-slash"></i>
+                    <span>Mute notifications</span>
+                </div>
+                <div class="chat-context-menu-item danger delete-option">
+                    <i class="fas fa-trash-alt"></i>
+                    <span>Delete chat</span>
                 </div>
             </div>
             <div class="contacts-list" id="contactsList">

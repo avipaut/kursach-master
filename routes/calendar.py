@@ -28,7 +28,7 @@ def admin_required(f):
 @calendar_bp.route('/')
 @login_required
 def calendar_page():
-    return render_template('calendar.html')
+    return render_template('calendar_zoom/calendar.html')
 # Добавьте этот эндпоинт в calendar_routes.py
 
 # Исправленный эндпоинт users для calendar_routes.py
@@ -210,7 +210,7 @@ def get_all_recordings():
 @calendar_bp.route('/recordings-archive')
 @login_required
 def recordings_archive():
-    return render_template('recordings.html')
+    return render_template('calendar_zoom/recordings.html')
 
 # Update an event
 @calendar_bp.route('/event/<event_id>', methods=['PUT'])

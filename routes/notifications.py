@@ -17,7 +17,7 @@ def notifications_page():
         notification.read = True
     db.session.commit()
 
-    return render_template('notifications.html', notifications=notifications)
+    return render_template('navbar/notifications.html', notifications=notifications)
 
 @notifications_bp.route('/get_unread_count')
 @login_required
@@ -96,8 +96,6 @@ def notify_user(user_id, message, category='info', link=None):
         category: One of 'info', 'success', 'warning', 'danger'
         link: Optional URL to link to from notification
     """
-    from .models import db, Notification
-
     notification = Notification(
         user_id=user_id,
         message=message,
@@ -107,6 +105,13 @@ def notify_user(user_id, message, category='info', link=None):
     
     db.session.add(notification)
     db.session.commit()
+    
+    # Отправляем уведомление через WebSocket (если используется)
+    from app import socketio
+    socketio.emit('new_notification', {
+        'user_id': user_id,
+        'count': Notification.query.filter_by(user_id=user_id, read=False).count()
+    }, namespace='/notifications')
 
 def create_message_notification(recipient_id, sender_id, lobby_id, message_text):
     """

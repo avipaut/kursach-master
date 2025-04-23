@@ -2,7 +2,7 @@
 
 /* Базовые стили для навигационной панели */
 :root {
-  --primary-color: #f54b64;
+  --primary-color: #c71320;
   --secondary-color: #f0f2f5;
   --text-color: #1a1a1a;
   --text-secondary: #65676b;
@@ -135,6 +135,46 @@
   cursor: pointer;
   padding: 5px;
 }
+
+/* НОВЫЕ СТИЛИ ДЛЯ АВАТАРА ПОЛЬЗОВАТЕЛЯ */
+.user-profile-container {
+  margin: 0 10px;
+}
+
+.user-avatar-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.user-avatar-btn:hover {
+  transform: scale(1.05);
+}
+
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-color);
+}
+
+.user-avatar-placeholder {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background-color: #f0ad4e;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
+  border: 2px solid var(--primary-color);
+}
+/* КОНЕЦ НОВЫХ СТИЛЕЙ ДЛЯ АВАТАРА */
 
 /* Адаптивные стили для навигационной панели */
 @media (max-width: 992px) {

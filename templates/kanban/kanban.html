@@ -5,115 +5,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kanban Board</title>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
+  
+  <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome for icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
-  <style>
-    /* Modified Navbar Styles */
-    :root {
-      /* Color variables */
-      --primary-color: #C71320;
-      --primary-hover: #4338ca;
-      --danger-color: #ef4444;
-      --danger-hover: #dc2626;
-      --success-color: #10b981;
-      --success-hover: #059669;
-      --bg-color: #f9fafb;
-      --card-bg: #ffffff;
-      --border-color: #e5e7eb;
-      --text-primary: #111827;
-      --text-secondary: #4b5563;
-      --text-muted: #6b7280;
-    }
-
-    .navbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      height: 64px;
-      padding: 0 16px;
-      background-color: white;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .navbar-left {
-      display: flex;
-      align-items: center;
-    }
-
-    .navbar-right {
-      display: flex;
-      align-items: center;
-    }
-
-    .logo-group {
-      display: flex;
-      align-items: center;
-      margin-right: 36px;  /* Add space after logo */
-    }
-
-    .app-logo {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: var(--primary-color);
-      font-weight: 600;
-      font-size: 24px;  /* Larger font size */
-    }
-
-    .app-logo i {
-      font-size: 28px;  /* Larger icon */
-    }
-
-    .main-nav {
-      display: flex;
-      gap: 24px;
-    }
-
-    .nav-link {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--text-secondary);
-      transition: all 0.2s;
-      padding: 6px 0;
-      position: relative;
-    }
-
-    .nav-link::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 0;
-      height: 2px;
-      background-color: var(--primary-color);
-      transition: width 0.2s;
-    }
-
-    .nav-link:hover {
-      color: var(--text-primary);
-    }
-
-    .nav-link:hover::after {
-      width: 100%;
-    }
-
-    .nav-link.active {
-      color: var(--primary-color);
-    }
-
-    .nav-link.active::after {
-      width: 100%;
-    }
-  </style>
 </head>
 
 <body>
-    {% include 'navbar.html' %}
-  </header>
+  <!-- Include navbar with active page set to 'kanban' -->
+  {% set active_page = 'kanban' %}
+  {% include 'navbar/navbar.html' %}
 
   <div class="app-container">
     <!-- Sidebar -->
@@ -143,6 +48,10 @@
       <div id="boardActions" class="board-actions" style="display: none;">
         <h1 id="activeBoardTitle">Kanban Board</h1>
         <div class="board-controls">
+          <a href="{{ url_for('reports.dashboard') }}" class="btn btn-info">
+            <i class="fas fa-tachometer-alt"></i>
+            <span>Дашборд</span>
+          </a>
           <button id="editBoardBtn" class="btn btn-edit">
             <i class="fas fa-edit"></i>
             <span>Edit Board</span>
@@ -156,6 +65,10 @@
       
       <div id="selectBoardMessage" class="select-board-message">
         <p>Select a board or create a new one</p>
+        <a href="{{ url_for('reports.dashboard') }}" class="btn btn-info mt-3">
+          <i class="fas fa-tachometer-alt"></i>
+          <span>Перейти на дашборд</span>
+        </a>
       </div>
       
       <div id="listsContainer" class="lists-container" style="display: none;">
@@ -374,7 +287,7 @@
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
   
-  <!-- Bootstrap Bundle с Popper -->
+  <!-- Bootstrap Bundle with Popper -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="{{ url_for('static', filename='js/kanban.js') }}"></script>
 </body>
