@@ -82,7 +82,8 @@
     </style>
 </head>
 <body class="min-h-screen bg-gray-50 flex flex-col">
-    {% include 'navbar/navbar.html' %}
+    {% set active_page = 'zoom' %}
+    {% include 'navbar.html' %}
 
     <!-- Page Content Container -->
     <div class="flex-1 flex flex-col overflow-hidden" id="page-content">

@@ -63,17 +63,7 @@
                                 <div class="d-flex justify-content-between">
                                     <div>
                                         <p class="text-muted mb-1">Администраторов</p>
-                                        <h3 class="mb-0">
-                                            {% set admin_count = 0 %}
-                                            {% for user in users %}
-                                                {% for role in user.roles %}
-                                                    {% if role.name == 'admin' %}
-                                                        {% set admin_count = admin_count + 1 %}
-                                                    {% endif %}
-                                                {% endfor %}
-                                            {% endfor %}
-                                            {{ admin_count }}
-                                        </h3>
+                                        <h3 class="mb-0">{{ users|selectattr('is_admin', 'equalto', true)|list|length }}</h3>
                                     </div>
                                     <div class="icon-bg rounded-circle d-flex align-items-center justify-content-center" style="background-color: #ffebee; width: 50px; height: 50px;">
                                         <i class="fas fa-user-shield text-danger"></i>
@@ -430,7 +420,6 @@
     </div>
     
     <!-- JavaScript для управления пользователями -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Поиск пользователей

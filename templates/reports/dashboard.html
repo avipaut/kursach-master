@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM System - Дашборд</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+       :root {
+          /* Color variables */
+          --primary-color: #C71320;
+          --primary-hover: #4338ca;
+          --danger-color: #ef4444;
+          --danger-hover: #dc2626;
+          --success-color: #10b981;
+          --success-hover: #059669;
+          --bg-color: #f4f6f9;
+          --card-bg: #ffffff;
+          --border-color: #e5e7eb;
+          --text-primary: #111827;
+          --text-secondary: #4b5563;
+          --text-muted: #6b7280;
+        }
+
+        /* Base styling */
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        a {
+          text-decoration: none;
+          color: inherit;
+        }
+
+        /* Modified Navbar Styles */
+        .navbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          height: 64px;
+          padding: 0 16px;
+          background-color: white;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .navbar-left {
+          display: flex;
+          align-items: center;
+        }
+
+        .navbar-right {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .logo-group {
+          display: flex;
+          align-items: center;
+          margin-right: 36px;  /* Add space after logo */
+        }
+
+        .app-logo {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          color: var(--primary-color);
+          font-weight: 600;
+          font-size: 24px;  /* Larger font size */
+        }
+
+        .app-logo i {
+          font-size: 28px;  /* Larger icon */
+        }
+
+        .main-nav {
+          display: flex;
+          gap: 24px;
+        }
+
+        .nav-link {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--text-secondary);
+          transition: all 0.2s;
+          padding: 6px 0;
+          position: relative;
+        }
+
+        .nav-link::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 0;
+          height: 2px;
+          background-color: var(--primary-color);
+          transition: width 0.2s;
+        }
+
+        .nav-link:hover {
+          color: var(--text-primary);
+        }
+
+        .nav-link:hover::after {
+          width: 100%;
+        }
+
+        .nav-link.active {
+          color: var(--primary-color);
+        }
+
+        .nav-link.active::after {
+          width: 100%;
+        }
+
+        /* Dashboard specific styles */
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .stat-icon {
+            font-size: 24px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        
+        .bg-primary-light {
+            background-color: rgba(199, 19, 32, 0.1);
+            color: var(--primary-color);
+        }
+        
+        .bg-success-light {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+        
+        .bg-warning-light {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+        
+        .bg-info-light {
+            background-color: rgba(14, 165, 233, 0.1);
+            color: #0ea5e9;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            margin-bottom: 30px;
+        }
+        
+        .due-date-card {
+            border-left: 4px solid;
+            padding: 15px;
+            margin-bottom: 10px;
+            background-color: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .border-danger {
+            border-color: var(--danger-color);
+        }
+        
+        .border-warning {
+            border-color: #f59e0b;
+        }
+        
+        .border-info {
+            border-color: #0ea5e9;
+        }
+        
+        .report-options {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        /* Добавленные стили для модального окна и уведомлений */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        
+        .custom-toast {
+            min-width: 250px;
+        }
+        
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .completion-progress {
+            height: 8px;
+            margin-top: 5px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    {% set active_page = 'reports' %}
+    {% include 'navbar/navbar.html' %}
+    
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-tachometer-alt me-2"></i> Дашборд</h2>
+            <div>
+                <a href="{{ url_for('reports.view_reports') }}" class="btn btn-outline-primary me-2">
+                    <i class="fas fa-chart-bar me-1"></i> Отчеты
+                </a>
+                <a href="{{ url_for('reports.export_kanban_report') }}" class="btn btn-success">
+                    <i class="fas fa-file-excel me-1"></i> Экспорт Kanban отчета
+                </a>
+            </div>
+        </div>
+        
+        <!-- Stats Overview -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-icon bg-primary-light">
+                        <i class="fas fa-tasks"></i>
+                    </div>
+                    <h6 class="text-muted">Всего задач</h6>
+                    <h3>{{ stats.total_cards }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-icon bg-success-light">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h6 class="text-muted">Выполненных задач</h6>
+                    <h3>{{ stats.completed_cards }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-icon bg-warning-light">
+                        <i class="fas fa-clipboard-list"></i>
+                    </div>
+                    <h6 class="text-muted">В процессе</h6>
+                    <h3>{{ stats.pending_cards }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-icon bg-info-light">
+                        <i class="fas fa-columns"></i>
+                    </div>
+                    <h6 class="text-muted">Количество досок</h6>
+                    <h3>{{ stats.total_boards }}</h3>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title">Задачи по статусу</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="tasksStatusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title">Задачи по приоритету</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="tasksPriorityChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title">Задачи по исполнителям</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="tasksUserChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title">Сроки выполнения</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="dueDatesContainer">
+                            <div class="due-date-card border-danger">
+                                <h6 class="mb-1">Просрочено</h6>
+                                <span class="badge bg-danger">0</span>
+                            </div>
+                            <div class="due-date-card border-warning">
+                                <h6 class="mb-1">На сегодня</h6>
+                                <span class="badge bg-warning text-dark">0</span>
+                            </div>
+                            <div class="due-date-card border-info">
+                                <h6 class="mb-1">На этой неделе</h6>
+                                <span class="badge bg-info">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Generate Reports Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Сгенерировать отчет</h5>
+            </div>
+            <div class="card-body">
+                <div class="report-options">
+                    <form id="reportForm">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Тип отчета</label>
+                                <select class="form-select" id="reportType" name="report_type">
+                                    <option value="default">Общий отчет</option>
+                                    <option value="user_productivity">Продуктивность пользователей</option>
+                                    <option value="tasks">Статистика по задачам</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Период</label>
+                                <select class="form-select" id="dateRange" name="date_range">
+                                    <option value="all">Все время</option>
+                                    <option value="week">Последняя неделя</option>
+                                    <option value="month">Последний месяц</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Пользователь</label>
+                                <select class="form-select" id="userId" name="user_id">
+                                    <option value="">Все пользователи</option>
+                                    {% for user, tasks in stats.user_tasks.items() %}
+                                        <option value="{{ user }}">{{ user }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <button type="button" id="generateReportBtn" class="btn btn-primary">
+                            <i class="fas fa-file-pdf me-1"></i> Сгенерировать PDF отчет
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>Быстрые отчеты</h6>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <a href="{{ url_for('reports.user_productivity') }}" class="btn btn-outline-primary report-type-btn">
+                                <i class="fas fa-users me-2"></i> Продуктивность пользователей
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('reports.task_statistics') }}" class="btn btn-outline-primary report-type-btn">
+                                <i class="fas fa-chart-pie me-2"></i> Статистика по задачам
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('reports.export_kanban_report') }}" class="btn btn-outline-primary report-type-btn">
+                                <i class="fas fa-file-excel me-2"></i> Полный Kanban отчет
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Completion Rate Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Процент выполнения задач</h5>
+            </div>
+            <div class="card-body">
+                <div class="progress completion-progress">
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {{ stats.completion_rate }}%;" 
+                         aria-valuenow="{{ stats.completion_rate }}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">{{ stats.completion_rate|round(1) }}%</div>
+                </div>
+                
+                <h6>Топ исполнителей</h6>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Пользователь</th>
+                                <th>Завершено задач</th>
+                                <th>Всего задач</th>
+                                <th>Процент выполнения</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for username, user_stats in stats.user_tasks.items() %}
+                                <tr>
+                                    <td>{{ username }}</td>
+                                    <td>{{ user_stats.completed }}</td>
+                                    <td>{{ user_stats.total }}</td>
+                                    <td>
+                                        <div class="progress">
+                                            <div class="progress-bar" role="progressbar" 
+                                                style="width: {{ user_stats.completion_rate }}%;" 
+                                                aria-valuenow="{{ user_stats.completion_rate }}" 
+                                                aria-valuemin="0" 
+                                                aria-valuemax="100">{{ user_stats.completion_rate|round(1) }}%</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно загрузки отчета -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center p-4">
+                    <div class="loader"></div>
+                    <h5 class="mt-3">Генерация отчета...</h5>
+                    <p class="text-muted">Пожалуйста, подождите. Это может занять несколько секунд.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast контейнер для уведомлений -->
+    <div class="toast-container">
+        <div class="toast custom-toast" role="alert" aria-live="assertive" aria-atomic="true" id="reportToast">
+            <div class="toast-header">
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <strong class="me-auto">Отчет готов</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                Отчет успешно сгенерирован и готов к загрузке.
+                <div class="mt-2">
+                    <a href="#" id="downloadReportLink" class="btn btn-sm btn-primary">Скачать</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Загрузка данных для графиков
+            fetchChartData('/reports/charts/tasks-by-status', tasksStatusChartInit);
+            fetchChartData('/reports/charts/tasks-by-priority', tasksPriorityChartInit);
+            fetchChartData('/reports/charts/tasks-by-user', tasksUserChartInit);
+            fetchDueDates();
+            
+            // Обработчик для генерации отчета
+            document.getElementById('generateReportBtn').addEventListener('click', function() {
+                const reportType = document.getElementById('reportType').value;
+                const dateRange = document.getElementById('dateRange').value;
+                const userId = document.getElementById('userId').value;
+
+                if (!reportType) {
+                    alert('Пожалуйста, выберите тип отчета');
+                        return;
+                    }
+    
+                generatePdfReport(reportType, dateRange, userId);
+            });
+        });
+        
+        function fetchChartData(endpoint, callback) {
+            fetch(endpoint)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json()
+                })
+                .then(data => callback(data))
+                .catch(error => console.error('Error fetching chart data:', error));
+        }
+        
+        function fetchDueDates() {
+            fetch('/reports/api/tasks/due-dates')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json()
+                })
+                .then(data => {
+                    // Update counters
+                    const dueDatesContainer = document.getElementById('dueDatesContainer');
+                    const badges = dueDatesContainer.querySelectorAll('.badge');
+                    
+                    badges[0].textContent = data.overdue;
+                    badges[1].textContent = data.due_today;
+                    badges[2].textContent = data.due_this_week;
+                })
+                .catch(error => console.error('Error fetching due dates:', error));
+        }
+        
+        function tasksStatusChartInit(data) {
+            const ctx = document.getElementById('tasksStatusChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.datasets[0].data,
+                        backgroundColor: data.datasets[0].backgroundColor,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        function tasksPriorityChartInit(data) {
+            const ctx = document.getElementById('tasksPriorityChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.datasets[0].data,
+                        backgroundColor: data.datasets[0].backgroundColor, // Цвета берутся из данных
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        function tasksUserChartInit(data) {
+            const ctx = document.getElementById('tasksUserChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: data.datasets[0].label,
+                            data: data.datasets[0].data,
+                            backgroundColor: data.datasets[0].backgroundColor,
+                            borderWidth: 1
+                        },
+                        {
+                            label: data.datasets[1].label,
+                            data: data.datasets[1].data,
+                            backgroundColor: data.datasets[1].backgroundColor,
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        function generatePdfReport(reportType, dateRange, userId) {
+            // Показываем модальное окно загрузки
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+            loadingModal.show();
+            
+            // Отправляем запрос на генерацию отчета
+            fetch('/reports/generate-pdf-report', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    report_type: reportType,
+                    date_range: dateRange,
+                    user_id: userId
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Скрываем модальное окно загрузки
+                loadingModal.hide();
+                
+                if (data.success) {
+                    // Обновляем ссылку для скачивания
+                    document.getElementById('downloadReportLink').href = data.download_url;
+                    
+                    // Показываем уведомление
+                    const toast = new bootstrap.Toast(document.getElementById('reportToast'));
+                    toast.show();
+                } else {
+                    alert('Ошибка при генерации отчета: ' + data.message);
+                }
+            })
+            .catch(error => {
+                loadingModal.hide();
+                console.error('Error generating report:', error);
+                alert('Произошла ошибка при генерации отчета. Пожалуйста, попробуйте еще раз.');
+            });
+        }
+        
+        // Функция для обновления данных дашборда
+        function refreshDashboard() {
+            fetchChartData('/reports/charts/tasks-by-status', tasksStatusChartInit);
+            fetchChartData('/reports/charts/tasks-by-priority', tasksPriorityChartInit);
+            fetchChartData('/reports/charts/tasks-by-user', tasksUserChartInit);
+            fetchDueDates();
+            
+            // Также можно добавить обновление других данных дашборда
+            fetch('/reports/dashboard/stats')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Обновление статистики
+                    document.querySelector('.stat-card:nth-child(1) h3').textContent = data.total_cards;
+                    document.querySelector('.stat-card:nth-child(2) h3').textContent = data.completed_cards;
+                    document.querySelector('.stat-card:nth-child(3) h3').textContent = data.pending_cards;
+                    document.querySelector('.stat-card:nth-child(4) h3').textContent = data.total_boards;
+                    
+                    // Обновление прогресс-бара
+                    const progressBar = document.querySelector('.completion-progress .progress-bar');
+                    progressBar.style.width = data.completion_rate + '%';
+                    progressBar.textContent = data.completion_rate.toFixed(1) + '%';
+                    progressBar.setAttribute('aria-valuenow', data.completion_rate);
+                })
+                .catch(error => console.error('Error fetching dashboard stats:', error));
+        }
+        
+        // Автообновление дашборда каждые 5 минут
+        setInterval(refreshDashboard, 5 * 60 * 1000);
+    </script>
+</body>
+</html>

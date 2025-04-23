@@ -21,6 +21,8 @@ from routes.kanban import kanban_bp  # Импортируем Kanban Blueprint
 from routes.trash import trash_bp
 from routes.notifications import notifications_bp, add_notification
 from routes.admin_panel import admin_bp
+from routes.profile import profile_bp  # Импортируем Profile Blueprint
+
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
@@ -128,11 +130,12 @@ app.register_blueprint(chat_bp, url_prefix='/chat')
 app.register_blueprint(calendar_bp, url_prefix='/calendar')
 app.register_blueprint(reports_bp, url_prefix='/reports')
 app.register_blueprint(kpi_bp, url_prefix='/kpi')
-app.register_blueprint(auth_bp, url_prefix='/auth')  # Без url_prefix
-app.register_blueprint(kanban_bp, url_prefix='/kanban')  # Без url_prefix
+app.register_blueprint(auth_bp, url_prefix='/auth')  # Путь должен быть /auth, а не пустым
+app.register_blueprint(kanban_bp, url_prefix='/kanban')
 app.register_blueprint(trash_bp, url_prefix='/trash')
 app.register_blueprint(notifications_bp, url_prefix='/notifications')
-app.register_blueprint(admin_bp, url_prefix='/admin')
+app.register_blueprint(admin_bp, url_prefix='/admin')  # Важно: уточняем правильный префикс
+app.register_blueprint(profile_bp)  # Регистрируем blueprint профиля без префикса
 
 # Главный маршрут
 @app.route('/')
@@ -190,6 +193,10 @@ with app.app_context():
 
 UPLOAD_FOLDER = "uploaded_documents"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Создаем директорию для аватаров
+AVATAR_FOLDER = os.path.join(app.static_folder, 'uploads', 'avatars')
+os.makedirs(AVATAR_FOLDER, exist_ok=True)
 
 with app.app_context():
     admin = User.query.filter_by(username='admin').first()

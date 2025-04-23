@@ -1,12 +1,16 @@
-from flask import Blueprint, abort, request, render_template, jsonify, redirect, url_for
+from flask import Blueprint, request, render_template, jsonify
 from flask_login import current_user, login_required
-from routes.models import KPITemplateHistory, db, KPI, User
+from routes.models import db, KPI, User, KPITemplate
 import logging
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Dict, Any
 import re
 import json
-
+import ast
+import operator
+import math
+from datetime import datetime
+from .notifications import notify_user
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
@@ -17,9 +21,7 @@ logger.addHandler(handler)
 
 kpi_bp = Blueprint('kpi', __name__)
 
-import ast
-import operator
-import math
+DEFAULT_COLUMNS = ["Название", "Значение", "Цель", "Прогресс"]
 
 # Поддерживаемые операции
 SAFE_OPERATORS = {
@@ -86,10 +88,7 @@ def evaluate_formula(formula: str, row_data: dict, column_names: list = None) ->
         column_names = list(row_data.keys())
     
     try:
-        # Подготовка переменных
         variables = {}
-        
-        # Добавляем значения из строки
         for col_name, value in row_data.items():
             safe_name = col_name.lower().replace(' ', '_')
             try:
@@ -97,23 +96,18 @@ def evaluate_formula(formula: str, row_data: dict, column_names: list = None) ->
             except (ValueError, TypeError):
                 variables[safe_name] = 0.0
         
-        # Добавляем математические константы
         variables.update({
             'pi': math.pi,
             'e': math.e
         })
         
-        # Заменяем ссылки на столбцы [Column] на переменные column
         normalized_formula = formula
         for col_name in column_names:
             safe_name = col_name.lower().replace(' ', '_')
             pattern = r'\[' + re.escape(col_name) + r'\]'
             normalized_formula = re.sub(pattern, safe_name, normalized_formula)
         
-        # Вычисляем результат
         result = safe_eval(normalized_formula, variables)
-        
-        # Форматируем результат
         if isinstance(result, (int, float)):
             return str(round(result, 4)).rstrip('0').rstrip('.') if '.' in str(result) else str(result)
         return str(result)
@@ -122,172 +116,174 @@ def evaluate_formula(formula: str, row_data: dict, column_names: list = None) ->
         logger.error(f"Formula error: {e} in formula '{formula}'")
         return f"#ERROR: {str(e)}"
 
-
-
-
-@kpi_bp.route('/validate_formula', methods=['POST'])
-@login_required
-def validate_formula():
+def validate_formula(formula: str, column_names: list) -> Dict[str, Any]:
     """Validate formula syntax."""
+    if not formula:
+        return {"valid": False, "errors": ["No formula provided"]}
+    
     try:
-        data = request.get_json()
-        formula = data.get('formula')
+        ast.parse(formula, mode='eval')
+        used_columns = re.findall(r'\[([^\]]+)\]', formula)
+        unknown_columns = [col for col in used_columns if col not in column_names]
         
-        if not formula:
-            return jsonify({"valid": False, "errors": ["No formula provided"]})
+        if unknown_columns:
+            return {
+                "valid": False,
+                "errors": [f"Unknown columns: {', '.join(unknown_columns)}"]
+            }
         
-        # Get column names for current user
-        columns_query = db.session.query(KPI.column_name).filter(
-            KPI.user_id == current_user.id
-        ).distinct()
-        column_names = [col[0] for col in columns_query.all()]
-        
-        validation = validate_formula(formula, column_names)
-        return jsonify(validation)
-        
+        return {"valid": True, "errors": []}
+    except SyntaxError as e:
+        return {"valid": False, "errors": [f"Syntax error: {str(e)}"]}
     except Exception as e:
-        logger.error(f"Formula validation error: {e}")
-        return jsonify({"valid": False, "errors": [str(e)]})
+        return {"valid": False, "errors": [str(e)]}
 
-def get_kpi_data_from_db(user_id=None, admin_view=False):
-    """Get KPI data from database and format for template."""
+def sync_template_columns(user_id: int, template_columns: List[str], max_row: int):
+    """Sync template columns to user's KPI table."""
     try:
-        # Для шаблонов
-        if admin_view and request.args.get('template'):
-            query = db.session.query(KPI).filter_by(is_template=True)
-            kpis = query.order_by(KPI.row_index).all()
-        # Для пользователей
-        else:
-            if not admin_view:
-                query = db.session.query(KPI).filter(KPI.user_id == user_id)
-            else:
-                query = db.session.query(KPI)
-            
-            kpis = query.filter_by(is_template=False).order_by(KPI.user_id, KPI.row_index).all()
+        # Get existing columns for the user
+        existing_columns = {col[0] for col in db.session.query(KPI.column_name).filter(KPI.user_id == user_id).distinct().all()}
+        
+        # Add any missing columns from the template
+        new_columns = [col for col in template_columns if col not in existing_columns]
+        
+        for col in new_columns:
+            for row_idx in range(max_row + 1):
+                kpi_entry = KPI.query.filter_by(
+                    row_index=row_idx,
+                    column_name=col,
+                    user_id=user_id
+                ).first()
+                if not kpi_entry:
+                    new_kpi = KPI(
+                        row_index=row_idx,
+                        column_name=col,
+                        value="",
+                        user_id=user_id,
+                        last_updated=datetime.utcnow()
+                    )
+                    db.session.add(new_kpi)
+        
+        logger.info(f"Synced columns {new_columns} for user {user_id}")
+    except SQLAlchemyError as e:
+        logger.error(f"Database error syncing columns: {e}")
+        raise
 
-        # Получаем уникальные колонки из БД
-        if admin_view:
-            columns_query = db.session.query(KPI.column_name).distinct()
-        else:
-            columns_query = db.session.query(KPI.column_name).filter(KPI.user_id == user_id).distinct()
+def get_kpi_data_from_db(user_id=None, admin_view=False, template=False):
+    """Get KPI or template data from database and format for template."""
+    try:
+        if template:
+            # Получаем все записи шаблона
+            kpis = KPITemplate.query.order_by(KPITemplate.row_index, KPITemplate.column_name).all()
             
-        columns = [col[0] for col in columns_query.all()]  # Только колонки из БД
-
-        if admin_view:
-            user_ids = db.session.query(KPI.user_id).distinct().all()
-            user_ids = [uid[0] for uid in user_ids]
+            # Получаем уникальные названия столбцов
+            db_columns = db.session.query(KPITemplate.column_name).distinct().order_by(KPITemplate.column_name).all()
+            columns = [col[0] for col in db_columns]
             
-            users_data = {}
-            for user_id in user_ids:
-                user = User.query.get(user_id)
-                if user:
-                    # Find the max row index for this user
-                    max_row = db.session.query(db.func.max(KPI.row_index)).filter(KPI.user_id == user_id).scalar() or 0
-                    # Create empty data matrix with 5 extra rows
-                    data = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]
-                    
-                    # Fill data from database
-                    user_kpis = [kpi for kpi in kpis if kpi.user_id == user_id]
-                    for kpi in user_kpis:
-                        try:
-                            col_idx = columns.index(kpi.column_name)
-                            data[kpi.row_index][col_idx] = kpi.value
-                        except (ValueError, IndexError) as e:
-                            logger.warning(f"Error placing KPI data: {e}")
-                    
-                    users_data[user_id] = {
-                        "username": user.username,
-                        "data": data
-                    }
+            # Определяем максимальный индекс строки
+            max_row = db.session.query(db.func.max(KPITemplate.row_index)).scalar() or 0
             
-            return users_data, columns
-        else:
-            # For regular user view, just return their data
-            # Find the max row index for this user
-            max_row = db.session.query(db.func.max(KPI.row_index)).filter(KPI.user_id == user_id).scalar() or 0
-            # Create empty data matrix with 5 extra rows
-            data = [["" for _ in range(len(columns))] for _ in range(max_row + 2)]
+            # Создаём матрицу данных
+            data = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]
             
-            # Fill data from database
+            # Заполняем данные
             for kpi in kpis:
                 try:
                     col_idx = columns.index(kpi.column_name)
-                    data[kpi.row_index][col_idx] = kpi.value
+                    data[kpi.row_index][col_idx] = kpi.calculated_value or kpi.value or ""
                 except (ValueError, IndexError) as e:
                     logger.warning(f"Error placing KPI data: {e}")
             
-            # Process formulas
-            rows_with_formulas = {}
-            for kpi in kpis:
-                if kpi.formula:
-                    if kpi.row_index not in rows_with_formulas:
-                        rows_with_formulas[kpi.row_index] = {}
-                    rows_with_formulas[kpi.row_index][kpi.column_name] = kpi.formula
-            
-            # Evaluate formulas
-            for row_idx in rows_with_formulas:
-                # Get all data for this row
-                row_data = {}
-                for col_idx, col_name in enumerate(columns):
-                    if row_idx < len(data) and col_idx < len(data[row_idx]):
-                        row_data[col_name] = data[row_idx][col_idx]
-                
-                # Evaluate each formula in the row
-                for col_name, formula in rows_with_formulas[row_idx].items():
-                    try:
-                        col_idx = columns.index(col_name)
-                        calculated = evaluate_formula(formula, row_data)
-                        
-                        # Update the displayed value
-                        data[row_idx][col_idx] = calculated
-                        
-                        # Update in database
-                        kpi_entry = KPI.query.filter_by(
-                            row_index=row_idx,
-                            column_name=col_name,
-                            user_id=user_id
-                        ).first()
-                        if kpi_entry:
-                            kpi_entry.calculated_value = calculated
-                            db.session.commit()
-                    except (ValueError, IndexError) as e:
-                        logger.warning(f"Error evaluating formula: {e}")
-            
             return data, columns
+        else:
+            query = db.session.query(KPI)
+            if not admin_view:
+                query = query.filter(KPI.user_id == user_id)
+            kpis = query.order_by(KPI.user_id, KPI.row_index, KPI.column_name).all()
+            columns_query = db.session.query(KPI.column_name).filter(KPI.user_id == user_id).distinct() if not admin_view else db.session.query(KPI.column_name).distinct()
+
+        db_columns = columns_query.all()
+        columns = [col[0] for col in db_columns]  # Используем только столбцы из базы
+        max_row = db.session.query(db.func.max(KPITemplate.row_index if template else KPI.row_index)).scalar() or 0
+        data = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]  # Убираем +2
+
+        for kpi in kpis:
+            try:
+                col_idx = columns.index(kpi.column_name)
+                data[kpi.row_index][col_idx] = kpi.calculated_value or kpi.value or ""
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Error placing KPI data: {e}")
+        
+        # Логирование для отладки
+        logger.debug(f"{'Template' if template else 'KPI'} data: {data}, columns: {columns}, max_row: {max_row}")
+
+        # Обработка формул
+        rows_with_formulas = {}
+        for kpi in kpis:
+            if kpi.formula:
+                if kpi.row_index not in rows_with_formulas:
+                    rows_with_formulas[kpi.row_index] = {}
+                rows_with_formulas[kpi.row_index][kpi.column_name] = kpi.formula
+        
+        for row_idx in rows_with_formulas:
+            row_data = {}
+            for col_idx, col_name in enumerate(columns):
+                if row_idx < len(data) and col_idx < len(data[row_idx]):
+                    row_data[col_name] = data[row_idx][col_idx]
+            
+            for col_name, formula in rows_with_formulas[row_idx].items():
+                try:
+                    col_idx = columns.index(col_name)
+                    calculated = evaluate_formula(formula, row_data, columns)
+                    data[row_idx][col_idx] = calculated
+                    
+                    kpi_entry = (KPITemplate if template else KPI).query.filter_by(
+                        row_index=row_idx,
+                        column_name=col_name,
+                        user_id=user_id if not template else None
+                    ).first()
+                    if kpi_entry:
+                        kpi_entry.calculated_value = calculated
+                        db.session.commit()
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Error evaluating formula: {e}")
+        
+        return data, columns
     except SQLAlchemyError as e:
         logger.error(f"Database error fetching KPI data: {e}")
-        return [[] for _ in range(10)], []  # Пустые данные при ошибке
+        return [], []
+
 @kpi_bp.route('/kpi', methods=['GET'])
 @login_required
 def kpi_constructor():
-    """Main route for KPI constructor."""
     try:
         selected_user_id = request.args.get('user_id')
         
         if current_user.is_admin:
-            # Для админа получаем список всех пользователей
             users = User.query.all()
+            template_data, template_columns = get_kpi_data_from_db(template=True)
             
-            # Если выбран конкретный пользователь - показываем его данные
             if selected_user_id:
-                kpi_data, columns = get_kpi_data_from_db(user_id=selected_user_id)
+                kpi_data, columns = get_kpi_data_from_db(user_id=int(selected_user_id))
                 return render_template(
                     'kpi/kpi_constructor.html',
                     kpi_columns=columns,
                     kpi_data=kpi_data,
+                    template_columns=template_columns,
+                    template_data=template_data,
                     users=users,
                     selected_user_id=int(selected_user_id),
                     is_admin=True
                 )
             
-            # Если пользователь не выбран - показываем список
             return render_template(
                 'kpi/kpi_constructor.html',
                 users=users,
+                template_columns=template_columns,
+                template_data=template_data,
                 is_admin=True
             )
         else:
-            # Для обычного пользователя
             kpi_data, columns = get_kpi_data_from_db(user_id=current_user.id)
             return render_template(
                 'kpi/kpi_constructor.html',
@@ -300,30 +296,120 @@ def kpi_constructor():
         logger.error(f"Error displaying KPI constructor: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@kpi_bp.route('/validate_formula', methods=['POST'])
+@login_required
+def validate_formula(formula: str, column_names: list) -> Dict[str, Any]:
+    """Validate formula syntax."""
+    if not formula:
+        return {"valid": False, "errors": ["No formula provided"]}
+    
+    try:
+        ast.parse(formula, mode='eval')
+        used_columns = re.findall(r'\[([^\]]+)\]', formula)
+        unknown_columns = [col for col in used_columns if col not in column_names]
+        
+        if unknown_columns:
+            return {
+                "valid": False,
+                "errors": [f"Unknown columns: {', '.join(unknown_columns)}"]
+            }
+        
+        return {"valid": True, "errors": []}
+    except SyntaxError as e:
+        return {"valid": False, "errors": [f"Syntax error: {str(e)}"]}
+    except Exception as e:
+        return {"valid": False, "errors": [str(e)]}
+
 @kpi_bp.route('/add_column', methods=['POST'])
 @login_required
 def add_column():
-    
     """Add a new column to KPI constructor."""
     try:
         data = request.get_json()
         column_name = data.get('column_name')
-        user_id = data.get('user_id', current_user.id)  # Для админа берем из запроса
+        user_id = data.get('user_id', current_user.id)
+        
+        if not column_name:
+            return jsonify({"status": "error", "message": "Column name required"}), 400
         
         if current_user.is_admin and user_id != current_user.id:
-            # Проверяем права админа на изменение других пользователей
-            pass  # Здесь можно добавить дополнительную проверку прав
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({"status": "error", "message": "User not found"}), 404
+        elif user_id != current_user.id:
+            return jsonify({"status": "error", "message": "Unauthorized"}), 403
         
-        # No need to store columns globally anymore, they're retrieved from DB
+        max_row = db.session.query(db.func.max(KPI.row_index)).filter(KPI.user_id == user_id).scalar() or 0
+        for row_idx in range(max_row + 1):
+            kpi_entry = KPI.query.filter_by(
+                row_index=row_idx,
+                column_name=column_name,
+                user_id=user_id
+            ).first()
+            if not kpi_entry:
+                new_kpi = KPI(
+                    row_index=row_idx,
+                    column_name=column_name,
+                    value="",
+                    user_id=user_id,
+                    last_updated=datetime.utcnow()
+                )
+                db.session.add(new_kpi)
         
-        logger.info(f"Added new column: {column_name}")
+        db.session.commit()
+        logger.info(f"Added new column: {column_name} for user {user_id}")
         return jsonify({
             "status": "success",
             "new_column": column_name,
-            "column_index": -1  # Will be determined client-side
+            "column_index": -1
         })
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Database error adding column: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
     except Exception as e:
         logger.error(f"Error adding column: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@kpi_bp.route('/add_template_column', methods=['POST'])
+@login_required
+def add_template_column():
+    """Add a new column to KPI template."""
+    try:
+        if not current_user.is_admin:
+            return jsonify({"status": "error", "message": "Admin access required"}), 403
+        
+        data = request.get_json()
+        column_name = data.get('column_name')
+        
+        if not column_name:
+            return jsonify({"status": "error", "message": "Column name required"}), 400
+        
+        if KPITemplate.query.filter_by(column_name=column_name).first():
+            return jsonify({"status": "error", "message": "Column already exists"}), 400
+        
+        max_row = db.session.query(db.func.max(KPITemplate.row_index)).scalar() or 0
+        for row_idx in range(max_row + 1):
+            new_template = KPITemplate(
+                row_index=row_idx,
+                column_name=column_name,
+                value=""
+            )
+            db.session.add(new_template)
+        
+        db.session.commit()
+        logger.info(f"Added new template column: {column_name}")
+        return jsonify({
+            "status": "success",
+            "new_column": column_name,
+            "column_index": -1
+        })
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Database error adding template column: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    except Exception as e:
+        logger.error(f"Error adding template column: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @kpi_bp.route('/delete_column', methods=['POST'])
@@ -333,152 +419,526 @@ def delete_column():
     try:
         data = request.get_json()
         column_name = data.get("column")
-        user_id = current_user.id
+        user_id = data.get("user_id", current_user.id)
         
         if not column_name:
             return jsonify({"status": "error", "message": "Column not found"}), 400
         
-        # Delete data from DB for current user only
-        if current_user.is_admin and data.get("all_users"):
-            # Admin can delete for all users
-            db.session.query(KPI).filter(KPI.column_name == column_name).delete()
-        else:
-            # Regular user or admin acting on their own data
-            db.session.query(KPI).filter(
-                KPI.column_name == column_name,
-                KPI.user_id == user_id
-            ).delete()
-            
+        if current_user.is_admin and user_id != current_user.id:
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({"status": "error", "message": "User not found"}), 404
+        elif user_id != current_user.id:
+            return jsonify({"status": "error", "message": "Unauthorized"}), 403
+        
+        db.session.query(KPI).filter(
+            KPI.column_name == column_name,
+            KPI.user_id == user_id
+        ).delete()
+        
         db.session.commit()
-
-        logger.info(f"Deleted column: {column_name}")
+        logger.info(f"Deleted column: {column_name} for user {user_id}")
         return jsonify({"status": "success"})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Database error deleting column: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
     except Exception as e:
         logger.error(f"Error deleting column: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@kpi_bp.route('/delete_template_column', methods=['POST'])
+@login_required
+def delete_template_column():
+    """Delete a specific column from KPI template."""
+    try:
+        if not current_user.is_admin:
+            return jsonify({"status": "error", "message": "Admin access required"}), 403
+        
+        data = request.get_json()
+        column_name = data.get("column")
+        
+        if not column_name:
+            return jsonify({"status": "error", "message": "Column not found"}), 400
+        
+        db.session.query(KPITemplate).filter(
+            KPITemplate.column_name == column_name
+        ).delete()
+        
+        db.session.commit()
+        logger.info(f"Deleted template column: {column_name}")
+        return jsonify({"status": "success"})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Database error deleting template column: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    except Exception as e:
+        logger.error(f"Error deleting template column: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@kpi_bp.route('/delete_row', methods=['POST'])
+@login_required
+def delete_row():
+    """Delete a specific row by index."""
+    try:
+        data = request.get_json()
+        row_index = data.get("row_index")
+        user_id = data.get("user_id", current_user.id)
+        
+        if row_index is None:
+            return jsonify({"status": "error", "message": "Row index required"}), 400
+        
+        if current_user.is_admin and user_id != current_user.id:
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({"status": "error", "message": "User not found"}), 404
+        elif user_id != current_user.id:
+            return jsonify({"status": "error", "message": "Unauthorized"}), 403
+        
+        db.session.query(KPI).filter(
+            KPI.row_index == row_index,
+            KPI.user_id == user_id
+        ).delete()
+        
+        db.session.query(KPI).filter(
+            KPI.row_index > row_index,
+            KPI.user_id == user_id
+        ).update({KPI.row_index: KPI.row_index - 1})
+        
+        db.session.commit()
+        logger.info(f"Deleted row: {row_index} for user {user_id}")
+        return jsonify({"status": "success"})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Database error deleting row: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    except Exception as e:
+        logger.error(f"Error deleting row: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@kpi_bp.route('/delete_template_row', methods=['POST'])
+@login_required
+def delete_template_row():
+    """Delete a specific row from KPI template."""
+    try:
+        if not current_user.is_admin:
+            return jsonify({"status": "error", "message": "Admin access required"}), 403
+        
+        data = request.get_json()
+        row_index = data.get("row_index")
+        
+        if row_index is None:
+            return jsonify({"status": "error", "message": "Row index required"}), 400
+        
+        db.session.query(KPITemplate).filter(
+            KPITemplate.row_index == row_index
+        ).delete()
+        
+        db.session.query(KPITemplate).filter(
+            KPITemplate.row_index > row_index
+        ).update({KPITemplate.row_index: KPITemplate.row_index - 1})
+        
+        db.session.commit()
+        logger.info(f"Deleted template row: {row_index}")
+        return jsonify({"status": "success"})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Database error deleting template row: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    except Exception as e:
+        logger.error(f"Error deleting template row: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @kpi_bp.route('/save_kpi', methods=['POST'])
 @login_required
 def save_kpi():
-    """Save KPI data to database."""
+    """Save KPI data for a user."""
     try:
-        data = request.get_json() if request.is_json else request.form
-        user_id = current_user.id
-        logger.debug(f"Received data for saving: {data}")
-        
-        with db.session.begin_nested():  # Create nested transaction
-            for key, value in data.items():
-                if key.startswith('formula_'):
-                    # Handle formula saving
-                    parts = key.split('_')
-                    row_idx = int(parts[1])
-                    col_idx = int(parts[3])
-                    
-                    # Get column name
-                    column_data = data.get(f'column_name_{col_idx}')
-                    if not column_data:
-                        continue
-                    
-                    # Find or create KPI entry
-                    kpi_entry = KPI.query.filter_by(
+        data = request.get_json()
+        user_id = data.get("user_id", current_user.id)
+        logger.debug(f"Saving KPI for user_id: {user_id}, data keys: {list(data.keys())}")
+
+        # Проверка прав доступа
+        if user_id != current_user.id and not current_user.is_admin:
+            logger.error(f"Unauthorized access attempt by user {current_user.id} for user {user_id}")
+            return jsonify({"status": "error", "message": "Unauthorized"}), 403
+
+        # Проверка существования пользователя
+        if current_user.is_admin and user_id != current_user.id:
+            user = User.query.get(user_id)
+            if not user:
+                logger.error(f"User not found: {user_id}")
+                return jsonify({"status": "error", "message": "User not found"}), 404
+
+        # Собираем все данные для сохранения
+        cells_to_save = {}
+        formulas_to_save = {}
+        column_names = {}
+
+        # Обрабатываем все ключи в данных
+        for key, value in data.items():
+            if key.startswith('cell_'):
+                # Формат: cell_<row>_col_<col>
+                parts = key.split('_')
+                row_idx = int(parts[1])
+                col_idx = int(parts[3])
+                column_name = data.get(f'column_name_{col_idx}')
+                
+                if column_name:
+                    cells_to_save[(row_idx, column_name)] = str(value) if value is not None else ""
+            
+            elif key.startswith('formula_'):
+                # Формат: formula_<row>_col_<col>
+                parts = key.split('_')
+                row_idx = int(parts[1])
+                col_idx = int(parts[3])
+                column_name = data.get(f'column_name_{col_idx}')
+                
+                if column_name:
+                    formulas_to_save[(row_idx, column_name)] = str(value) if value else None
+            
+            elif key.startswith('column_name_'):
+                # Сохраняем названия колонок
+                col_idx = int(key.split('_')[2])
+                column_names[col_idx] = str(value)
+
+        # Проверяем, есть ли данные для сохранения
+        if not cells_to_save and not formulas_to_save:
+            logger.warning(f"No data to save for user {user_id}")
+            return jsonify({"status": "error", "message": "No data to save"}), 400
+
+        with db.session.begin_nested():
+            # Сохраняем данные ячеек
+            for (row_idx, col_name), value in cells_to_save.items():
+                kpi_entry = KPI.query.filter_by(
+                    user_id=user_id,
+                    row_index=row_idx,
+                    column_name=col_name
+                ).first()
+
+                if kpi_entry:
+                    kpi_entry.value = value
+                    kpi_entry.last_updated = datetime.utcnow()
+                else:
+                    new_kpi = KPI(
+                        user_id=user_id,
                         row_index=row_idx,
-                        column_name=column_data,
-                        user_id=user_id
+                        column_name=col_name,
+                        value=value,
+                        last_updated=datetime.utcnow()
+                    )
+                    db.session.add(new_kpi)
+
+            # Сохраняем формулы
+            for (row_idx, col_name), formula in formulas_to_save.items():
+                kpi_entry = KPI.query.filter_by(
+                    user_id=user_id,
+                    row_index=row_idx,
+                    column_name=col_name
+                ).first()
+
+                if kpi_entry:
+                    kpi_entry.formula = formula
+                    kpi_entry.last_updated = datetime.utcnow()
+                else:
+                    new_kpi = KPI(
+                        user_id=user_id,
+                        row_index=row_idx,
+                        column_name=col_name,
+                        formula=formula,
+                        last_updated=datetime.utcnow()
+                    )
+                    db.session.add(new_kpi)
+
+            # Пересчитываем формулы
+            all_columns = list(set(col_name for _, col_name in cells_to_save.keys()) | 
+                          set(col_name for _, col_name in formulas_to_save.keys()))
+            
+            for (row_idx, col_name), formula in formulas_to_save.items():
+                if not formula:
+                    continue
+                    
+                try:
+                    # Получаем все значения строки для вычисления формулы
+                    row_data = {}
+                    for entry in KPI.query.filter_by(
+                        user_id=user_id,
+                        row_index=row_idx
+                    ).all():
+                        row_data[entry.column_name] = entry.value or ""
+
+                    # Вычисляем формулу
+                    calculated = evaluate_formula(formula, row_data, all_columns)
+                    
+                    # Обновляем calculated_value
+                    kpi_entry = KPI.query.filter_by(
+                        user_id=user_id,
+                        row_index=row_idx,
+                        column_name=col_name
                     ).first()
                     
                     if kpi_entry:
-                        kpi_entry.formula = value
+                        kpi_entry.calculated_value = calculated
+                        kpi_entry.last_updated = datetime.utcnow()
+                except Exception as e:
+                    logger.error(f"Error evaluating formula for row {row_idx}, column {col_name}: {str(e)}")
+                    if kpi_entry:
+                        kpi_entry.calculated_value = f"#ERROR: {str(e)}"
+                        kpi_entry.last_updated = datetime.utcnow()
+
+        db.session.commit()
+        logger.info(f"Successfully saved KPI data for user {user_id}")
+        return jsonify({
+            "status": "success",
+            "message": "KPI data saved successfully",
+            "user_id": user_id
+        })
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Database error while saving KPI: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": "Database error occurred",
+            "error": str(e)
+        }), 500
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Unexpected error while saving KPI: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": "An unexpected error occurred",
+            "error": str(e)
+        }), 500
+
+@kpi_bp.route('/save_template', methods=['POST'])
+@login_required
+def save_template():
+    """Save KPI template data to database."""
+    try:
+        if not current_user.is_admin:
+            return jsonify({"status": "error", "message": "Admin access required"}), 403
+        
+        data = request.get_json()
+        logger.debug(f"Saving template data: {data}")
+        
+        with db.session.begin_nested():
+            db.session.query(KPITemplate).delete()
+            
+            template_columns = {data.get(f'template_column_name_{i}') for i in range(len(data)) if f'template_column_name_{i}' in data}
+            max_row = max([int(key.split('_')[2]) for key in data if key.startswith('template_cell_') or key.startswith('template_formula_')] + [0]) + 1
+            
+            for col in template_columns:
+                if not col:
+                    continue
+                for row_idx in range(max_row):
+                    template_entry = KPITemplate(
+                        row_index=row_idx,
+                        column_name=col,
+                        value=""
+                    )
+                    db.session.add(template_entry)
+            
+            for key, value in data.items():
+                if key.startswith('template_formula_'):
+                    parts = key.split('_')
+                    row_idx = int(parts[2])
+                    col_idx = int(parts[4])
+                    
+                    column_data = data.get(f'template_column_name_{col_idx}')
+                    if not column_data:
+                        continue
+                    
+                    template_entry = KPITemplate.query.filter_by(
+                        row_index=row_idx,
+                        column_name=column_data
+                    ).first()
+                    if template_entry:
+                        template_entry.formula = value
+                        template_entry.last_updated = datetime.utcnow()
                     else:
-                        new_kpi = KPI(
+                        new_template = KPITemplate(
                             row_index=row_idx,
                             column_name=column_data,
                             formula=value,
-                            user_id=user_id
+                            last_updated=datetime.utcnow()
                         )
-                        db.session.add(new_kpi)
-                    
-                elif key.startswith('cell_'):
-                    # Handle regular cell data
+                        db.session.add(new_template)
+                
+                elif key.startswith('template_cell_'):
                     parts = key.split('_')
-                    row_idx = int(parts[1])
-                    col_idx = int(parts[3])
+                    row_idx = int(parts[2])
+                    col_idx = int(parts[4])
                     
-                    # Get column name
-                    column_data = data.get(f'column_name_{col_idx}')
+                    column_data = data.get(f'template_column_name_{col_idx}')
                     if not column_data:
                         continue
                     
-                    # Find or create KPI entry
-                    kpi_entry = KPI.query.filter_by(
+                    template_entry = KPITemplate.query.filter_by(
                         row_index=row_idx,
-                        column_name=column_data,
-                        user_id=user_id
+                        column_name=column_data
                     ).first()
-                    
-                    if kpi_entry:
-                        kpi_entry.value = value
+                    if template_entry:
+                        template_entry.value = value or ""
+                        template_entry.last_updated = datetime.utcnow()
                     else:
-                        new_kpi = KPI(
+                        new_template = KPITemplate(
                             row_index=row_idx,
                             column_name=column_data,
-                            value=value,
-                            user_id=user_id
+                            value=value or "",
+                            last_updated=datetime.utcnow()
                         )
-                        db.session.add(new_kpi)
+                        db.session.add(new_template)
         
-        # After all updates, process formulas
-        rows_with_updates = set()
-        for key in data:
-            if key.startswith('cell_') or key.startswith('formula_'):
-                parts = key.split('_')
-                rows_with_updates.add(int(parts[1]))
-        
-        # Get all KPI data for this user
-        kpi_entries = KPI.query.filter_by(user_id=user_id).all()
-        
-        # Group by row index
+        # Пересчёт всех формул шаблона
+        template_entries = KPITemplate.query.all()
         rows_data = {}
         formulas = {}
         columns = set()
         
-        for entry in kpi_entries:
+        for entry in template_entries:
             rows_data.setdefault(entry.row_index, {})
-            rows_data[entry.row_index][entry.column_name] = entry.value
+            rows_data[entry.row_index][entry.column_name] = entry.value or ""
             columns.add(entry.column_name)
-            
             if entry.formula:
                 formulas.setdefault(entry.row_index, {})
                 formulas[entry.row_index][entry.column_name] = entry.formula
         
-        # Evaluate formulas for updated rows
-        for row_idx in rows_with_updates:
-            if row_idx in formulas:
-                for col_name, formula in formulas[row_idx].items():
-                    try:
-                        row_data = rows_data.get(row_idx, {})
-                        calculated = evaluate_formula(formula, row_data)
-                        
-                        # Update in database
-                        kpi_entry = KPI.query.filter_by(
-                            row_index=row_idx,
-                            column_name=col_name,
-                            user_id=user_id
-                        ).first()
-                        if kpi_entry:
-                            kpi_entry.calculated_value = calculated
-                    except Exception as e:
-                        logger.error(f"Formula evaluation error: {e}")
+        for row_idx in formulas:
+            for col_name, formula in formulas[row_idx].items():
+                try:
+                    row_data = rows_data.get(row_idx, {})
+                    calculated = evaluate_formula(formula, row_data, columns)
+                    template_entry = KPITemplate.query.filter_by(
+                        row_index=row_idx,
+                        column_name=col_name
+                    ).first()
+                    if template_entry:
+                        template_entry.calculated_value = calculated
+                        template_entry.last_updated = datetime.utcnow()
+                except Exception as e:
+                    logger.error(f"Formula evaluation error: {e}")
         
         db.session.commit()
-        logger.info("KPI data successfully saved")
-        return jsonify({"status": "success", "message": "Data saved successfully"})
-        
+        logger.info("KPI template successfully saved")
+        return jsonify({"status": "success", "message": "Template saved successfully"})
     except SQLAlchemyError as e:
         db.session.rollback()
-        logger.error(f"Database error saving KPI: {e}")
+        logger.error(f"Database error saving template: {e}")
         return jsonify({"status": "error", "message": "Database error"}), 500
     except Exception as e:
-        logger.error(f"Unexpected error saving KPI: {e}")
+        logger.error(f"Unexpected error saving template: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@kpi_bp.route('/apply_template_to_all', methods=['POST'])
+@login_required
+def apply_template_to_all():
+    """Применяет шаблон KPI ко всем пользователям, полностью синхронизируя данные."""
+    try:
+        if not current_user.is_admin:
+            return jsonify({"status": "error", "message": "Требуются права администратора"}), 403
+        
+        # Получаем данные шаблона
+        template_entries = KPITemplate.query.all()
+        template_columns = {col[0] for col in db.session.query(KPITemplate.column_name).distinct().all()}
+        max_row_template = db.session.query(db.func.max(KPITemplate.row_index)).scalar() or 0
+        users = User.query.all()
+        
+        if not template_columns:
+            return jsonify({"status": "error", "message": "Столбцы шаблона не найдены"}), 400
+        
+        with db.session.begin_nested():
+            for user in users:
+                logger.debug(f"Применение шаблона к пользователю {user.id}")
+                
+                # Получаем текущие столбцы пользователя
+                user_columns = {col[0] for col in db.session.query(KPI.column_name).filter(KPI.user_id == user.id).distinct().all()}
+                
+                # Удаляем столбцы, которых нет в шаблоне
+                columns_to_delete = user_columns - template_columns
+                for col in columns_to_delete:
+                    db.session.query(KPI).filter(
+                        KPI.column_name == col,
+                        KPI.user_id == user.id
+                    ).delete()
+                    logger.info(f"Удалён столбец {col} для пользователя {user.id}")
+                
+                # Синхронизируем столбцы шаблона
+                sync_template_columns(user.id, template_columns, max_row_template)
+                
+                # Применяем данные шаблона
+                for entry in template_entries:
+                    kpi_entry = KPI.query.filter_by(
+                        row_index=entry.row_index,
+                        column_name=entry.column_name,
+                        user_id=user.id
+                    ).first()
+                    
+                    if not kpi_entry:
+                        # Создаём новую запись KPI, если она не существует
+                        new_kpi = KPI(
+                            row_index=entry.row_index,
+                            column_name=entry.column_name,
+                            value=entry.value or "",
+                            formula=entry.formula,
+                            calculated_value=entry.calculated_value,
+                            user_id=user.id,
+                            last_updated=datetime.utcnow()
+                        )
+                        db.session.add(new_kpi)
+                    else:
+                        # Обновляем существующую запись KPI
+                        kpi_entry.value = entry.value or ""
+                        kpi_entry.formula = entry.formula
+                        kpi_entry.calculated_value = entry.calculated_value
+                        kpi_entry.last_updated = datetime.utcnow()
+                
+                # Удаляем строки, индекс которых превышает max_row_template
+                db.session.query(KPI).filter(
+                    KPI.row_index > max_row_template,
+                    KPI.user_id == user.id
+                ).delete()
+                
+                # Пересчитываем формулы для пользователя
+                user_kpi_entries = KPI.query.filter_by(user_id=user.id).all()
+                rows_data = {}
+                formulas = {}
+                columns = set()
+                
+                for entry in user_kpi_entries:
+                    rows_data.setdefault(entry.row_index, {})
+                    rows_data[entry.row_index][entry.column_name] = entry.value or ""
+                    columns.add(entry.column_name)
+                    if entry.formula:
+                        formulas.setdefault(entry.row_index, {})
+                        formulas[entry.row_index][entry.column_name] = entry.formula
+                
+                for row_idx in formulas:
+                    for col_name, formula in formulas[row_idx].items():
+                        try:
+                            row_data = rows_data.get(row_idx, {})
+                            calculated = evaluate_formula(formula, row_data, columns)
+                            kpi_entry = KPI.query.filter_by(
+                                row_index=row_idx,
+                                column_name=col_name,
+                                user_id=user.id
+                            ).first()
+                            if kpi_entry:
+                                kpi_entry.calculated_value = calculated
+                                kpi_entry.last_updated = datetime.utcnow()
+                        except Exception as e:
+                            logger.error(f"Ошибка вычисления формулы для пользователя {user.id}: {e}")
+        
+        db.session.commit()
+        logger.info("Шаблон KPI успешно применён ко всем пользователям")
+        return jsonify({"status": "success", "message": "Шаблон применён ко всем пользователям"})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Ошибка базы данных при применении шаблона: {e}")
+        return jsonify({"status": "error", "message": "Ошибка базы данных"}), 500
+    except Exception as e:
+        logger.error(f"Непредвиденная ошибка при применении шаблона: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @kpi_bp.route('/get_chart_data', methods=['GET'])
@@ -492,30 +952,23 @@ def get_chart_data():
         if not column:
             return jsonify({"status": "error", "message": "Column parameter required"}), 400
             
-        # Get all KPI entries for this column and user
         kpi_entries = KPI.query.filter_by(
             column_name=column,
             user_id=user_id
         ).order_by(KPI.row_index).all()
         
-        # Get the label column values (usually from the first column "Название")
-        first_column = db.session.query(KPI.column_name).filter(
-            KPI.user_id == user_id
-        ).order_by(KPI.id).first()
-        label_column = first_column[0] if first_column else "Label"  # Fallback
+        label_column = DEFAULT_COLUMNS[0]
         label_entries = KPI.query.filter_by(
             column_name=label_column,
             user_id=user_id
         ).order_by(KPI.row_index).all()
         
-        # Create data for chart
         chart_data = []
         for i, entry in enumerate(kpi_entries):
             label = "Row " + str(entry.row_index + 1)
             if i < len(label_entries) and label_entries[i].row_index == entry.row_index:
                 label = label_entries[i].value or label
                 
-            # Use calculated value if available, otherwise use value
             value = entry.calculated_value if entry.calculated_value else entry.value
             try:
                 value = float(value)
@@ -532,163 +985,65 @@ def get_chart_data():
             "data": chart_data,
             "column": column
         })
+    except SQLAlchemyError as e:
+        logger.error(f"Database error getting chart data: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
     except Exception as e:
         logger.error(f"Error getting chart data: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-@kpi_bp.route('/delete_row', methods=['POST'])
-@login_required
-def delete_row():
-    """Delete a specific row by index."""
+
+@kpi_bp.route('/debug_template')
+def debug_template():
+    """Debug endpoint to check KPITemplate data."""
     try:
-        data = request.get_json()
-        row_index = data.get("row_index")
-        user_id = current_user.id
-        
-        if row_index is None:
-            return jsonify({"status": "error", "message": "Row index required"}), 400
-        
-        # Delete all KPI entries for this row and user
-        db.session.query(KPI).filter(
-            KPI.row_index == row_index,
-            KPI.user_id == user_id
-        ).delete()
-        
-        # Update row indices for rows after the deleted one
-        db.session.query(KPI).filter(
-            KPI.row_index > row_index,
-            KPI.user_id == user_id
-        ).update({KPI.row_index: KPI.row_index - 1})
-        
-        db.session.commit()
-
-        logger.info(f"Deleted row: {row_index}")
-        return jsonify({"status": "success"})
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error deleting row: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-    
-
-@kpi_bp.route('/template')
-@login_required
-def get_template():
-    if not current_user.is_admin:
-        abort(403)
-    
-    # Получаем данные шаблона
-    template_data = KPI.query.filter_by(is_template=True).order_by(KPI.row_index).all()
-    
-    # Форматируем данные для фронтенда
-    columns = set()
-    data = {}
-    
-    for item in template_data:
-        if item.row_index not in data:
-            data[item.row_index] = {}
-        data[item.row_index][item.column_name] = item.value
-        columns.add(item.column_name)
-    
-    return jsonify({
-        'columns': list(columns),
-        'data': data
-    })
-from datetime import datetime
-@kpi_bp.route('/save_template', methods=['POST'])
-@login_required
-def save_template():
-    if not current_user.is_admin:
-        return jsonify({'status': 'error', 'message': 'Доступ запрещён'}), 403
-
-    try:
-        data = request.get_json()
-        
-        # Удаляем старые шаблонные данные
-        db.session.query(KPI).filter(KPI.is_template == True).delete()
-        
-        # Сохраняем данные шаблона
-        template_data = data.get('template_data', {})
-        
-        for row_idx, row in template_data.get('rows', {}).items():
-            for col_name, cell_data in row.items():
-                new_kpi = KPI(
-                    row_index=int(row_idx),
-                    column_name=col_name,
-                    value=cell_data.get('value', ''),
-                    formula=cell_data.get('formula', ''),
-                    is_template=True,
-                    user_id=None,  # Шаблоны не привязаны к пользователю
-                    created_at=datetime.utcnow(),
-                    created_by=current_user.id
-                )
-                db.session.add(new_kpi)
-        
-        db.session.commit()
-        
+        template_entries = KPITemplate.query.all()
+        template_columns = {col[0] for col in db.session.query(KPITemplate.column_name).distinct().all()}
+        max_row = db.session.query(db.func.max(KPITemplate.row_index)).scalar() or 0
         return jsonify({
-            'status': 'success',
-            'message': 'Шаблон успешно сохранён'
+            'entries': [{
+                'row_index': e.row_index,
+                'column_name': e.column_name,
+                'value': e.value,
+                'formula': e.formula,
+                'calculated_value': e.calculated_value
+            } for e in template_entries],
+            'columns': list(template_columns),
+            'max_row': max_row
         })
-        
     except Exception as e:
-        db.session.rollback()
-        logger.error(f"Ошибка сохранения шаблона: {str(e)}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': f'Ошибка сохранения шаблона: {str(e)}'
-        }), 500
-def apply_template_changes():
-    """Применяет изменения шаблона ко всем пользователям"""
-    # Получаем текущий шаблон
-    template_items = KPI.query.filter_by(is_template=True).order_by(KPI.row_index).all()
-    
-    # Получаем всех пользователей (кроме админов, если нужно)
-    users = User.query.filter(User.id != current_user.id).all()
-    
-    for user in users:
-        # Удаляем только KPI пользователя, которые были созданы из шаблона
-        KPI.query.filter_by(user_id=user.id, is_template=False).delete()
-        
-        # Создаем новые KPI на основе шаблона
-        for template_item in template_items:
-            kpi = KPI(
-                row_index=template_item.row_index,
-                column_name=template_item.column_name,
-                value=template_item.value,
-                formula=template_item.formula,
-                user_id=user.id,
-                is_template=False,
-                template_id=template_item.id
-            )
-            db.session.add(kpi)
-    
-    db.session.commit()
+        logger.error(f"Debug template error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-    
-@kpi_bp.route('/template/apply', methods=['POST'])
+@kpi_bp.route('/submit_for_review', methods=['POST'])
 @login_required
-def apply_template():
-    if not current_user.is_admin:
-        abort(403)
-    
+def submit_for_review():
+    """Отправка KPI на проверку администраторам"""
     try:
-        apply_template_changes()
-        return jsonify({'status': 'success'})
+        user_id = request.json.get('user_id')
+        if not user_id or user_id != current_user.id:
+            return jsonify({"status": "error", "message": "Invalid user"}), 400
+        
+        # Получаем всех администраторов
+        admins = User.query.filter_by(is_admin=True).all()
+        
+        if not admins:
+            return jsonify({"status": "error", "message": "No admins found"}), 400
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "User not found"}), 404
+        
+        # Создаем уведомления для каждого администратора
+        for admin in admins:
+            notify_user(
+                admin.id,
+                f"Пользователь {user.username} отправил KPI на проверку",
+                category='warning',
+                link=f"/kpi/kpi?user_id={user_id}"
+            )
+        
+        return jsonify({"status": "success", "message": "KPI отправлен на проверку"})
+    
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@kpi_bp.route('/template/history', methods=['GET'])
-@login_required
-def get_template_history():
-    if not current_user.is_admin:
-        abort(403)
-    
-    history = KPITemplateHistory.query.order_by(KPITemplateHistory.changed_at.desc()).limit(50).all()
-    
-    return jsonify({
-        'history': [{
-            'id': item.id,
-            'changed_at': item.changed_at.isoformat(),
-            'changed_by': item.user.username,
-            'description': item.change_description
-        } for item in history]
-    })
+        logger.error(f"Ошибка при отправке на проверку: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500

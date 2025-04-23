@@ -613,3 +613,4 @@ def admin_view_user_documents(user_id):
         documents = [{'name': "No documents available for this user."}]
     
     return render_template('documents/user_documents.html', documents=documents, user=user)
+    

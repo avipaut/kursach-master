@@ -111,6 +111,13 @@ def login():
         
         if user:
             print(f"User found: {user.username}")
+            
+            # Проверяем, активен ли пользователь
+            if not user.active:
+                print(f"User {user.username} is inactive")
+                flash('Ваш аккаунт деактивирован. Обратитесь к администратору.', 'danger')
+                return redirect(url_for('auth.login'))
+                
             password_check = check_password_hash(user.password, password)
             print(f"Password check: {password_check}")
             

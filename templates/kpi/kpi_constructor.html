@@ -9,22 +9,402 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/kpi_constructor.css') }}">
 
+    <style>
+        :root {
+            --primary-red: #C71320;
+            --primary-white: #FFFFFF;
+            --primary-gray: #424242;
+            --light-gray: #b1b6be;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            color: var(--primary-gray);
+        }
+        
+        .kpi-table-wrapper {
+            overflow-x: auto;
+            max-width: 100%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .kpi-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: var(--primary-white);
+            border-radius: 8px;
+            overflow: hidden;
+            min-width: 100%;
+        }
+        
+        .kpi-table th {
+            background-color: var(--primary-red);
+            color: var(--primary-white);
+            font-weight: 600;
+            padding: 12px 15px;
+            text-align: left;
+            position: relative;
+            min-width: 120px;
+            white-space: nowrap;
+        }
+        .kpi-table th:first-child {
+            min-width: 40px;
+            width: 40px;
+        }
+        
+        .kpi-table td {
+            border-bottom: 1px solid var(--light-gray);
+            padding: 12px 15px;
+            transition: all 0.2s;
+            min-width: 120px;
+        }
+        
+        .kpi-table td:first-child {
+            min-width: 40px;
+            width: 40px;
+        }
 
+        .kpi-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .kpi-table tr:hover td {
+            background-color: rgba(199, 19, 32, 0.05);
+        }
+        
+        .formula-cell {
+            background-color: #f0fdf4 !important;
+            font-weight: 500;
+        }
+        
+        .formula-error {
+            background-color: #fee2e2 !important;
+            color: #dc2626;
+        }
+        
+        .kpi-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--light-gray);
+            border-radius: 4px;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            min-width: 100px;
+        }
+        
+        .kpi-input:focus {
+            border-color: var(--primary-red);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(199, 19, 32, 0.2);
+        }
+        
+        .formula-btn {
+            font-size: 11px;
+            padding: 3px 6px;
+            margin-left: 5px;
+            background-color: rgba(199, 19, 32, 0.1);
+            color: var(--primary-red);
+            border-radius: 4px;
+            border: 1px solid rgba(199, 19, 32, 0.2);
+            cursor: pointer;
+            transition: all 0.2s;
+            opacity: 0;
+        }
+        
+        .formula-btn:hover {
+            background-color: rgba(199, 19, 32, 0.2);
+        }
+        
+        .kpi-cell:hover .formula-btn {
+            opacity: 1;
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: var(--primary-gray);
+            color: var(--primary-white);
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .tab-container {
+            border-bottom: 1px solid var(--light-gray);
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .tab-button {
+            padding: 12px 20px;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--primary-gray);
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+        
+        .tab-button:hover {
+            color: var(--primary-red);
+        }
+        
+        .tab-button.active {
+            color: var(--primary-red);
+            border-bottom-color: var(--primary-red);
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 15px;
+            background: var(--primary-white);
+            border-radius: 0 0 8px 8px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-red);
+            color: var(--primary-white);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .btn-primary:hover {
+            background-color: #a5101a;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background-color: var(--primary-white);
+            color: var(--primary-red);
+            border: 1px solid var(--primary-red);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .btn-secondary:hover {
+            background-color: rgba(199, 19, 32, 0.05);
+        }
+        
+        .btn-apply-all {
+            background-color: #16a34a;
+            color: var(--primary-white);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .btn-apply-all:hover {
+            background-color: #15803d;
+            transform: translateY(-1px);
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(66, 66, 66, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 15px;
+        }
+        
+        .modal-content {
+            background-color: var(--primary-white);
+            border-radius: 8px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            animation: modalFadeIn 0.3s;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .scroll-indicator {
+            display: none;
+            text-align: center;
+            padding: 5px;
+            color: var(--light-gray);
+            font-size: 12px;
+        }
+        
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .chart-container {
+            background: var(--primary-white);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: var(--primary-red);
+            color: var(--primary-white);
+            padding: 12px 24px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            max-width: calc(100% - 40px);
+        }
+        
+        .notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .column-tag {
+            display: inline-block;
+            background-color: rgba(199, 19, 32, 0.1);
+            color: var(--primary-red);
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin: 0 5px 5px 0;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .column-tag:hover {
+            background-color: rgba(199, 19, 32, 0.2);
+        }
+        
+        .delete-btn {
+            color: var(--light-gray);
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .delete-btn:hover {
+            color: var(--primary-red);
+            transform: scale(1.1);
+        }
+
+        @media (max-width: 768px) {
+            .kpi-table th, .kpi-table td {
+                padding: 8px 10px;
+                font-size: 14px;
+            }
+            
+            .tab-button {
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+            
+            .btn-primary, .btn-secondary, .btn-apply-all {
+                padding: 6px 12px;
+                font-size: 13px;
+            }
+            
+            .modal-content {
+                padding: 15px;
+            }
+            
+            .chart-container {
+                padding: 10px;
+            }
+            
+            .kpi-input {
+                padding: 6px 8px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .kpi-table th, .kpi-table td {
+                padding: 6px 8px;
+                font-size: 13px;
+            }
+            
+            .tab-button {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+            
+            .btn-primary, .btn-secondary, .btn-apply-all {
+                padding: 5px 10px;
+                font-size: 12px;
+            }
+            
+            .formula-btn {
+                font-size: 10px;
+                padding: 2px 4px;
+            }
+            
+            .modal-content {
+                padding: 12px;
+            }
+            
+            .chart-container h3 {
+                font-size: 16px;
+            }
+        }
+    </style>
 </head>
 <body class="min-h-screen">
     {% include 'navbar/navbar.html' %}
 
-    <!-- Main Content -->
     <main class="w-full mx-auto px-2 sm:px-4 py-4 sm:py-8">
         {% if is_admin and not selected_user_id %}
-        <!-- User selection block for admin -->
+        <!-- Admin view: User selection and Template -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6 sm:mb-8">
             <div class="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50 border-b border-gray-200">
-                <h2 class="text-lg sm:text-xl font-bold text-gray-800">Выберите пользователя</h2>
+                <div class="flex tab-container">
+                    <div class="tab-button active" data-tab="users-tab">Users</div>
+                    <div class="tab-button" data-tab="template-tab">Template</div>
+                </div>
             </div>
-            <div class="p-4 sm:p-6">
+
+            <!-- Users Tab Content -->
+            <div id="users-tab" class="tab-content active p-4 sm:p-6">
+                <h2 class="text-lg sm:text-xl font-bold text-gray-800 mb-4">Select User</h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     {% for user in users %}
                     <a href="{{ url_for('kpi.kpi_constructor', user_id=user.id) }}" 
@@ -35,20 +415,87 @@
                     {% endfor %}
                 </div>
             </div>
+
+            <!-- Template Tab Content -->
+            <div id="template-tab" class="tab-content">
+                <div class="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        
+                        <h2 class="text-xl sm:text-2xl font-bold text-gray-800">KPI Template </h2>
+                        <div class="flex flex-wrap gap-2 sm:space-x-3">
+                            <button id="add_column_template" class="btn-primary inline-flex items-center">
+                                <i class="fas fa-plus mr-1 sm:mr-2"></i> Add Column
+                            </button>
+                            <button id="add_row_template" class="btn-primary inline-flex items-center">
+                                <i class="fas fa-plus mr-1 sm:mr-2"></i> Add Row
+                            </button>
+                            <button id="save_template" class="btn-primary inline-flex items-center">
+                                <i class="fas fa-save mr-1 sm:mr-2"></i> Save Template
+                            </button>
+                            <button id="apply_to_all" class="btn-apply-all inline-flex items-center">
+                                <i class="fas fa-users mr-1 sm:mr-2"></i> Apply to All Users
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kpi-table-wrapper">
+                    <table id="template-table" class="kpi-table">
+                        <thead>
+                            <tr id="template-column-names-row">
+                                <th>Actions</th>
+                                {% for column in template_columns %}
+                                    <th class="relative group">
+                                        <div class="flex items-center justify-between">
+                                            <span class="truncate max-w-[100px] sm:max-w-none">{{ column }}</span>
+                                            <input type="hidden" name="template_column_name_{{ loop.index0 }}" value="{{ column }}">
+                                            <button class="delete-btn delete-template-column ml-1 sm:ml-2" 
+                                                    data-column="{{ column }}">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in template_data %}
+                            <tr>
+                                <td class="text-center">
+                                    <button class="delete-btn delete-template-row">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </td>
+                                
+                                {% set row_index = loop.index0 %}
+                                {% for cell in row %}
+                                <td class="kpi-cell">
+                                    <input type="text" class="kpi-input" name="template_cell_{{ row_index }}_col_{{ loop.index0 }}" value="{{ cell }}">
+                                    <button class="formula-btn" data-row="{{ row_index }}" data-col="{{ loop.index0 }}" data-table="template">
+                                        <i class="fas fa-calculator"></i> fx
+                                    </button>
+                                    <input type="hidden" name="template_formula_{{ row_index }}_col_{{ loop.index0 }}" class="cell-formula" value="">
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
         {% else %}
-        <!-- Main KPI constructor content -->
+        <!-- User KPI Constructor -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden">
             {% if is_admin and selected_user_id %}
             <div class="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-gray-50">
                 <a href="{{ url_for('kpi.kpi_constructor') }}" 
-                class="btn-secondary inline-flex items-center text-sm sm:text-base">
-                    <i class="fas fa-arrow-left mr-2"></i> Назад к списку пользователей
+                   class="btn-secondary inline-flex items-center text-sm sm:text-base">
+                    <i class="fas fa-arrow-left mr-2"></i> Back to User List
                 </a>
             </div>
             {% endif %}
             
-            <!-- Header -->
             <div class="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <h2 class="text-xl sm:text-2xl font-bold text-gray-800">KPI Constructor</h2>
@@ -62,26 +509,25 @@
                         <button id="save_kpi" class="btn-primary inline-flex items-center">
                             <i class="fas fa-save mr-1 sm:mr-2"></i> Save KPI
                         </button>
-                    </div>
+                        {% if not current_user.is_admin %}
+                        <button id="submit-for-review" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                            Отправить на проверку
+                        </button>
+                        {% endif %}
+                                            </div>
                 </div>
             </div>
 
-            <!-- Horizontal scroll indicator for mobile -->
             <div class="scroll-indicator">
                 <i class="fas fa-arrow-left"></i> Scroll horizontally <i class="fas fa-arrow-right"></i>
             </div>
 
-            <!-- Tabs -->
             <div class="flex tab-container px-4 sm:px-6">
                 <div class="tab-button active" data-tab="table-tab">Table View</div>
-                {% if is_admin %}
-                <div class="tab-button" data-tab="template-tab">Template</div>
-                {% endif %}
                 <div class="tab-button" data-tab="chart-tab">Charts</div>
                 <div class="tab-button" data-tab="formula-help-tab">Formula Help</div>
             </div>
 
-            <!-- Table Tab Content -->
             <div id="table-tab" class="tab-content active">
                 <div class="kpi-table-wrapper">
                     <table id="kpi-table" class="kpi-table">
@@ -115,7 +561,7 @@
                                 {% for cell in row %}
                                 <td class="kpi-cell">
                                     <input type="text" class="kpi-input" name="cell_{{ row_index }}_col_{{ loop.index0 }}" value="{{ cell }}">
-                                    <button class="formula-btn" data-row="{{ row_index }}" data-col="{{ loop.index0 }}">
+                                    <button class="formula-btn" data-row="{{ row_index }}" data-col="{{ loop.index0 }}" data-table="kpi">
                                         <i class="fas fa-calculator"></i> fx
                                     </button>
                                     <input type="hidden" name="formula_{{ row_index }}_col_{{ loop.index0 }}" class="cell-formula" value="">
@@ -128,74 +574,6 @@
                 </div>
             </div>
 
-            <!-- Template Tab Content (for admin only) -->
-            {% if is_admin %}
-            <div id="template-tab" class="tab-content p-4 sm:p-6">
-                <div class="mb-4 flex justify-between items-center">
-                    <h3 class="text-lg font-semibold">KPI Template</h3>
-                    <div>
-                        <button id="save-template" class="btn-primary">
-                            <i class="fas fa-save mr-2"></i> Save Template
-                        </button>
-                        <button id="apply-template" class="btn-secondary ml-2">
-                            <i class="fas fa-sync-alt mr-2"></i> Apply to All Users
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="kpi-table-wrapper">
-                    <table id="template-table" class="kpi-table">
-                        <thead>
-                            <tr id="template-column-names-row">
-                                <th>Actions</th>
-                                {% for column in kpi_columns %}
-                                    <th class="relative group">
-                                        <div class="flex items-center justify-between">
-                                            <span class="truncate max-w-[100px] sm:max-w-none">{{ column }}</span>
-                                            <input type="hidden" name="template_column_name_{{ loop.index0 }}" value="{{ column }}">
-                                            <button class="delete-btn delete-template-column ml-1 sm:ml-2" 
-                                                    data-column="{{ column }}">
-                                                <i class="fas fa-times"></i>
-                                            </button>
-                                        </div>
-                                    </th>
-                                {% endfor %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in kpi_data %}
-                            <tr>
-                                <td class="text-center">
-                                    <button class="delete-btn delete-template-row">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </td>
-                                
-                                {% set row_index = loop.index0 %}
-                                {% for cell in row %}
-                                <td class="kpi-cell">
-                                    <input type="text" class="kpi-input" name="template_cell_{{ row_index }}_col_{{ loop.index0 }}" value="{{ cell }}">
-                                    <button class="formula-btn" data-row="{{ row_index }}" data-col="{{ loop.index0 }}">
-                                        <i class="fas fa-calculator"></i> fx
-                                    </button>
-                                    <input type="hidden" name="template_formula_{{ row_index }}_col_{{ loop.index0 }}" class="cell-formula" value="">
-                                </td>
-                                {% endfor %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="mt-4">
-                    <label for="change-description" class="block text-sm font-medium mb-1">Change Description:</label>
-                    <input type="text" id="change-description" class="kpi-input w-full" 
-                        placeholder="Describe what you changed (optional)">
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Chart Tab Content -->
             <div id="chart-tab" class="tab-content p-4 sm:p-6">
                 <div class="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div class="flex-1">
@@ -229,7 +607,6 @@
                 </div>
             </div>
 
-            <!-- Formula Help Tab Content -->
             <div id="formula-help-tab" class="tab-content p-4 sm:p-6">
                 <div class="max-w-3xl">
                     <h3 class="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-800">Formula Syntax Help</h3>
@@ -270,7 +647,7 @@
                         <div class="bg-gray-50 p-3 sm:p-4 rounded-lg border-l-4 border-red-500">
                             <div class="mb-2 sm:mb-3">
                                 <p class="font-medium text-gray-800 mb-1 text-sm sm:text-base">Progress calculation:</p>
-                                <code class="bg-white px-2 sm:px-3 py-1 sm:py-2 rounded block text-xs sm:text-sm">[Значение] / [Цель] * 100</code>
+                                <code class="bg-white px-2 sm:px-3 py-1 sm:py-2 rounded block text-xs sm:text-sm">[Value] / [Target] * 100</code>
                             </div>
                             <div class="mb-2 sm:mb-3">
                                 <p class="font-medium text-gray-800 mb-1 text-sm sm:text-base">Profit calculation:</p>
@@ -305,7 +682,6 @@
         </div>
         {% endif %}
 
-        <!-- Formula Modal -->
         <div id="formula-modal" class="modal-overlay hidden">
             <div class="modal-content">
                 <div class="p-4 sm:p-6">
@@ -323,9 +699,15 @@
                     <div class="mb-3 sm:mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">Available columns:</label>
                         <div id="available-columns" class="flex flex-wrap">
+                            {% if is_admin and not selected_user_id %}
+                            {% for column in template_columns %}
+                            <span class="column-tag">[{{ column }}]</span>
+                            {% endfor %}
+                            {% else %}
                             {% for column in kpi_columns %}
                             <span class="column-tag">[{{ column }}]</span>
                             {% endfor %}
+                            {% endif %}
                         </div>
                     </div>
                     <div class="flex justify-end space-x-2 sm:space-x-3 pt-3 sm:pt-4 border-t border-gray-200">
@@ -334,14 +716,11 @@
                     </div>
                     <input type="hidden" id="current-row" value="">
                     <input type="hidden" id="current-col" value="">
+                    <input type="hidden" id="current-table" value="">
                 </div>
             </div>
         </div>
-        <div id="kpi-app-config" 
-                data-is-admin="{{ 'true' if is_admin else 'false' }}"
-                data-selected-user-id="{{ selected_user_id if selected_user_id else 'null' }}">
-        </div>
-        <!-- Notification Toast -->
+
         <div id="notification" class="notification">
             <div class="flex items-center">
                 <i class="fas fa-check-circle mr-2"></i>
@@ -349,6 +728,37 @@
             </div>
         </div>
     </main>
-    <script defer src="{{ url_for('static', filename='js/kpi_constructor.js') }}"></script>
+     <script src="{{ url_for('static', filename='js/kpi_constructor.js') }}"></script>
+     <script>
+        window.KPIApp = window.KPIApp || {};
+        
+        {% if current_user and current_user.is_authenticated %}
+            // Для админа
+            KPIApp.isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
+            KPIApp.currentUserId = {{ current_user.id }};
+            
+            // Для обычного пользователя selectedUserId всегда равен его ID
+            // Для админа может быть выбран другой пользователь
+            {% if current_user.is_admin and selected_user_id %}
+                KPIApp.selectedUserId = {{ selected_user_id }};
+            {% else %}
+                KPIApp.selectedUserId = {{ current_user.id }};
+            {% endif %}
+        {% else %}
+            KPIApp.isAdmin = false;
+            KPIApp.selectedUserId = null;
+            KPIApp.currentUserId = null;
+        {% endif %}
+        
+        console.log('KPIApp initialized:', {
+            isAdmin: KPIApp.isAdmin,
+            selectedUserId: KPIApp.selectedUserId,
+            currentUserId: KPIApp.currentUserId
+        });
+    </script>
+
+       
+
+
 </body>
 </html>
