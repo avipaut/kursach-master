@@ -57,14 +57,11 @@ def get_boards():
     if is_admin:
         boards = Board.query.all()
     else:
-        # Non-admins see only public boards and their own boards
-        if hasattr(Board, 'admin_only'):
-            boards = Board.query.filter(
-                (Board.user_id == current_user.id) | (Board.admin_only == False)
-            ).all()
-        else:
-            # If admin_only field doesn't exist yet, show all boards
-            boards = Board.query.all()
+        # Non-admins see only their own boards and boards they've been given access to
+        boards = Board.query.filter(
+            (Board.user_id == current_user.id) |  # Boards created by the user
+            (Board.users.contains(current_user))   # Boards the user has been added to
+        ).all()
     
     return jsonify([board.to_dict() for board in boards])
 
@@ -74,16 +71,24 @@ def get_boards():
 def create_board():
     data = request.get_json()
     
-    # Check if admin_only field exists in Board model
+    # Create the board
     board_kwargs = {
         'name': data.get('name'),
-        'user_id': current_user.id
+        'user_id': current_user.id,
+        'admin_only': data.get('admin_only', False)  # Default to public board
     }
     
-    if hasattr(Board, 'admin_only'):
-        board_kwargs['admin_only'] = data.get('admin_only', False)  # Default to public board
-    
     new_board = Board(**board_kwargs)
+    
+    # Add the creator to the board's users
+    new_board.users.append(current_user)
+    
+    # Add any additional users specified in the request
+    if data.get('user_ids'):
+        for user_id in data.get('user_ids'):
+            user = User.query.get(user_id)
+            if user:
+                new_board.users.append(user)
     
     db.session.add(new_board)
     db.session.commit()
@@ -92,22 +97,114 @@ def create_board():
 
 @kanban_bp.route('/boards/<int:board_id>', methods=['PUT'])
 @login_required
-@admin_required  # Only admins can update boards
 def update_board(board_id):
     board_obj = Board.query.get(board_id)
     if not board_obj:
         return jsonify({"error": "Board not found"}), 404
     
-    data = request.json
-    board_obj.name = data.get('name', board_obj.name)
+    # Only board creator or admin can update the board
+    if board_obj.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({"error": "Permission denied"}), 403
     
-    # Allow updating admin_only status if the field exists
-    if hasattr(Board, 'admin_only') and 'admin_only' in data:
+    data = request.json
+    
+    # Update basic board info
+    if 'name' in data:
+        board_obj.name = data['name']
+    
+    if 'admin_only' in data and current_user.is_admin:
         board_obj.admin_only = data['admin_only']
+    
+    # Update board users
+    if 'user_ids' in data:
+        # Clear existing users and re-add them
+        board_obj.users = []
+        
+        # Always add the board creator
+        creator = User.query.get(board_obj.user_id)
+        if creator:
+            board_obj.users.append(creator)
+        
+        # Add the specified users
+        for user_id in data['user_ids']:
+            user = User.query.get(user_id)
+            if user:
+                board_obj.users.append(user)
     
     db.session.commit()
     return jsonify(board_obj.to_dict())
 
+# Add a new endpoint to manage board users
+@kanban_bp.route('/boards/<int:board_id>/users', methods=['POST'])
+@login_required
+def add_board_user(board_id):
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    
+    # Only board creator or admin can add users
+    if board.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({"error": "Permission denied"}), 403
+    
+    data = request.json
+    user_id = data.get('user_id')
+    
+    if not user_id:
+        return jsonify({"error": "User ID is required"}), 400
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    # Check if user is already added to the board
+    if user in board.users:
+        return jsonify({"message": "User already has access to this board"}), 200
+    
+    # Add user to the board
+    board.users.append(user)
+    db.session.commit()
+    
+    return jsonify({"message": "User added to board successfully"}), 200
+
+@kanban_bp.route('/boards/<int:board_id>/users/<int:user_id>', methods=['DELETE'])
+@login_required
+def remove_board_user(board_id, user_id):
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    
+    # Only board creator or admin can remove users
+    if board.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({"error": "Permission denied"}), 403
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    # Prevent removing the board creator
+    if user.id == board.user_id:
+        return jsonify({"error": "Cannot remove board creator"}), 400
+    
+    # Remove user from the board
+    if user in board.users:
+        board.users.remove(user)
+        db.session.commit()
+        return jsonify({"message": "User removed from board successfully"}), 200
+    else:
+        return jsonify({"error": "User does not have access to this board"}), 404
+
+@kanban_bp.route('/boards/<int:board_id>/users', methods=['GET'])
+@login_required
+def get_board_users(board_id):
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+    
+    # Only users with access to the board can see its users
+    if current_user not in board.users and not current_user.is_admin:
+        return jsonify({"error": "Permission denied"}), 403
+    
+    return jsonify([user.to_dict() for user in board.users]), 200
 @kanban_bp.route('/boards/<int:board_id>', methods=['DELETE'])
 @login_required
 @admin_required  # Only admins can delete boards
