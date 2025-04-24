@@ -14,11 +14,14 @@ from wtforms.validators import DataRequired, Email, Length, Optional
 db =  SQLAlchemy()
 # В models.py добавьте в начало файла:
 from flask_login import UserMixin
+
+
 # Таблица связи пользователей и ролей
 roles_users = db.Table('roles_users',
     db.Column('user_id', db.Integer(), db.ForeignKey('users.id')),  # Изменено с 'user.id' на 'users.id'
     db.Column('role_id', db.Integer(), db.ForeignKey('role.id'))
 )
+
 class Role(db.Model, RoleMixin):
     id = db.Column(db.Integer(), primary_key=True)
     name = db.Column(db.String(80), unique=True)
@@ -67,6 +70,11 @@ class User(UserMixin, db.Model):
         }
     def __repr__(self):
         return f"<User {self.username}>"
+    def has_role(self, role_name):
+        """Проверяет, имеет ли пользователь указанную роль"""
+        return any(role.name == role_name for role in self.roles)
+
+
 class MessageType(PyEnum):
     TEXT = "text"
     IMAGE = "image"
@@ -134,26 +142,19 @@ class Lobby(db.Model):
     description = Column(Text, nullable=True)
     is_group = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    created_by = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=True)  # Can be null for system-created lobbies
+    created_by = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=True)
+    
+    # New fields for archiving functionality
+    is_archived = Column(Boolean, default=False)
+    archived_at = Column(DateTime, nullable=True)
+    archived_by = Column(Integer, ForeignKey('users.id', ondelete="SET NULL"), nullable=True)
     
     # Relationships
     users = db.relationship('User', secondary=user_lobby, back_populates='lobbies')
     messages = db.relationship('Message', backref='lobby', lazy=True, cascade="all, delete-orphan")
+    archiver = db.relationship('User', foreign_keys=[archived_by], backref='archived_lobbies', lazy=True)
     
-    def get_unread_count_for_user(self, user_id):
-        """Получить количество непрочитанных сообщений для пользователя"""
-        from sqlalchemy import and_, not_
-        
-        # Запрос для подсчета сообщений, которые не были прочитаны пользователем
-        # и были отправлены другими пользователями
-        unread_count = Message.query.filter(
-            Message.lobby_id == self.id,
-            Message.sender_id != user_id,
-            ~Message.read_by.any(ReadReceipt.user_id == user_id)
-        ).count()
-        
-        return unread_count
-    
+    # Update the to_dict method to include archive info
     def to_dict(self):
         return {
             'id': self.id,
@@ -164,7 +165,10 @@ class Lobby(db.Model):
             'created_at': self.created_at.isoformat(),
             'created_by': self.created_by,
             'users': [user.to_dict() for user in self.users],
-            'last_message': self.get_last_message()
+            'last_message': self.get_last_message(),
+            'is_archived': self.is_archived,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': self.archived_by
         }
     
     def get_last_message(self):
@@ -183,39 +187,41 @@ class PriorityLevel(enum.Enum):
     HIGH = "high"
 
 class KPI(db.Model):
-    __tablename__ = 'kpi'
-
+    tablename = 'kpi'
     id = db.Column(db.Integer, primary_key=True)
     row_index = db.Column(db.Integer, nullable=False)
     column_name = db.Column(db.String(100), nullable=False)
     value = db.Column(db.String(1000), nullable=True)
     formula = db.Column(db.String(1000), nullable=True)
     calculated_value = db.Column(db.String(1000), nullable=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=True)
-    is_template = db.Column(db.Boolean, default=False, nullable=False)
-    template_id = db.Column(db.Integer, db.ForeignKey('kpi.id'), nullable=True)  # Добавлено это поле
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime)
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    updated_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Отношения
-    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('kpi_values', lazy=True))
-    template = db.relationship('KPI', remote_side=[id], backref='instances')
-    creator = db.relationship('User', foreign_keys=[created_by])
-    updater = db.relationship('User', foreign_keys=[updated_by])
+    table_args = (
+        db.UniqueConstraint('row_index', 'column_name', 'user_id', name='uix_kpi_row_column_user'),
+    )
 
-class KPITemplateHistory(db.Model):
-    __tablename__ = 'kpi_template_history'
+    user = db.relationship('User', backref=db.backref('kpi_values', lazy=True, cascade="all, delete-orphan"))
 
+    def repr(self):
+        return f"<KPI: {self.column_name} [{self.row_index}] = {self.value}>"
+
+class KPITemplate(db.Model):
+    tablename = 'kpi_template'
     id = db.Column(db.Integer, primary_key=True)
-    template_id = db.Column(db.Integer, db.ForeignKey('kpi.id'), nullable=False)
-    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    changed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    change_description = db.Column(db.String(500), nullable=True)
+    row_index = db.Column(db.Integer, nullable=False)
+    column_name = db.Column(db.String(100), nullable=False)
+    value = db.Column(db.String(1000), nullable=True)
+    formula = db.Column(db.String(1000), nullable=True)
+    calculated_value = db.Column(db.String(1000), nullable=True)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    template = db.relationship('KPI', backref='history_records')
-    user = db.relationship('User', backref='template_changes')
+    table_args = (
+        db.UniqueConstraint('row_index', 'column_name', name='uix_kpi_template_row_column'),
+    )
+
+    def repr(self):
+        return f"<KPITemplate: {self.column_name} [{self.row_index}] = {self.value}>"
 
 class Board(db.Model):
     __tablename__ = 'board'
@@ -244,6 +250,9 @@ class List(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     board_id = Column(Integer, ForeignKey('board.id', ondelete="CASCADE"), nullable=False)
+    position = Column(Integer, default=0)  # Поле для хранения порядка
+    color = Column(String(50), nullable=True)  # Поле для хранения цвета списка
+    text_color = Column(String(50), nullable=True)  # Поле для хранения цвета текста
     
     cards = db.relationship('Card', backref='list', cascade="all, delete-orphan", lazy=True)
 
@@ -251,11 +260,15 @@ class List(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'board_id': self.board_id
+            'board_id': self.board_id,
+            'position': self.position,
+            'color': self.color,
+            'text_color': self.text_color
         }
 
     def __repr__(self):
         return f"<List {self.name}>"
+
 
 class Card(db.Model):
     __tablename__ = 'card'
@@ -266,36 +279,33 @@ class Card(db.Model):
     list_id = Column(Integer, ForeignKey('list.id', ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)  # Creator of the card
     priority = Column(Enum(PriorityLevel), default=PriorityLevel.LOW)
-    completed = Column(db.Boolean, default=False)  # New field for completion status
-    assigned_to = Column(Integer, ForeignKey('users.id'), nullable=True)  # New field for assignment
-    deadline = Column(DateTime, nullable=True)  # New field for deadline
+    completed = Column(db.Boolean, default=False)  # Field for completion status
+    assigned_to = Column(Integer, ForeignKey('users.id'), nullable=True)  # Field for assignment
+    deadline = Column(DateTime, nullable=True)  # Field for deadline
+    custom_color = Column(String(50), nullable=True)  # Поле для хранения пользовательского цвета
+    position = Column(Integer, default=0)  # Новое поле для сортировки карточек
     
     # Relationships
     todos = db.relationship('Todo', backref='card', cascade="all, delete-orphan", lazy=True)
-    
-    # REMOVED the duplicate relationship that was causing the error
-    # This line was causing the conflict:
-    # assigned_user = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_cards', lazy=True)
-    # It's already defined in the User model with assigned_cards relationship
 
     def to_dict(self):
         return {
             'id': self.id,
             'title': self.title,
             'description': self.description,
-            'created_at': self.created_at.isoformat(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
             'list_id': self.list_id,
             'user_id': self.user_id,
-            'priority': self.priority.value,
+            'priority': self.priority.value if self.priority else 'low',
             'completed': self.completed,
             'assigned_to': self.assigned_to,
             'deadline': self.deadline.isoformat() if self.deadline else None,
+            'custom_color': self.custom_color,
+            'position': self.position,  # Добавляем позицию в вывод
             'todos': [todo.to_dict() for todo in self.todos]  # Include todos in the card data
-
         }
-
     def __repr__(self):
-        return f"<Card {self.title} (Priority: {self.priority.name})>"
+        return f"<Card {self.title} (Priority: {self.priority.name if self.priority else 'None'})>"
 
 # New Todo model for to-do lists within cards
 class Todo(db.Model):

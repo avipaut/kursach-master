@@ -7,7 +7,9 @@ let apiBaseUrl = '';
 let useFullColorPriority = true;
 let isAdmin = false;
 let currentUserName = '';
-
+let isDraggingList = false;
+let draggedList = null;
+let currentOpenMenu = null;
 
 // DOM elements for modal windows
 const createBoardModal = document.getElementById('createBoardModal');
@@ -61,7 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Toggle sidebar collapse
     document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
-     
+    
+    setupListsContainer();
 });
 // Fetch current user details
 async function fetchCurrentUser() {
@@ -150,6 +153,11 @@ async function loadLists(boardId) {
         lists = await response.json();
         console.log('Lists loaded successfully:', lists);
         
+        // Сортируем списки по позиции, если такое поле есть
+        if (lists.length > 0 && 'position' in lists[0]) {
+            lists.sort((a, b) => a.position - b.position);
+        }
+        
         // Preload cards for all lists
         for (const list of lists) {
             await loadCards(boardId, list.id);
@@ -162,6 +170,7 @@ async function loadLists(boardId) {
     }
 }
 
+// Обновляем функцию loadCards чтобы сортировать карточки по position
 async function loadCards(boardId, listId) {
     try {
         console.log(`Fetching cards for list ${listId} in board ${boardId}`);
@@ -173,6 +182,11 @@ async function loadCards(boardId, listId) {
         
         const cards = await response.json();
         console.log(`Cards for list ${listId} loaded successfully:`, cards);
+        
+        // Если у карточек есть поле position, сортируем их
+        if (cards.length > 0 && 'position' in cards[0]) {
+            cards.sort((a, b) => a.position - b.position);
+        }
         
         // Update lists with their cards
         const listIndex = lists.findIndex(list => list.id === listId);
@@ -1452,6 +1466,8 @@ async function handleCardMove(cardId, sourceListId, targetListId) {
     if (!activeBoard) return;
     
     try {
+        console.log(`Moving card ${cardId} from list ${sourceListId} to list ${targetListId}`);
+        
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${sourceListId}/cards/${cardId}/move/${targetListId}`, {
             method: 'PUT'
         });
@@ -1580,77 +1596,67 @@ function renderBoards() {
     });
 }
 
-// Override renderLists to respect admin permissions
+// Обновляем функцию renderLists
 function renderLists() {
     const listsContainer = document.getElementById('listsContainer');
     
-    // Clear container
+    // Очищаем контейнер
     listsContainer.innerHTML = '';
     
-    // Add lists
+    // Добавляем списки
     lists.forEach(list => {
-        const listElement = document.createElement('div');
-        listElement.className = 'list';
-        listElement.dataset.listId = list.id;
+        // Используем новую функцию для создания элемента списка
+        const { listElement, listHeader } = createListElement(list);
         
-        // Create list header
-        const listHeader = document.createElement('div');
-        listHeader.className = 'list-header';
-        listHeader.innerHTML = `
-            <h3 class="list-title">${list.name} <span>${list.cards ? list.cards.length : 0}</span></h3>
-            ${isAdmin ? `
-                <div class="list-actions">
-                    <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
-                    <button class="btn-delete" title="Delete list"><i class="fas fa-trash"></i></button>
-                </div>
-            ` : ''}
-        `;
-        
-        // Add handlers for list buttons if admin
-        if (isAdmin) {
-            listHeader.querySelector('.btn-edit')?.addEventListener('click', () => openEditListModal(list.id));
-            listHeader.querySelector('.btn-delete')?.addEventListener('click', () => handleDeleteList(list.id));
-        }
-        
-        // Create container for cards
+        // Создаем контейнер для карточек
         const listCards = document.createElement('div');
         listCards.className = 'list-cards';
         listCards.dataset.listId = list.id;
         
-        // Enable drag and drop if admin
+        // Включаем перетаскивание, если пользователь - администратор
         if (isAdmin) {
             setupDropZone(listCards);
         }
         
-        // Add cards to list
+        // Добавляем карточки в список
         if (list.cards && list.cards.length > 0) {
+            // Сортируем карточки по позиции, если такое поле есть
+            if (list.cards[0].position !== undefined) {
+                list.cards.sort((a, b) => a.position - b.position);
+            }
+            
             list.cards.forEach(card => {
                 const cardElement = createCardElement(card, list.id);
                 listCards.appendChild(cardElement);
             });
         }
         
-        // Create add card button (only for admins)
+        // Создаем кнопку добавления карточки (только для администраторов)
         if (isAdmin) {
             const addCardBtn = document.createElement('button');
             addCardBtn.className = 'btn-add-card';
             addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Add Card';
             addCardBtn.addEventListener('click', () => openCreateCardModal(list.id));
             
-            // Put everything together
+            // Добавляем всё в элемент списка
             listElement.appendChild(listHeader);
             listElement.appendChild(listCards);
             listElement.appendChild(addCardBtn);
         } else {
-            // For non-admins, just show the header and cards
+            // Для обычных пользователей только заголовок и карточки
             listElement.appendChild(listHeader);
             listElement.appendChild(listCards);
+        }
+        
+        // Настраиваем перетаскивание списка, если пользователь - администратор
+        if (isAdmin) {
+            setupDraggableList(listElement);
         }
         
         listsContainer.appendChild(listElement);
     });
     
-    // Add container for add list button (only for admins)
+    // Добавляем контейнер для кнопки добавления списка (только для администраторов)
     if (isAdmin) {
         const addListContainer = document.createElement('div');
         addListContainer.className = 'add-list-container';
@@ -1660,19 +1666,26 @@ function renderLists() {
             </button>
         `;
         
-        // Add handler for add list button
+        // Добавляем обработчик для кнопки добавления списка
         addListContainer.querySelector('#addListBtn')?.addEventListener('click', () => openModal(createListModal));
         
         listsContainer.appendChild(addListContainer);
     }
+    
+    // Настраиваем контейнер списков для перетаскивания
+    if (isAdmin) {
+        setupListsContainer();
+    }
 }
-// Override createCardElement to respect admin permissions
+
+// Обновим функцию создания карточки, добавив position в карточку
 function createCardElement(card, listId) {
     const cardElement = document.createElement('div');
     cardElement.className = `card ${card.completed ? 'completed' : ''}`;
     cardElement.dataset.cardId = card.id;
     cardElement.dataset.listId = listId;
     cardElement.dataset.priority = card.priority || 'medium';
+    cardElement.dataset.position = card.position || 0; // Добавляем позицию
     
     // Make card draggable only for admins
     if (isAdmin) {
@@ -1789,7 +1802,7 @@ function createCardElement(card, listId) {
     `;
     
     // Add event handlers
- // Modified card click event handler to allow users to access todos
+    // Modified card click event handler to allow users to access todos
     cardElement.addEventListener('click', (e) => {
         // Skip if clicked on card actions (complete button, etc.)
         if (e.target.closest('.card-actions')) {
@@ -1804,6 +1817,111 @@ function createCardElement(card, listId) {
             openUserTodoModal(card.id, card.title);
         }
     });
+    
+    // Handler for toggling completion status (available to all users)
+    cardElement.querySelector('.btn-toggle-completion').addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleToggleCardCompletion(card.id, listId, card.completed);
+    });
+    
+    if (isAdmin) {
+        // Handler for editing card (admin only)
+        cardElement.querySelector('.btn-edit-card')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditCardModal(card.id, listId);
+        });
+        
+        // Handler for deleting card (admin only)
+        cardElement.querySelector('.btn-delete-card')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            handleDeleteCard(card.id, listId);
+        });
+    }
+    
+    return cardElement;
+}
+
+// Обновляем функцию renderLists
+function renderLists() {
+    const listsContainer = document.getElementById('listsContainer');
+    
+    // Очищаем контейнер
+    listsContainer.innerHTML = '';
+    
+    // Добавляем списки
+    lists.forEach(list => {
+        // Используем новую функцию для создания элемента списка
+        const { listElement, listHeader } = createListElement(list);
+        
+        // Создаем контейнер для карточек
+        const listCards = document.createElement('div');
+        listCards.className = 'list-cards';
+        listCards.dataset.listId = list.id;
+        
+        // Включаем перетаскивание, если пользователь - администратор
+        if (isAdmin) {
+            setupDropZone(listCards);
+        }
+        
+        // Добавляем карточки в список
+        if (list.cards && list.cards.length > 0) {
+            // Сортируем карточки по позиции, если такое поле есть
+            if (list.cards[0].position !== undefined) {
+                list.cards.sort((a, b) => a.position - b.position);
+            }
+            
+            list.cards.forEach(card => {
+                const cardElement = createCardElement(card, list.id);
+                listCards.appendChild(cardElement);
+            });
+        }
+        
+        // Создаем кнопку добавления карточки (только для администраторов)
+        if (isAdmin) {
+            const addCardBtn = document.createElement('button');
+            addCardBtn.className = 'btn-add-card';
+            addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Add Card';
+            addCardBtn.addEventListener('click', () => openCreateCardModal(list.id));
+            
+            // Добавляем всё в элемент списка
+            listElement.appendChild(listHeader);
+            listElement.appendChild(listCards);
+            listElement.appendChild(addCardBtn);
+        } else {
+            // Для обычных пользователей только заголовок и карточки
+            listElement.appendChild(listHeader);
+            listElement.appendChild(listCards);
+        }
+        
+        // Настраиваем перетаскивание списка, если пользователь - администратор
+        if (isAdmin) {
+            setupDraggableList(listElement);
+        }
+        
+        listsContainer.appendChild(listElement);
+    });
+    
+    // Добавляем контейнер для кнопки добавления списка (только для администраторов)
+    if (isAdmin) {
+        const addListContainer = document.createElement('div');
+        addListContainer.className = 'add-list-container';
+        addListContainer.innerHTML = `
+            <button id="addListBtn" class="btn-add-list">
+                <i class="fas fa-plus"></i> Add List
+            </button>
+        `;
+        
+        // Добавляем обработчик для кнопки добавления списка
+        addListContainer.querySelector('#addListBtn')?.addEventListener('click', () => openModal(createListModal));
+        
+        listsContainer.appendChild(addListContainer);
+    }
+    
+    // Настраиваем контейнер списков для перетаскивания
+    if (isAdmin) {
+        setupListsContainer();
+    }
+}
 
 // Function to open a simplified modal for regular users
 function openUserTodoModal(cardId, cardTitle) {
@@ -1872,7 +1990,9 @@ function openUserTodoModal(cardId, cardTitle) {
     todoModal.addEventListener('shown.bs.modal', function() {
         fetchAndDisplayTodos(cardId);
     }, { once: true });
-}// Function to fetch and display todos
+}
+
+// Function to fetch and display todos
 function fetchAndDisplayTodos(cardId) {
     const todoContainer = document.querySelector('#userTodoModal .todo-list-container');
     todoContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
@@ -1975,7 +2095,20 @@ function displayUserTodos(todos, container, cardId) {
 function updateTodoStatus(todoId, completed, cardId) {
     // Find the todo item in the DOM
     const todoItem = document.querySelector(`.todo-item[data-todo-id="${todoId}"]`);
+    
+    // Check if todo item exists
+    if (!todoItem) {
+        console.error('Todo item not found in DOM:', todoId);
+        return;
+    }
+    
     const todoContent = todoItem.querySelector('.todo-content');
+    
+    // Check if todo content exists
+    if (!todoContent) {
+        console.error('Todo content element not found in item:', todoId);
+        return;
+    }
     
     // Optimistic UI update
     if (completed) {
@@ -2001,8 +2134,12 @@ function updateTodoStatus(todoId, completed, cardId) {
     .then(data => {
         if (!data.success) {
             console.error('Failed to update todo status:', data.message);
-            // Revert UI if update failed
-            todoItem.querySelector('input[type="checkbox"]').checked = !completed;
+            // Revert UI if update failed - safely check for checkbox
+            const checkbox = todoItem.querySelector('input[type="checkbox"]');
+            if (checkbox) {
+                checkbox.checked = !completed;
+            }
+            
             if (completed) {
                 todoContent.classList.remove('text-decoration-line-through', 'text-muted');
             } else {
@@ -2012,8 +2149,12 @@ function updateTodoStatus(todoId, completed, cardId) {
     })
     .catch(error => {
         console.error('Error updating todo status:', error);
-        // Revert UI on error
-        todoItem.querySelector('input[type="checkbox"]').checked = !completed;
+        // Revert UI on error - safely check for checkbox
+        const checkbox = todoItem.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+            checkbox.checked = !completed;
+        }
+        
         if (completed) {
             todoContent.classList.remove('text-decoration-line-through', 'text-muted');
         } else {
@@ -2022,30 +2163,6 @@ function updateTodoStatus(todoId, completed, cardId) {
         alert('Failed to update task status. Please try again.');
     });
 }
-    
-    // Handler for toggling completion status (available to all users)
-    cardElement.querySelector('.btn-toggle-completion').addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleToggleCardCompletion(card.id, listId, card.completed);
-    });
-    
-    if (isAdmin) {
-        // Handler for editing card (admin only)
-        cardElement.querySelector('.btn-edit-card')?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openEditCardModal(card.id, listId);
-        });
-        
-        // Handler for deleting card (admin only)
-        cardElement.querySelector('.btn-delete-card')?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDeleteCard(card.id, listId);
-        });
-    }
-    
-    return cardElement;
-}
-
 // Add CSS for admin indicators
 function addAdminStyles() {
     const style = document.createElement('style');
@@ -2188,11 +2305,17 @@ function addTodoItem(containerId) {
 
 
 
-// Drag and drop functions
+// Обновляем функцию для работы с перетаскиванием карточек
 function setupDraggable(element) {
     element.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', e.target.dataset.cardId);
+        // Убедимся, что перетаскивается карточка, а не список
+        e.stopPropagation(); // Предотвращаем всплытие события к родительскому списку
+        
+        e.dataTransfer.setData('card-id', e.target.dataset.cardId);
         e.dataTransfer.setData('source-list', e.target.dataset.listId);
+        e.dataTransfer.effectAllowed = 'move';
+        
+        // Добавляем класс для визуального отображения перетаскивания
         setTimeout(() => {
             e.target.classList.add('dragging');
         }, 0);
@@ -2205,11 +2328,31 @@ function setupDraggable(element) {
         });
     });
 }
-
+// Обновите функцию setupDropZone чтобы добавить упорядочивание карточек внутри списка
 function setupDropZone(element) {
     element.addEventListener('dragover', (e) => {
         e.preventDefault();
+        
+        // Проверяем, является ли перетаскиваемый элемент карточкой
+        if (isDraggingList) return;
+        
+        const cardBeingDragged = document.querySelector('.dragging');
+        if (!cardBeingDragged) return;
+        
+        // Определяем, над какой карточкой находится курсор
+        const cardsInThisList = Array.from(element.querySelectorAll('.card:not(.dragging)'));
+        const cardAfterCursor = getCardAfterCursor(cardsInThisList, e.clientY);
+        
+        // Визуальная индикация для зоны сброса
         element.classList.add('drag-over');
+        
+        // Если карточка найдена, вставляем перетаскиваемую карточку перед ней
+        if (cardAfterCursor) {
+            element.insertBefore(cardBeingDragged, cardAfterCursor);
+        } else {
+            // Если курсор ниже всех карточек или список пуст, добавляем в конец
+            element.appendChild(cardBeingDragged);
+        }
     });
     
     element.addEventListener('dragleave', () => {
@@ -2220,12 +2363,25 @@ function setupDropZone(element) {
         e.preventDefault();
         element.classList.remove('drag-over');
         
-        const cardId = e.dataTransfer.getData('text/plain');
-        const sourceListId = e.dataTransfer.getData('source-list');
-        const targetListId = element.dataset.listId;
+        // Проверяем, является ли перетаскиваемый элемент карточкой
+        const cardId = e.dataTransfer.getData('card-id');
+        if (!cardId) return; // Если нет id карточки, то пропускаем
         
-        if (cardId && sourceListId && targetListId && sourceListId !== targetListId) {
-            await handleCardMove(parseInt(cardId), parseInt(sourceListId), parseInt(targetListId));
+        const sourceListId = parseInt(e.dataTransfer.getData('source-list'));
+        const targetListId = parseInt(element.dataset.listId);
+        
+        // Если перемещение между разными списками
+        if (sourceListId !== targetListId) {
+            await handleCardMove(parseInt(cardId), sourceListId, targetListId);
+        }
+        // Если перемещение внутри одного списка
+        else {
+            // Собираем новый порядок карточек
+            const cards = Array.from(element.querySelectorAll('.card'));
+            const cardIds = cards.map(card => parseInt(card.dataset.cardId));
+            
+            // Сохраняем новый порядок
+            saveCardsOrder(targetListId, cardIds);
         }
     });
 }
@@ -2238,3 +2394,543 @@ function toggleSidebar() {
 
 // Initialize edit list form handler
 document.getElementById('editListForm').addEventListener('submit', handleEditList);
+
+function setupDraggableList(listElement) {
+    // Добавляем атрибут draggable
+    listElement.setAttribute('draggable', 'true');
+    
+    // Обработчики событий для перетаскивания
+    listElement.addEventListener('dragstart', handleListDragStart);
+    listElement.addEventListener('dragend', handleListDragEnd);
+    
+    console.log('Setup draggable for list:', listElement.dataset.listId);
+}
+
+// 2. Функция для обработки начала перетаскивания списка
+function handleListDragStart(e) {
+    console.log('List drag start triggered', e.target);
+    
+    // Проверяем, что пользователь схватил за заголовок
+    const header = e.target.closest('.list-header');
+    if (!header || !isAdmin) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+    
+    // Устанавливаем флаги и данные
+    isDraggingList = true;
+    draggedList = this;
+    
+    // Важно: устанавливаем тип данных
+    e.dataTransfer.setData('text/plain', this.dataset.listId);
+    // Устанавливаем дополнительный тип для различения списков и карточек
+    e.dataTransfer.setData('application/list-id', this.dataset.listId);
+    e.dataTransfer.effectAllowed = 'move';
+    
+    console.log('Dragging list:', this.dataset.listId);
+    
+    // Добавляем класс для визуального отображения перетаскивания
+    setTimeout(() => {
+        this.classList.add('dragging-list');
+    }, 0);
+}
+
+// 3. Функция для обработки окончания перетаскивания списка
+function handleListDragEnd(e) {
+    console.log('List drag end');
+    
+    // Сбрасываем флаги и классы
+    isDraggingList = false;
+    this.classList.remove('dragging-list');
+    
+    // Убираем индикаторы зон сброса
+    document.querySelectorAll('.list-drop-zone').forEach(zone => {
+        zone.classList.remove('list-drop-zone');
+        zone.removeAttribute('data-drop-position');
+    });
+}
+
+// 4. Функция для настройки области перетаскивания списков
+function setupListsContainer() {
+    const listsContainer = document.getElementById('listsContainer');
+    if (!listsContainer) {
+        console.error('Lists container not found');
+        return;
+    }
+    
+    console.log('Setting up lists container for dragging');
+    
+    // Обработчики событий для перетаскивания
+    listsContainer.addEventListener('dragover', handleListContainerDragOver);
+    listsContainer.addEventListener('dragenter', function(e) { 
+        e.preventDefault(); 
+    });
+    listsContainer.addEventListener('drop', handleListContainerDrop);
+}
+
+// 5. Обработчик для события dragover на контейнере списков
+function handleListContainerDragOver(e) {
+    e.preventDefault();
+    
+    // Проверяем, перетаскивается ли список
+    if (!isDraggingList) return;
+    
+    // Находим все списки, кроме перетаскиваемого
+    const listElements = Array.from(document.querySelectorAll('.list:not(.dragging-list)'));
+    
+    // Определяем ближайший список
+    const closest = findClosestList(e.clientX, listElements);
+    if (!closest) return;
+    
+    // Удаляем предыдущие зоны сброса
+    document.querySelectorAll('.list-drop-zone').forEach(zone => {
+        zone.classList.remove('list-drop-zone');
+        zone.removeAttribute('data-drop-position');
+    });
+    
+    // Определяем позицию сброса (до или после)
+    const rect = closest.getBoundingClientRect();
+    const offset = e.clientX - rect.left;
+    const position = offset < rect.width / 2 ? 'before' : 'after';
+    
+    // Отмечаем зону сброса
+    closest.classList.add('list-drop-zone');
+    closest.dataset.dropPosition = position;
+}
+
+// 6. Обработчик для события dragenter на контейнере списков
+function handleListContainerDragEnter(e) {
+    e.preventDefault(); // Разрешаем вход в зону сброса
+}
+
+// 7. Обработчик для события drop на контейнере списков
+function handleListContainerDrop(e) {
+    e.preventDefault();
+    console.log('List container drop triggered');
+    
+    // Проверяем, что сбрасывается список
+    if (!isDraggingList || !isAdmin) return;
+    
+    try {
+        // Получаем данные перетаскивания
+        const listId = e.dataTransfer.getData('text/plain');
+        if (!listId) {
+            console.log('No list ID found in dragged data');
+            return;
+        }
+        
+        console.log('Dropped list ID:', listId);
+        
+        // Находим зону сброса
+        const dropZone = document.querySelector('.list-drop-zone');
+        if (!dropZone) {
+            console.log('No drop zone found');
+            return;
+        }
+        
+        // Получаем данные зоны сброса
+        const targetId = dropZone.dataset.listId;
+        const position = dropZone.dataset.dropPosition;
+        
+        console.log(`Dropping list ${listId} ${position} list ${targetId}`);
+        
+        // Выполняем перемещение в DOM
+        moveListInUI(listId, targetId, position);
+        
+        // Сохраняем новый порядок на сервере
+        saveListsOrder();
+    } catch (error) {
+        console.error('Error during list drop:', error);
+    } finally {
+        // Сбрасываем состояние перетаскивания
+        isDraggingList = false;
+        draggedList = null;
+        document.querySelectorAll('.list-drop-zone').forEach(el => {
+            el.classList.remove('list-drop-zone');
+            el.removeAttribute('data-drop-position');
+        });
+    }
+}
+// Добавим функцию для определения, перед какой карточкой вставить перетаскиваемую
+function getCardAfterCursor(cards, cursorY) {
+    // Находим карточку, после которой нужно вставить перетаскиваемую
+    return cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = cursorY - box.top - box.height / 2;
+        
+        // Если курсор выше середины карточки и это ближайшая карточка сверху
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+// 8. Функция для поиска ближайшего списка к позиции курсора
+function findClosestList(mouseX, lists) {
+    let closestList = null;
+    let closestDistance = Infinity;
+    
+    lists.forEach(list => {
+        const rect = list.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const distance = Math.abs(mouseX - centerX);
+        
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestList = list;
+        }
+    });
+    
+    return closestList;
+}
+
+// 9. Функция для перемещения списка в интерфейсе
+function moveListInUI(listId, targetId, position) {
+    const listsContainer = document.getElementById('listsContainer');
+    const listToMove = document.querySelector(`.list[data-list-id="${listId}"]`);
+    const targetList = document.querySelector(`.list[data-list-id="${targetId}"]`);
+    
+    if (!listToMove || !targetList) {
+        console.error('List elements not found:', listId, targetId);
+        return;
+    }
+    
+    if (position === 'before') {
+        listsContainer.insertBefore(listToMove, targetList);
+    } else {
+        listsContainer.insertBefore(listToMove, targetList.nextSibling);
+    }
+    
+    // Обновляем массив списков
+    updateListsOrder();
+}
+
+// 10. Функция для обновления порядка списков в массиве
+function updateListsOrder() {
+    const listElements = document.querySelectorAll('.list');
+    const newLists = [];
+    
+    listElements.forEach(element => {
+        const listId = parseInt(element.dataset.listId);
+        const list = lists.find(l => l.id === listId);
+        if (list) {
+            newLists.push(list);
+        }
+    });
+    
+    lists = newLists;
+}
+
+// 11. Функция для сохранения порядка списков на сервере
+function saveListsOrder() {
+    if (!activeBoard) return;
+    
+    const listIds = lists.map(list => list.id);
+    
+    fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ list_ids: listIds }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Failed to save lists order. Status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Lists order saved:', data);
+    })
+    .catch(error => {
+        console.error('Error saving lists order:', error);
+        showToast('Error', 'Failed to save lists order', 'error');
+    });
+}
+// Добавим функцию для сохранения нового порядка карточек
+async function saveCardsOrder(listId, cardIds) {
+    if (!activeBoard) return;
+    
+    try {
+        console.log(`Saving new cards order for list ${listId}:`, cardIds);
+        
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ card_ids: cardIds }),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to save cards order. Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Cards order saved:', data);
+        
+        // Обновляем порядок карточек в массиве списков
+        updateCardsOrderInMemory(listId, cardIds);
+        
+        showToast('Success', 'Cards order saved successfully', 'success');
+    } catch (error) {
+        console.error('Error saving cards order:', error);
+        showToast('Error', 'Failed to save cards order', 'error');
+    }
+}
+
+// Функция для обновления порядка карточек в памяти
+function updateCardsOrderInMemory(listId, cardIds) {
+    const listIndex = lists.findIndex(list => list.id === listId);
+    if (listIndex === -1 || !lists[listIndex].cards) return;
+    
+    // Создаем новый массив карточек в новом порядке
+    const newOrderCards = [];
+    
+    // Добавляем карточки в новом порядке
+    cardIds.forEach(cardId => {
+        const card = lists[listIndex].cards.find(c => c.id === cardId);
+        if (card) {
+            newOrderCards.push(card);
+        }
+    });
+    
+    // Обновляем массив карточек в списке
+    lists[listIndex].cards = newOrderCards;
+}
+
+
+
+// Добавляем инициализацию в DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Добавьте эту строку к существующему обработчику
+    if (isAdmin) {
+        setupListsContainer();
+    }
+});
+
+const LIST_COLORS = [
+    { name: 'Синий', value: '#1976D2', text: 'white' },
+    { name: 'Фиолетовый', value: '#9C27B0', text: 'white' },
+    { name: 'Красный', value: '#D32F2F', text: 'white' },
+    { name: 'Оранжевый', value: '#FF9800', text: 'black' },
+    { name: 'Зеленый', value: '#2E7D32', text: 'white' },
+    { name: 'Бирюзовый', value: '#00897B', text: 'white' },
+    { name: 'Серый', value: '#757575', text: 'white' },
+    { name: 'Розовый', value: '#E91E63', text: 'white' },
+    { name: 'Коричневый', value: '#795548', text: 'white' },
+    { name: 'Желтый', value: '#FFC107', text: 'black' },
+    { name: 'По умолчанию', value: '#f0f2f5', text: 'black' }
+];
+
+// Предопределенные цвета для карточек
+const CARD_COLORS = [
+    { name: 'Без цвета', value: 'none', text: 'black' },
+    { name: 'Синий', value: '#E3F2FD', text: 'black' },
+    { name: 'Фиолетовый', value: '#F3E5F5', text: 'black' },
+    { name: 'Красный', value: '#FFEBEE', text: 'black' },
+    { name: 'Оранжевый', value: '#FFF3E0', text: 'black' },
+    { name: 'Зеленый', value: '#E8F5E9', text: 'black' },
+    { name: 'Желтый', value: '#FFFDE7', text: 'black' },
+    { name: 'Серый', value: '#F5F5F5', text: 'black' },
+];
+
+// Функция для создания модального окна выбора цвета списка
+function createListColorModal() {
+    // Проверяем, существует ли уже модальное окно
+    let colorModal = document.getElementById('listColorModal');
+    if (colorModal) return;
+    
+    // Создаем модальное окно
+    colorModal = document.createElement('div');
+    colorModal.id = 'listColorModal';
+    colorModal.className = 'modal';
+    
+    // Создаем содержимое модального окна
+    colorModal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Выберите цвет списка</h2>
+                <button class="close-modal"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="color-picker-container" style="padding: 16px;">
+                <div class="color-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    ${LIST_COLORS.map(color => `
+                        <div class="color-option" data-color="${color.value}" data-text="${color.text}" 
+                             style="background-color: ${color.value}; color: ${color.text}; 
+                                   height: 40px; border-radius: 4px; cursor: pointer; 
+                                   display: flex; align-items: center; justify-content: center; 
+                                   box-shadow: 0 1px 3px rgba(0,0,0,0.12);">
+                            ${color.name}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Добавляем модальное окно в DOM
+    document.body.appendChild(colorModal);
+    
+    // Добавляем обработчики событий
+    colorModal.querySelector('.close-modal').addEventListener('click', () => {
+        colorModal.classList.remove('active');
+    });
+    
+    colorModal.querySelectorAll('.color-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const listId = colorModal.dataset.listId;
+            const color = option.dataset.color;
+            const textColor = option.dataset.text;
+            
+            if (listId && color) {
+                setListColor(listId, color, textColor);
+                colorModal.classList.remove('active');
+            }
+        });
+    });
+    
+    // Закрытие при клике вне модального окна
+    colorModal.addEventListener('click', (e) => {
+        if (e.target === colorModal) {
+            colorModal.classList.remove('active');
+        }
+    });
+}
+
+// Функция для открытия модального окна выбора цвета
+function openListColorPicker(listId) {
+    // Убедимся, что у нас есть модальное окно
+    createListColorModal();
+    
+    // Получаем ссылку на модальное окно
+    const colorModal = document.getElementById('listColorModal');
+    
+    // Устанавливаем ID списка
+    colorModal.dataset.listId = listId;
+    
+    // Открываем модальное окно
+    colorModal.classList.add('active');
+}
+
+// Функция для установки цвета списка
+function setListColor(listId, color, textColor) {
+    // Обновляем UI
+    const listElement = document.querySelector(`.list[data-list-id="${listId}"]`);
+    if (listElement) {
+        const headerElement = listElement.querySelector('.list-header');
+        if (headerElement) {
+            headerElement.style.backgroundColor = color;
+            headerElement.style.color = textColor;
+            
+            // Сохраняем цвета в атрибутах для восстановления при перерисовке
+            listElement.dataset.color = color;
+            listElement.dataset.textColor = textColor;
+        }
+    }
+    
+    // Находим список в массиве
+    const listIndex = lists.findIndex(list => list.id === parseInt(listId));
+    if (listIndex !== -1) {
+        // Добавляем свойства цвета к объекту списка
+        lists[listIndex].color = color;
+        lists[listIndex].textColor = textColor;
+        
+        // Сохраняем на сервере
+        saveListColor(listId, color, textColor);
+    }
+}
+
+// Функция для сохранения цвета списка на сервере
+function saveListColor(listId, color, textColor) {
+    if (!activeBoard) return;
+    
+    fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/color`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color, text_color: textColor }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Failed to save list color. Status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('List color saved:', data);
+    })
+    .catch(error => {
+        console.error('Error saving list color:', error);
+        showToast('Error', 'Failed to save list color', 'error');
+    });
+}
+
+// Модифицируем функцию для создания элемента списка
+function createListElement(list) {
+    const listElement = document.createElement('div');
+    listElement.className = 'list';
+    listElement.dataset.listId = list.id;
+    
+    // Добавляем хранение цвета, если он есть
+    if (list.color) {
+        listElement.dataset.color = list.color;
+        listElement.dataset.textColor = list.textColor || 'black';
+    }
+    
+    // Создаем заголовок списка
+    const listHeader = document.createElement('div');
+    listHeader.className = 'list-header';
+    
+    // Применяем сохраненный цвет к заголовку
+    if (list.color) {
+        listHeader.style.backgroundColor = list.color;
+        listHeader.style.color = list.textColor || 'black';
+    }
+    
+    // Создаем содержимое заголовка списка
+    listHeader.innerHTML = `
+        <div class="list-title-container" style="display: flex; align-items: center; flex: 1;">
+            <div class="list-color-indicator" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;
+                ${list.color ? `background-color: ${list.color};` : 'display: none;'}"></div>
+            <h3 class="list-title">${list.name} <span>${list.cards ? list.cards.length : 0}</span></h3>
+        </div>
+        ${isAdmin ? `
+            <div class="list-actions">
+                <button class="btn-list-color" title="Change color"><i class="fas fa-palette"></i></button>
+                <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
+                <button class="btn-delete" title="Delete list"><i class="fas fa-trash"></i></button>
+            </div>
+        ` : ''}
+    `;
+    
+    // Добавляем обработчики для кнопок в заголовке списка
+    if (isAdmin) {
+        // После добавления заголовка в DOM, добавляем обработчики
+        setTimeout(() => {
+            const colorBtn = listHeader.querySelector('.btn-list-color');
+            if (colorBtn) {
+                colorBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openListColorPicker(list.id);
+                });
+            }
+            
+            const editBtn = listHeader.querySelector('.btn-edit');
+            if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openEditListModal(list.id);
+                });
+            }
+            
+            const deleteBtn = listHeader.querySelector('.btn-delete');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleDeleteList(list.id);
+                });
+            }
+        }, 0);
+    }
+    
+    return { listElement, listHeader };
+}

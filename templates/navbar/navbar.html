@@ -34,7 +34,7 @@
                 <i class="fas fa-chart-line"></i>
                 <span>KPI</span>
             </a>
-            <a href="{{ url_for('calendar.calendar_page') }}" class="nav-link {% if active_page == 'zoom' %}active{% endif %}">
+            <a href="{{ url_for('calendar.calendar_page') }}" class="nav-link {% if active_page == 'calendar' %}active{% endif %}">
                 <i class="fas fa-video"></i>
                 <span>Zoom</span>
             </a>
@@ -43,9 +43,9 @@
     
     <div class="navbar-right">
         {% if 'admin' in current_user.roles|map(attribute='name')|list %}
-        <div class="admin-badge nav-link" onclick="location.href='{{ url_for('auth.admin_panel') }}'">
+        <div class="admin-badge nav-link" onclick="location.href='{{ url_for('admin.user_management') }}'">
             <i class="fas fa-shield-alt"></i>
-            <span class="admin-text">Admin</span>
+            <strong>{{ current_user.username }}</strong>
         </div>
         {% endif %}
         
@@ -78,6 +78,18 @@
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <!-- Кнопка профиля пользователя с аватаром -->
+        <div class="position-relative user-profile-container mx-2">
+            <button class="btn btn-link text-decoration-none position-relative user-avatar-btn" 
+                    onclick="location.href='{{ url_for('profile.profile_page') }}'">
+                {% if current_user.avatar %}
+                    <img src="{{ current_user.avatar }}" alt="{{ current_user.username }}" class="user-avatar">
+                {% else %}
+                    <div class="user-avatar-placeholder">{{ current_user.username[0]|upper }}</div>
+                {% endif %}
+            </button>
         </div>
         
         <a href="{{ url_for('auth.logout') }}" class="nav-link desktop-only logout-link">
