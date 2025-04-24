@@ -21,6 +21,10 @@ roles_users = db.Table('roles_users',
     db.Column('user_id', db.Integer(), db.ForeignKey('users.id')),  # Изменено с 'user.id' на 'users.id'
     db.Column('role_id', db.Integer(), db.ForeignKey('role.id'))
 )
+board_users = db.Table('board_users',
+    db.Column('board_id', db.Integer(), db.ForeignKey('board.id', ondelete="CASCADE"), primary_key=True),
+    db.Column('user_id', db.Integer(), db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
+)
 
 class Role(db.Model, RoleMixin):
     id = db.Column(db.Integer(), primary_key=True)
@@ -223,6 +227,7 @@ class KPITemplate(db.Model):
     def repr(self):
         return f"<KPITemplate: {self.column_name} [{self.row_index}] = {self.value}>"
 
+# Then modify the Board class to add the relationship with users
 class Board(db.Model):
     __tablename__ = 'board'
     id = Column(Integer, primary_key=True)
@@ -232,6 +237,9 @@ class Board(db.Model):
     admin_only = db.Column(db.Boolean, default=False)
     
     lists = db.relationship('List', backref='board', cascade="all, delete-orphan", lazy=True)
+    # Add the new relationship
+    users = db.relationship('User', secondary=board_users, 
+                           backref=db.backref('accessible_boards', lazy='dynamic'))
 
     def to_dict(self):
         return {
@@ -239,7 +247,8 @@ class Board(db.Model):
             'name': self.name,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'user_id': self.user_id,
-            'admin_only': self.admin_only  # Include admin_only status in API responses
+            'admin_only': self.admin_only,
+            'users': [{'id': user.id, 'username': user.username} for user in self.users]
         }
 
     def __repr__(self):
