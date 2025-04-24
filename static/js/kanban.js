@@ -36,11 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event handlers for creating boards
     document.getElementById('createBoardBtn').addEventListener('click', () => openModal(createBoardModal));
-    document.getElementById('createBoardForm').addEventListener('submit', handleCreateBoard);
+    document.getElementById('createBoardForm').addEventListener('submit', handleCreateBoardWithUsers);
 
     // Event handlers for editing boards
     document.getElementById('editBoardBtn').addEventListener('click', () => openEditBoardModal());
-    document.getElementById('editBoardForm').addEventListener('submit', handleEditBoard);
+    document.getElementById('editBoardForm').addEventListener('submit', handleEditBoardWithUsers);
     document.getElementById('deleteBoardBtn').addEventListener('click', () => handleDeleteBoard());
 
     // Event handlers for creating lists
@@ -429,8 +429,9 @@ function handleSearchResultClick(result) {
             break;
     }
 }
-// Override board creation to support admin-only option
-async function handleCreateBoard(event) {
+// 1. Update the handleCreateBoard and handleEditBoard functions to work with users
+// Override handleCreateBoard to support adding users
+async function handleCreateBoardWithUsers(event) {
     event.preventDefault();
     
     const nameInput = document.getElementById('boardName');
@@ -440,6 +441,9 @@ async function handleCreateBoard(event) {
     const adminOnlyInput = document.getElementById('boardAdminOnly');
     const adminOnly = adminOnlyInput ? adminOnlyInput.checked : false;
     
+    // Get selected users (if using multi-select)
+    const userIds = getSelectedUsers();
+    
     if (!name) return;
     
     try {
@@ -448,7 +452,8 @@ async function handleCreateBoard(event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 name,
-                admin_only: adminOnly 
+                admin_only: adminOnly,
+                user_ids: userIds
             }),
         });
         
@@ -474,6 +479,70 @@ async function handleCreateBoard(event) {
     }
 }
 
+// Override handleEditBoard to support updating users
+async function handleEditBoardWithUsers(event) {
+    event.preventDefault();
+    
+    if (!activeBoard) return;
+    
+    const nameInput = document.getElementById('editBoardName');
+    const name = nameInput.value.trim();
+    
+    // Get admin-only checkbox value if it exists
+    const adminOnlyInput = document.getElementById('editBoardAdminOnly');
+    const adminOnly = adminOnlyInput ? adminOnlyInput.checked : false;
+    
+    // Get selected users (if using multi-select)
+    const userIds = getSelectedUsersForEdit();
+    
+    if (!name) return;
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                name,
+                admin_only: adminOnly,
+                user_ids: userIds
+            }),
+        });
+        
+        if (!response.ok) {
+            if (response.status === 403) {
+                showToast('Error', 'You need administrator privileges to edit boards', 'error');
+                return;
+            }
+            throw new Error(`Failed to update board. Status: ${response.status}`);
+        }
+        
+        const updatedBoard = await response.json();
+        
+        // Update name and admin_only status of active board
+        activeBoard.name = name;
+        activeBoard.admin_only = adminOnly;
+        activeBoard.users = updatedBoard.users || [];
+        
+        // Update board list
+        const boardIndex = boards.findIndex(board => board.id === activeBoard.id);
+        if (boardIndex !== -1) {
+            boards[boardIndex].name = name;
+            boards[boardIndex].admin_only = adminOnly;
+            boards[boardIndex].users = updatedBoard.users || [];
+        }
+        
+        renderBoards();
+        document.getElementById('activeBoardTitle').textContent = name;
+        closeAllModals();
+        
+        showToast('Success', 'Board updated successfully', 'success');
+    } catch (error) {
+        console.error('Error updating board:', error);
+        showToast('Error', 'Failed to update board. Please try again.', 'error');
+    }
+}
+
+
 // Modify the create board modal to include admin-only option
 function openCreateBoardModal() {
     const modal = document.getElementById('createBoardModal');
@@ -491,7 +560,8 @@ function openCreateBoardModal() {
         const formActions = modal.querySelector('.form-actions');
         formActions.parentNode.insertBefore(formGroup, formActions);
     }
-    
+    addUsersToCreateBoardModal();
+
     openModal(modal);
 }
 
@@ -521,65 +591,9 @@ function openEditBoardModal() {
     if (adminOnlyInput) {
         adminOnlyInput.checked = activeBoard.admin_only || false;
     }
-    
-    openModal(document.getElementById('editBoardModal'));
-}
+    addUsersToEditBoardModal();
 
-// Override board editing to support admin-only option
-async function handleEditBoard(event) {
-    event.preventDefault();
-    
-    if (!activeBoard) return;
-    
-    const nameInput = document.getElementById('editBoardName');
-    const name = nameInput.value.trim();
-    
-    // Get admin-only checkbox value if it exists
-    const adminOnlyInput = document.getElementById('editBoardAdminOnly');
-    const adminOnly = adminOnlyInput ? adminOnlyInput.checked : false;
-    
-    if (!name) return;
-    
-    try {
-        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                name,
-                admin_only: adminOnly 
-            }),
-        });
-        
-        if (!response.ok) {
-            if (response.status === 403) {
-                showToast('Error', 'You need administrator privileges to edit boards', 'error');
-                return;
-            }
-            throw new Error(`Failed to update board. Status: ${response.status}`);
-        }
-        
-        const updatedBoard = await response.json();
-        
-        // Update name and admin_only status of active board
-        activeBoard.name = name;
-        activeBoard.admin_only = adminOnly;
-        
-        // Update board list
-        const boardIndex = boards.findIndex(board => board.id === activeBoard.id);
-        if (boardIndex !== -1) {
-            boards[boardIndex].name = name;
-            boards[boardIndex].admin_only = adminOnly;
-        }
-        
-        renderBoards();
-        document.getElementById('activeBoardTitle').textContent = name;
-        closeAllModals();
-        
-        showToast('Success', 'Board updated successfully', 'success');
-    } catch (error) {
-        console.error('Error updating board:', error);
-        showToast('Error', 'Failed to update board. Please try again.', 'error');
-    }
+    openModal(document.getElementById('editBoardModal'));
 }
 
 // Override rendering to show admin-only indicators
