@@ -914,7 +914,7 @@ async function handleCreateCard(event) {
             endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
             
             operations.push(
-                fetch('/zoom/create_task', {
+                fetch('//calendar/task_task', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -984,7 +984,7 @@ async function syncCardsToCalendar() {
         endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
         
         try {
-            await fetch('/zoom/create_task', {
+            await fetch('//calendar/task_task', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1296,7 +1296,7 @@ async function handleUpdateCard(event) {
             
             // First, create or update the event in the Zoom calendar
             operations.push(
-                fetch('/zoom/create_task', {
+                fetch('//calendar/task_task', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
