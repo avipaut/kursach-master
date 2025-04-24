@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSearch();
     fetchCurrentUser();
     addAdminStyles();
+    addDragAndDropStyles();
 
 
     // Event handlers for creating boards
@@ -1595,8 +1596,79 @@ function renderBoards() {
         boardsList.appendChild(boardItem);
     });
 }
+// Функция для создания элемента списка
+function createListElement(list) {
+    const listElement = document.createElement('div');
+    listElement.className = 'list';
+    listElement.dataset.listId = list.id;
+    
+    // Добавляем хранение цвета, если он есть
+    if (list.color) {
+        listElement.dataset.color = list.color;
+        listElement.dataset.textColor = list.textColor || 'black';
+    }
+    
+    // Создаем заголовок списка
+    const listHeader = document.createElement('div');
+    listHeader.className = 'list-header';
+    
+    // Применяем сохраненный цвет к заголовку
+    if (list.color) {
+        listHeader.style.backgroundColor = list.color;
+        listHeader.style.color = list.textColor || 'black';
+    }
+    
+    // Создаем содержимое заголовка списка
+    listHeader.innerHTML = `
+        <div class="list-title-container" style="display: flex; align-items: center; flex: 1;">
+            <div class="list-color-indicator" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;
+                ${list.color ? `background-color: ${list.color};` : 'display: none;'}"></div>
+            <h3 class="list-title">${list.name} <span>${list.cards ? list.cards.length : 0}</span></h3>
+        </div>
+        ${isAdmin ? `
+            <div class="list-actions">
+                <button class="btn-list-color" title="Change color"><i class="fas fa-palette"></i></button>
+                <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
+                <button class="btn-delete" title="Delete list"><i class="fas fa-trash"></i></button>
+            </div>
+        ` : ''}
+    `;
+    
+    // Добавляем обработчики для кнопок в заголовке списка
+    if (isAdmin) {
+        // После добавления заголовка в DOM, добавляем обработчики
+        setTimeout(() => {
+            const colorBtn = listHeader.querySelector('.btn-list-color');
+            if (colorBtn) {
+                colorBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openListColorPicker(list.id);
+                });
+            }
+            
+            const editBtn = listHeader.querySelector('.btn-edit');
+            if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openEditListModal(list.id);
+                });
+            }
+            
+            const deleteBtn = listHeader.querySelector('.btn-delete');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleDeleteList(list.id);
+                });
+            }
+        }, 0);
+    }
+    
+    return { listElement, listHeader };
+}
 
 // Обновляем функцию renderLists
+// Рендеринг списков
 function renderLists() {
     const listsContainer = document.getElementById('listsContainer');
     
@@ -1677,6 +1749,7 @@ function renderLists() {
         setupListsContainer();
     }
 }
+
 
 // Обновим функцию создания карточки, добавив position в карточку
 function createCardElement(card, listId) {
@@ -2395,22 +2468,9 @@ function toggleSidebar() {
 // Initialize edit list form handler
 document.getElementById('editListForm').addEventListener('submit', handleEditList);
 
-function setupDraggableList(listElement) {
-    // Добавляем атрибут draggable
-    listElement.setAttribute('draggable', 'true');
-    
-    // Обработчики событий для перетаскивания
-    listElement.addEventListener('dragstart', handleListDragStart);
-    listElement.addEventListener('dragend', handleListDragEnd);
-    
-    console.log('Setup draggable for list:', listElement.dataset.listId);
-}
-
-// 2. Функция для обработки начала перетаскивания списка
+// Функция для обработки начала перетаскивания списка
 function handleListDragStart(e) {
-    console.log('List drag start triggered', e.target);
-    
-    // Проверяем, что пользователь схватил за заголовок
+    // Проверяем, что пользователь схватил заголовок, и что это администратор
     const header = e.target.closest('.list-header');
     if (!header || !isAdmin) {
         e.preventDefault();
@@ -2418,17 +2478,17 @@ function handleListDragStart(e) {
         return false;
     }
     
+    console.log('List drag start', this.dataset.listId);
+    
     // Устанавливаем флаги и данные
     isDraggingList = true;
     draggedList = this;
     
-    // Важно: устанавливаем тип данных
+    // Устанавливаем данные для переноса
     e.dataTransfer.setData('text/plain', this.dataset.listId);
-    // Устанавливаем дополнительный тип для различения списков и карточек
+    // Устанавливаем дополнительный тип для идентификации списка
     e.dataTransfer.setData('application/list-id', this.dataset.listId);
     e.dataTransfer.effectAllowed = 'move';
-    
-    console.log('Dragging list:', this.dataset.listId);
     
     // Добавляем класс для визуального отображения перетаскивания
     setTimeout(() => {
@@ -2436,7 +2496,7 @@ function handleListDragStart(e) {
     }, 0);
 }
 
-// 3. Функция для обработки окончания перетаскивания списка
+// Функция для обработки окончания перетаскивания списка
 function handleListDragEnd(e) {
     console.log('List drag end');
     
@@ -2450,26 +2510,7 @@ function handleListDragEnd(e) {
         zone.removeAttribute('data-drop-position');
     });
 }
-
-// 4. Функция для настройки области перетаскивания списков
-function setupListsContainer() {
-    const listsContainer = document.getElementById('listsContainer');
-    if (!listsContainer) {
-        console.error('Lists container not found');
-        return;
-    }
-    
-    console.log('Setting up lists container for dragging');
-    
-    // Обработчики событий для перетаскивания
-    listsContainer.addEventListener('dragover', handleListContainerDragOver);
-    listsContainer.addEventListener('dragenter', function(e) { 
-        e.preventDefault(); 
-    });
-    listsContainer.addEventListener('drop', handleListContainerDrop);
-}
-
-// 5. Обработчик для события dragover на контейнере списков
+// Функция для обработки события dragover на контейнере списков
 function handleListContainerDragOver(e) {
     e.preventDefault();
     
@@ -2478,6 +2519,7 @@ function handleListContainerDragOver(e) {
     
     // Находим все списки, кроме перетаскиваемого
     const listElements = Array.from(document.querySelectorAll('.list:not(.dragging-list)'));
+    if (listElements.length === 0) return;
     
     // Определяем ближайший список
     const closest = findClosestList(e.clientX, listElements);
@@ -2498,13 +2540,12 @@ function handleListContainerDragOver(e) {
     closest.classList.add('list-drop-zone');
     closest.dataset.dropPosition = position;
 }
-
 // 6. Обработчик для события dragenter на контейнере списков
 function handleListContainerDragEnter(e) {
     e.preventDefault(); // Разрешаем вход в зону сброса
 }
 
-// 7. Обработчик для события drop на контейнере списков
+// Функция для обработки события drop на контейнере списков
 function handleListContainerDrop(e) {
     e.preventDefault();
     console.log('List container drop triggered');
@@ -2552,22 +2593,8 @@ function handleListContainerDrop(e) {
         });
     }
 }
-// Добавим функцию для определения, перед какой карточкой вставить перетаскиваемую
-function getCardAfterCursor(cards, cursorY) {
-    // Находим карточку, после которой нужно вставить перетаскиваемую
-    return cards.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = cursorY - box.top - box.height / 2;
-        
-        // Если курсор выше середины карточки и это ближайшая карточка сверху
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-// 8. Функция для поиска ближайшего списка к позиции курсора
+
+// Функция для поиска ближайшего списка к позиции курсора
 function findClosestList(mouseX, lists) {
     let closestList = null;
     let closestDistance = Infinity;
@@ -2585,8 +2612,7 @@ function findClosestList(mouseX, lists) {
     
     return closestList;
 }
-
-// 9. Функция для перемещения списка в интерфейсе
+// Функция для перемещения списка в интерфейсе
 function moveListInUI(listId, targetId, position) {
     const listsContainer = document.getElementById('listsContainer');
     const listToMove = document.querySelector(`.list[data-list-id="${listId}"]`);
@@ -2609,44 +2635,68 @@ function moveListInUI(listId, targetId, position) {
 
 // 10. Функция для обновления порядка списков в массиве
 function updateListsOrder() {
+    console.log('Updating lists order in memory');
     const listElements = document.querySelectorAll('.list');
-    const newLists = [];
+    const newOrder = Array.from(listElements).map(el => parseInt(el.dataset.listId));
     
-    listElements.forEach(element => {
-        const listId = parseInt(element.dataset.listId);
+    console.log('New list order:', newOrder);
+    
+    // Create new array with lists in the new order
+    const newLists = [];
+    newOrder.forEach(listId => {
         const list = lists.find(l => l.id === listId);
         if (list) {
             newLists.push(list);
         }
     });
     
+    // Update the global lists array
     lists = newLists;
-}
-
-// 11. Функция для сохранения порядка списков на сервере
-function saveListsOrder() {
+}// 11. Функция для сохранения порядка списков на сервере
+async function saveListsOrder() {
     if (!activeBoard) return;
     
-    const listIds = lists.map(list => list.id);
+    // Get the current order of lists from the DOM
+    const listElements = document.querySelectorAll('.list');
+    const listIds = Array.from(listElements).map(el => parseInt(el.dataset.listId));
     
-    fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/reorder`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ list_ids: listIds }),
-    })
-    .then(response => {
+    console.log('Saving lists order to server:', listIds);
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ list_ids: listIds }),
+        });
+        
         if (!response.ok) {
             throw new Error(`Failed to save lists order. Status: ${response.status}`);
         }
-        return response.json();
-    })
-    .then(data => {
-        console.log('Lists order saved:', data);
-    })
-    .catch(error => {
+        
+        const data = await response.json();
+        console.log('Lists order saved successfully:', data);
+        
+        // Notify user of success
+        showToast('Success', 'List order saved successfully', 'success');
+    } catch (error) {
         console.error('Error saving lists order:', error);
-        showToast('Error', 'Failed to save lists order', 'error');
-    });
+        showToast('Error', 'Failed to save list order. Please try again.', 'error');
+    }
+}
+// Добавим функцию для определения, перед какой карточкой вставить перетаскиваемую
+function getCardAfterCursor(cards, cursorY) {
+    // Находим карточку, после которой нужно вставить перетаскиваемую
+    return cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = cursorY - box.top - box.height / 2;
+        
+        // Если курсор выше середины карточки и это ближайшая карточка сверху
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 // Добавим функцию для сохранения нового порядка карточек
 async function saveCardsOrder(listId, cardIds) {
@@ -2864,73 +2914,214 @@ function saveListColor(listId, color, textColor) {
     });
 }
 
-// Модифицируем функцию для создания элемента списка
-function createListElement(list) {
-    const listElement = document.createElement('div');
-    listElement.className = 'list';
-    listElement.dataset.listId = list.id;
+
+
+
+// ==== Drag & Drop для списков ====
+
+function setupDraggableList(listElement) {
+    // Ensure element exists
+    if (!listElement) return;
     
-    // Добавляем хранение цвета, если он есть
-    if (list.color) {
-        listElement.dataset.color = list.color;
-        listElement.dataset.textColor = list.textColor || 'black';
-    }
+    // Add draggable attribute
+    listElement.setAttribute('draggable', 'true');
     
-    // Создаем заголовок списка
-    const listHeader = document.createElement('div');
-    listHeader.className = 'list-header';
-    
-    // Применяем сохраненный цвет к заголовку
-    if (list.color) {
-        listHeader.style.backgroundColor = list.color;
-        listHeader.style.color = list.textColor || 'black';
-    }
-    
-    // Создаем содержимое заголовка списка
-    listHeader.innerHTML = `
-        <div class="list-title-container" style="display: flex; align-items: center; flex: 1;">
-            <div class="list-color-indicator" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;
-                ${list.color ? `background-color: ${list.color};` : 'display: none;'}"></div>
-            <h3 class="list-title">${list.name} <span>${list.cards ? list.cards.length : 0}</span></h3>
-        </div>
-        ${isAdmin ? `
-            <div class="list-actions">
-                <button class="btn-list-color" title="Change color"><i class="fas fa-palette"></i></button>
-                <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
-                <button class="btn-delete" title="Delete list"><i class="fas fa-trash"></i></button>
-            </div>
-        ` : ''}
-    `;
-    
-    // Добавляем обработчики для кнопок в заголовке списка
-    if (isAdmin) {
-        // После добавления заголовка в DOM, добавляем обработчики
+    // Store original width before dragging starts
+    listElement.addEventListener('dragstart', (e) => {
+        // Cancel if not dragging the header (only drag when grabbing header)
+        const header = e.target.closest('.list-header');
+        if (!header || !isAdmin) {
+            e.preventDefault();
+            return false;
+        }
+        
+        // Store the original width to maintain dimensions during drag
+        const rect = listElement.getBoundingClientRect();
+        listElement.style.setProperty('--list-width', `${rect.width}px`);
+        
+        // Set drag data and visual effects
+        isDraggingList = true;
+        draggedList = listElement;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', listElement.dataset.listId);
+        
+        // Add dragging class after a small delay (this helps Chrome show proper drag image)
         setTimeout(() => {
-            const colorBtn = listHeader.querySelector('.btn-list-color');
-            if (colorBtn) {
-                colorBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    openListColorPicker(list.id);
-                });
-            }
-            
-            const editBtn = listHeader.querySelector('.btn-edit');
-            if (editBtn) {
-                editBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    openEditListModal(list.id);
-                });
-            }
-            
-            const deleteBtn = listHeader.querySelector('.btn-delete');
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    handleDeleteList(list.id);
-                });
-            }
+            listElement.classList.add('dragging-list');
         }, 0);
+    });
+    
+    listElement.addEventListener('dragend', () => {
+        isDraggingList = false;
+        draggedList = null;
+        listElement.classList.remove('dragging-list');
+        
+        // Save new order to server after dragging ends
+        saveListsOrder();
+    });
+}
+function setupListsContainer() {
+    const container = document.getElementById('listsContainer');
+    if (!container) {
+        console.error('Lists container not found');
+        return;
     }
     
-    return { listElement, listHeader };
+    // Create drop indicator element
+    let dropIndicator = document.createElement('div');
+    dropIndicator.className = 'list-drop-indicator';
+    dropIndicator.style.display = 'none';
+    container.appendChild(dropIndicator);
+    
+    container.addEventListener('dragover', (e) => {
+        if (!isDraggingList) return;
+        e.preventDefault();
+        
+        // Get the target list element that's closest to the drag position
+        const afterElement = getDragAfterElement(container, e.clientX);
+        
+        // Show drop indicator
+        if (afterElement) {
+            const rect = afterElement.getBoundingClientRect();
+            dropIndicator.style.height = `${rect.height}px`;
+            dropIndicator.style.left = `${rect.left - 5}px`;
+            dropIndicator.style.top = `${rect.top}px`;
+            dropIndicator.style.display = 'block';
+        } else {
+            // Position at the end if there's no afterElement
+            const lastChild = container.querySelector('.list:last-child');
+            if (lastChild) {
+                const rect = lastChild.getBoundingClientRect();
+                dropIndicator.style.height = `${rect.height}px`;
+                dropIndicator.style.left = `${rect.right + 5}px`;
+                dropIndicator.style.top = `${rect.top}px`;
+                dropIndicator.style.display = 'block';
+            }
+        }
+        
+        // Move the draggedList to the correct position
+        if (afterElement == null) {
+            container.appendChild(draggedList);
+        } else {
+            container.insertBefore(draggedList, afterElement);
+        }
+    });
+    
+    container.addEventListener('dragleave', () => {
+        // Hide drop indicator when leaving container
+        dropIndicator.style.display = 'none';
+    });
+    
+    container.addEventListener('drop', (e) => {
+        e.preventDefault();
+        
+        // Hide drop indicator
+        dropIndicator.style.display = 'none';
+        
+        // Update lists array order to match DOM
+        updateListsOrder();
+        
+        // Save the new order to the server
+        saveListsOrder();
+    });
+}
+
+function getDragAfterElement(container, x) {
+    const draggableElements = [...container.querySelectorAll('.list:not(.dragging-list)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+function addDragAndDropStyles() {
+    // Проверяем, добавлены ли уже стили
+    if (document.getElementById('kanban-drag-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'kanban-drag-styles';
+    style.textContent = `
+        .list.dragging {
+            opacity: 0.5;
+            background: #f0f0f0;
+            border: 2px dashed #999;
+        }
+        .list {
+            transition: all 0.2s ease;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+
+
+function setupDraggableList(listElement) {
+    listElement.setAttribute('draggable', 'true');
+
+    listElement.addEventListener('dragstart', (e) => {
+        isDraggingList = true;
+        draggedList = listElement;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', listElement.dataset.listId);
+        listElement.classList.add('dragging');
+    });
+
+    listElement.addEventListener('dragend', () => {
+        isDraggingList = false;
+        draggedList = null;
+        listElement.classList.remove('dragging');
+    });
+}
+
+function setupListsContainer() {
+    const listsContainer = document.getElementById('listsContainer');
+
+    listsContainer.addEventListener('dragover', (e) => {
+        if (!isDraggingList) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const afterElement = getDragAfterElement(listsContainer, e.clientX);
+        const dragging = document.querySelector('.list.dragging');
+        if (afterElement == null) {
+            listsContainer.appendChild(dragging);
+        } else {
+            listsContainer.insertBefore(dragging, afterElement);
+        }
+    });
+
+    listsContainer.addEventListener('drop', (e) => {
+        if (!isDraggingList) return;
+        isDraggingList = false;
+        const dragging = document.querySelector('.list.dragging');
+        dragging.classList.remove('dragging');
+
+        const newListOrder = Array.from(listsContainer.querySelectorAll('.list')).map((listEl, index) => {
+            const listId = parseInt(listEl.dataset.listId);
+            const list = lists.find(l => l.id === listId);
+            if (list) list.position = index;
+            return list;
+        });
+
+        lists = newListOrder;
+        renderLists();
+    });
+}
+
+function getDragAfterElement(container, x) {
+    const draggableElements = [...container.querySelectorAll('.list:not(.dragging)')];
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
