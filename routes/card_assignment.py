@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from routes.models import User, db, Board, List, Card, PriorityLevel
 from functools import wraps
+from routes.notifications import notify_user  # Добавить этот импорт в начало файла
 
 card_assignment_bp = Blueprint('card_assignment', __name__)
 
@@ -52,6 +53,11 @@ def init_card_assignment_db():
 
 # ===== CARD ASSIGNMENT ROUTES =====
 
+# Изменения для файла card_assignment.py
+
+# Добавьте импорт функции уведомлений в начало файла
+
+# Обновите функцию назначения нескольких пользователей
 @card_assignment_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/assign-multiple', methods=['PUT'])
 @login_required
 @admin_required  # Only admins can assign multiple users to cards
@@ -81,6 +87,10 @@ def assign_multiple_users_to_card(board_id, list_id, card_id):
     user_ids = data.get('user_ids', [])
     
     try:
+        # Сохраняем список текущих назначенных пользователей для отслеживания изменений
+        current_assigned_users = list(card.assigned_users)
+        current_assigned_user_ids = [user.id for user in current_assigned_users]
+        
         # Validate all users exist and have access to the board
         valid_users = []
         for user_id in user_ids:
@@ -106,6 +116,30 @@ def assign_multiple_users_to_card(board_id, list_id, card_id):
         
         db.session.commit()
         
+        # Определяем новых пользователей для отправки уведомлений
+        new_user_ids = [user.id for user in valid_users]
+        
+        # Отправляем уведомления новым назначенным пользователям
+        for user in valid_users:
+            # Если пользователь ранее не был назначен
+            if user.id not in current_assigned_user_ids:
+                notify_user(
+                    user_id=user.id,
+                    message=f"Вы были назначены на карточку '{card.title}' в доске '{board.name}'",
+                    category='info',
+                    link=f"/kanban?board_id={board_id}"
+                )
+        
+        # Отправляем уведомления пользователям, которые были сняты с карточки
+        for user in current_assigned_users:
+            if user.id not in new_user_ids:
+                notify_user(
+                    user_id=user.id,
+                    message=f"Вы были сняты с карточки '{card.title}' в доске '{board.name}'",
+                    category='info',
+                    link=f"/kanban?board_id={board_id}"
+                )
+        
         return jsonify({
             "success": True,
             "message": "Card assignments updated successfully",
@@ -116,7 +150,6 @@ def assign_multiple_users_to_card(board_id, list_id, card_id):
         db.session.rollback()
         print(f"Error assigning users to card: {str(e)}")
         return jsonify({"success": False, "message": f"Failed to assign users: {str(e)}"}), 500
-
 @card_assignment_bp.route('/cards/<int:card_id>/assignees', methods=['GET'])
 @login_required
 def get_card_assignees(card_id):
