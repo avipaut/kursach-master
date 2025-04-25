@@ -17,9 +17,9 @@ depends_on = None
 
 
 def upgrade():
-    op.drop_table('_alembic_tmp_list')
-    with op.batch_alter_table('list', schema=None) as batch_op:
-        batch_op.drop_column('color_id')
+    # op.drop_table('_alembic_tmp_list')
+    # with op.batch_alter_table('list', schema=None) as batch_op:
+    #     batch_op.drop_column('color_id')
 
     with op.batch_alter_table('lobbies', schema=None) as batch_op:
         batch_op.create_foreign_key(
