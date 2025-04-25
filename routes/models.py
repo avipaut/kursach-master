@@ -25,6 +25,10 @@ board_users = db.Table('board_users',
     db.Column('board_id', db.Integer(), db.ForeignKey('board.id', ondelete="CASCADE"), primary_key=True),
     db.Column('user_id', db.Integer(), db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
 )
+card_assignees = db.Table('card_assignees',
+    db.Column('card_id', db.Integer, db.ForeignKey('card.id', ondelete="CASCADE"), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
+)
 
 class Role(db.Model, RoleMixin):
     id = db.Column(db.Integer(), primary_key=True)
@@ -296,9 +300,12 @@ class Card(db.Model):
     
     # Relationships
     todos = db.relationship('Todo', backref='card', cascade="all, delete-orphan", lazy=True)
-
+    assigned_users = db.relationship('User', 
+                                  secondary=card_assignees,
+                                  backref=db.backref('assigned_cards_multi', lazy='dynamic'))
+     # Also update the to_dict method to include assigned users:
     def to_dict(self):
-        return {
+        base_dict = {
             'id': self.id,
             'title': self.title,
             'description': self.description,
@@ -310,9 +317,12 @@ class Card(db.Model):
             'assigned_to': self.assigned_to,
             'deadline': self.deadline.isoformat() if self.deadline else None,
             'custom_color': self.custom_color,
-            'position': self.position,  # Добавляем позицию в вывод
-            'todos': [todo.to_dict() for todo in self.todos]  # Include todos in the card data
+            'position': self.position,
+            'todos': [todo.to_dict() for todo in self.todos],
+            # Add assigned users
+            'assigned_users': [{'id': user.id, 'username': user.username} for user in self.assigned_users]
         }
+        return base_dict
     def __repr__(self):
         return f"<Card {self.title} (Priority: {self.priority.name if self.priority else 'None'})>"
 

@@ -23,6 +23,7 @@ from routes.trash import trash_bp
 from routes.notifications import notifications_bp, add_notification
 from routes.admin_panel import admin_bp
 from routes.profile import profile_bp  # Импортируем Profile Blueprint
+from routes.card_assignment import card_assignment_bp, init_card_assignment_db  # Import new card assignment module
 
 # Инициализация Flask
 app = Flask(__name__)
@@ -138,6 +139,7 @@ app.register_blueprint(trash_bp, url_prefix='/trash')
 app.register_blueprint(notifications_bp, url_prefix='/notifications')
 app.register_blueprint(admin_bp, url_prefix='/admin')  # Важно: уточняем правильный префикс
 app.register_blueprint(profile_bp)  # Регистрируем blueprint профиля без префикса
+app.register_blueprint(card_assignment_bp, url_prefix='/kanban')  # Register card assignment blueprint
 
 # Главный маршрут
 @app.route('/')
@@ -192,6 +194,7 @@ def check_login():
 with app.app_context():
     db.create_all()
     create_initial_roles_and_admin()
+    init_card_assignment_db()  # Initialize card assignment module
 
 UPLOAD_FOLDER = "uploaded_documents"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

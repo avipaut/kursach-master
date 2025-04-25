@@ -808,38 +808,62 @@ async function handleDeleteList(listId) {
     }
 }
 
-// Card management functions
 function openCreateCardModal(listId) {
     // Save list ID in the form
-    document.getElementById('createCardForm').dataset.listId = listId;
+    const createCardForm = document.getElementById('createCardForm');
+    if (createCardForm) {
+        createCardForm.dataset.listId = listId;
+    }
     
-    // Clear form
-    document.getElementById('cardTitle').value = '';
-    document.getElementById('cardDescription').value = '';
-    document.getElementById('cardPriority').value = 'medium';
-    document.getElementById('cardAssignee').value = '';
-    document.getElementById('cardDeadline').value = '';
+    // Clear form fields - check for existence before setting values
+    const cardTitle = document.getElementById('cardTitle');
+    if (cardTitle) {
+        cardTitle.value = '';
+    }
+    
+    const cardDescription = document.getElementById('cardDescription');
+    if (cardDescription) {
+        cardDescription.value = '';
+    }
+    
+    const cardPriority = document.getElementById('cardPriority');
+    if (cardPriority) {
+        cardPriority.value = 'medium';
+    }
+    
+    // Handle single assignee dropdown if it exists
+    const cardAssignee = document.getElementById('cardAssignee');
+    if (cardAssignee) {
+        cardAssignee.value = '';
+    }
+    
+    const cardDeadline = document.getElementById('cardDeadline');
+    if (cardDeadline) {
+        cardDeadline.value = '';
+    }
     
     // Clear and reset task list
     const todoItemsContainer = document.getElementById('todoItems');
-    todoItemsContainer.innerHTML = `
-        <div class="todo-item">
-            <input type="text" class="todo-input" placeholder="Add a task...">
-            <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
-        </div>
-    `;
+    if (todoItemsContainer) {
+        todoItemsContainer.innerHTML = `
+            <div class="todo-item">
+                <input type="text" class="todo-input" placeholder="Add a task...">
+                <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+            </div>
+        `;
+    }
     
-    // Add users to dropdown
-    const assigneeSelect = document.getElementById('cardAssignee');
-    populateUserSelect(assigneeSelect);
+    // Add users to dropdown only if the original dropdown exists
+    if (cardAssignee) {
+        populateUserSelect(cardAssignee);
+    }
     
     // Add remove button handlers
     attachRemoveTodoHandlers();
     
     // Open modal
     openModal(createCardModal);
-}
-// Helper function to get priority color
+}// Helper function to get priority color
 function getPriorityColor(priority) {
     switch (priority) {
         case 'low':
@@ -852,7 +876,7 @@ function getPriorityColor(priority) {
             return '#3788d8';  // Blue
     }
 }
-// Update card creation to sync with calendar
+// Update card creation to sync with calendar and handle both single and multiple assignees
 async function handleCreateCard(event) {
     event.preventDefault();
     
@@ -861,17 +885,44 @@ async function handleCreateCard(event) {
     const listId = parseInt(event.target.dataset.listId);
     if (!listId) return;
     
-    const title = document.getElementById('cardTitle').value.trim();
-    const description = document.getElementById('cardDescription').value.trim();
-    const priority = document.getElementById('cardPriority').value;
+    // Get basic card information
+    const titleElement = document.getElementById('cardTitle');
+    const descriptionElement = document.getElementById('cardDescription');
+    const priorityElement = document.getElementById('cardPriority');
+    const deadlineElement = document.getElementById('cardDeadline');
+    
+    // Check if elements exist before getting values
+    const title = titleElement ? titleElement.value.trim() : '';
+    const description = descriptionElement ? descriptionElement.value.trim() : '';
+    const priority = priorityElement ? priorityElement.value : 'medium';
+    const deadline = deadlineElement ? deadlineElement.value : '';
+    
+    // Check for both single and multiple assignee elements
     const assignedToElement = document.getElementById('cardAssignee');
     const assignedTo = assignedToElement ? assignedToElement.value : '';
-    const deadline = document.getElementById('cardDeadline').value;
     
-    if (!title) return;
+    // Also check for multi-select
+    const multiAssigneesElement = document.getElementById('cardAssignees');
+    let selectedAssigneeIds = [];
+    
+    if (multiAssigneesElement) {
+        // Get multiple assignees if using multi-select
+        Array.from(multiAssigneesElement.selectedOptions).forEach(option => {
+            if (option.value) {
+                selectedAssigneeIds.push(parseInt(option.value));
+            }
+        });
+    }
+    
+    if (!title) {
+        alert("Title is required");
+        return;
+    }
     
     try {
-        console.log('Creating card with assigned user:', assignedTo);
+        console.log('Creating card with assignment info:', 
+            assignedTo ? `Single assignee: ${assignedTo}` : 'No single assignee', 
+            selectedAssigneeIds.length > 0 ? `Multiple assignees: ${selectedAssigneeIds.join(', ')}` : 'No multiple assignees');
         
         // Create basic card
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards`, {
@@ -897,9 +948,8 @@ async function handleCreateCard(event) {
         const operations = [];
         
         // Add tasks
-        const todoInputs = document.querySelectorAll('#todoItems .todo-input');
-        for (const input of todoInputs) {
-            const content = input.value.trim();
+        const todoItems = getTodoItems('todoItems');
+        for (const content of todoItems) {
             if (content) {
                 operations.push(
                     fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/todos`, {
@@ -944,8 +994,24 @@ async function handleCreateCard(event) {
             );
         }
         
-        // User assignment - use the correct route with /kanban prefix
-        if (assignedTo) {
+        // User assignment logic - handle both single and multiple assignees
+        if (selectedAssigneeIds.length > 0) {
+            // If we have multiple assignees selected, use the multi-assign endpoint
+            operations.push(
+                fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign-multiple`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_ids: selectedAssigneeIds }),
+                })
+            );
+            
+            // Store assignments for client-side use if cardAssignments Map exists
+            if (typeof cardAssignments !== 'undefined') {
+                cardAssignments.set(cardId, selectedAssigneeIds);
+            }
+        }
+        else if (assignedTo) {
+            // If using traditional single assignee, use that API
             operations.push(
                 fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
                     method: 'PUT',
@@ -969,6 +1035,24 @@ async function handleCreateCard(event) {
         console.error('Error creating card:', error);
         showToast('Error', 'Failed to create card. Please try again.', 'error');
     }
+}
+
+// Helper function to get todos (used by both kanban.js and card_assignment.js)
+function getTodoItems(containerId) {
+    const todos = [];
+    const container = document.getElementById(containerId);
+    
+    if (container) {
+        const todoInputs = container.querySelectorAll('.todo-input');
+        todoInputs.forEach(input => {
+            const content = input.value.trim();
+            if (content) {
+                todos.push(content);
+            }
+        });
+    }
+    
+    return todos;
 }
 // Sync existing cards with deadlines to the calendar
 async function syncCardsToCalendar() {
@@ -1064,67 +1148,79 @@ function openEditCardModal(cardId, listId) {
     document.getElementById('editCardTitle').value = card.title || '';
     document.getElementById('editCardDescription').value = card.description || '';
     document.getElementById('editCardPriority').value = card.priority || 'medium';
-    document.getElementById('editCardAssignee').value = card.assigned_to ? card.assigned_to.toString() : '';
+    
+    // Check if the single assignee dropdown exists before setting its value
+    const assigneeElement = document.getElementById('editCardAssignee');
+    if (assigneeElement) {
+        assigneeElement.value = card.assigned_to ? card.assigned_to.toString() : '';
+    }
+    
     document.getElementById('editCardCompleted').checked = card.completed || false;
     
     // Set deadline date
     const deadlineInput = document.getElementById('editCardDeadline');
-    if (card.deadline) {
+    if (deadlineInput && card.deadline) {
         // Format date for input[type="date"]
         const deadline = new Date(card.deadline);
         const year = deadline.getFullYear();
         const month = String(deadline.getMonth() + 1).padStart(2, '0');
         const day = String(deadline.getDate()).padStart(2, '0');
         deadlineInput.value = `${year}-${month}-${day}`;
-    } else {
+    } else if (deadlineInput) {
         deadlineInput.value = '';
     }
     
-    // Add users to dropdown
+    // Add users to dropdown if the element exists
     const assigneeSelect = document.getElementById('editCardAssignee');
-    populateUserSelect(assigneeSelect);
+    if (assigneeSelect) {
+        populateUserSelect(assigneeSelect);
+    }
     
     // Fill tasks
     const todoItemsContainer = document.getElementById('editTodoItems');
-    todoItemsContainer.innerHTML = '';
-    
-    if (card.todos && card.todos.length > 0) {
-        card.todos.forEach(todo => {
-            const todoItem = document.createElement('div');
-            todoItem.className = 'todo-item';
-            todoItem.dataset.todoId = todo.id;
-            
-            todoItem.innerHTML = `
-                <div class="form-check">
-                    <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
-                    <input type="text" class="todo-input" value="${todo.content}" placeholder="Task...">
-                </div>
-                <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
-            `;
-            
-            todoItemsContainer.appendChild(todoItem);
-        });
+    if (todoItemsContainer) {
+        todoItemsContainer.innerHTML = '';
+        
+        if (card.todos && card.todos.length > 0) {
+            card.todos.forEach(todo => {
+                const todoItem = document.createElement('div');
+                todoItem.className = 'todo-item';
+                todoItem.dataset.todoId = todo.id;
+                
+                todoItem.innerHTML = `
+                    <div class="form-check">
+                        <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
+                        <input type="text" class="todo-input" value="${todo.content}" placeholder="Task...">
+                    </div>
+                    <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+                `;
+                
+                todoItemsContainer.appendChild(todoItem);
+            });
+        }
+        
+        // Add empty line for new task
+        const emptyTodoItem = document.createElement('div');
+        emptyTodoItem.className = 'todo-item';
+        emptyTodoItem.innerHTML = `
+            <input type="text" class="todo-input" placeholder="Add new task...">
+            <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+        `;
+        todoItemsContainer.appendChild(emptyTodoItem);
     }
-    
-    // Add empty line for new task
-    const emptyTodoItem = document.createElement('div');
-    emptyTodoItem.className = 'todo-item';
-    emptyTodoItem.innerHTML = `
-        <input type="text" class="todo-input" placeholder="Add new task...">
-        <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
-    `;
-    todoItemsContainer.appendChild(emptyTodoItem);
     
     // Add handlers for task delete buttons
     attachRemoveTodoHandlers();
     
     // Add event handler for delete card button
-    document.getElementById('deleteCardBtn').onclick = () => handleDeleteCard(cardId, listId);
+    const deleteCardBtn = document.getElementById('deleteCardBtn');
+    if (deleteCardBtn) {
+        deleteCardBtn.onclick = () => handleDeleteCard(cardId, listId);
+    }
     
     // Open modal
     openModal(editCardModal);
 }
-
 function attachRemoveTodoHandlers() {
     document.querySelectorAll('.btn-remove-todo').forEach(button => {
         button.addEventListener('click', (e) => {
@@ -1928,87 +2024,6 @@ function createCardElement(card, listId) {
     return cardElement;
 }
 
-// Обновляем функцию renderLists
-function renderLists() {
-    const listsContainer = document.getElementById('listsContainer');
-    
-    // Очищаем контейнер
-    listsContainer.innerHTML = '';
-    
-    // Добавляем списки
-    lists.forEach(list => {
-        // Используем новую функцию для создания элемента списка
-        const { listElement, listHeader } = createListElement(list);
-        
-        // Создаем контейнер для карточек
-        const listCards = document.createElement('div');
-        listCards.className = 'list-cards';
-        listCards.dataset.listId = list.id;
-        
-        // Включаем перетаскивание, если пользователь - администратор
-        if (isAdmin) {
-            setupDropZone(listCards);
-        }
-        
-        // Добавляем карточки в список
-        if (list.cards && list.cards.length > 0) {
-            // Сортируем карточки по позиции, если такое поле есть
-            if (list.cards[0].position !== undefined) {
-                list.cards.sort((a, b) => a.position - b.position);
-            }
-            
-            list.cards.forEach(card => {
-                const cardElement = createCardElement(card, list.id);
-                listCards.appendChild(cardElement);
-            });
-        }
-        
-        // Создаем кнопку добавления карточки (только для администраторов)
-        if (isAdmin) {
-            const addCardBtn = document.createElement('button');
-            addCardBtn.className = 'btn-add-card';
-            addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Add Card';
-            addCardBtn.addEventListener('click', () => openCreateCardModal(list.id));
-            
-            // Добавляем всё в элемент списка
-            listElement.appendChild(listHeader);
-            listElement.appendChild(listCards);
-            listElement.appendChild(addCardBtn);
-        } else {
-            // Для обычных пользователей только заголовок и карточки
-            listElement.appendChild(listHeader);
-            listElement.appendChild(listCards);
-        }
-        
-        // Настраиваем перетаскивание списка, если пользователь - администратор
-        if (isAdmin) {
-            setupDraggableList(listElement);
-        }
-        
-        listsContainer.appendChild(listElement);
-    });
-    
-    // Добавляем контейнер для кнопки добавления списка (только для администраторов)
-    if (isAdmin) {
-        const addListContainer = document.createElement('div');
-        addListContainer.className = 'add-list-container';
-        addListContainer.innerHTML = `
-            <button id="addListBtn" class="btn-add-list">
-                <i class="fas fa-plus"></i> Add List
-            </button>
-        `;
-        
-        // Добавляем обработчик для кнопки добавления списка
-        addListContainer.querySelector('#addListBtn')?.addEventListener('click', () => openModal(createListModal));
-        
-        listsContainer.appendChild(addListContainer);
-    }
-    
-    // Настраиваем контейнер списков для перетаскивания
-    if (isAdmin) {
-        setupListsContainer();
-    }
-}
 
 // Function to open a simplified modal for regular users
 function openUserTodoModal(cardId, cardTitle) {

@@ -6,6 +6,7 @@ from flask_login import login_required, current_user
 from routes.models import PriorityLevel, User, db, Board, List, Card, Todo  # Make sure this import works with your project structure
 from functools import wraps
 from sqlalchemy import case
+from routes.notifications import notify_user  # Добавить этот импорт в начало файла
 
 kanban_bp = Blueprint('kanban', __name__)
 
@@ -65,6 +66,7 @@ def get_boards():
     
     return jsonify([board.to_dict() for board in boards])
 
+# Обновите функцию создания доски для отправки уведомлений пользователям, добавленным в доску
 @kanban_bp.route('/boards', methods=['POST'])
 @login_required
 @admin_required  # Only admins can create boards
@@ -84,17 +86,33 @@ def create_board():
     new_board.users.append(current_user)
     
     # Add any additional users specified in the request
+    added_users = []
     if data.get('user_ids'):
         for user_id in data.get('user_ids'):
+            # Пропускаем создателя доски
+            if user_id == current_user.id:
+                continue
+                
             user = User.query.get(user_id)
             if user:
                 new_board.users.append(user)
+                added_users.append(user_id)
     
     db.session.add(new_board)
     db.session.commit()
     
+    # Отправляем уведомления добавленным пользователям
+    for user_id in added_users:
+        notify_user(
+            user_id=user_id,
+            message=f"Вы были добавлены к новой доске '{new_board.name}'",
+            category='info',
+            link=f"/kanban?board_id={new_board.id}"
+        )
+    
     return jsonify(new_board.to_dict()), 201
 
+# Обновите функцию обновления доски для отправки уведомлений
 @kanban_bp.route('/boards/<int:board_id>', methods=['PUT'])
 @login_required
 def update_board(board_id):
@@ -108,8 +126,16 @@ def update_board(board_id):
     
     data = request.json
     
+    # Сохраняем старое название доски для сравнения
+    old_name = board_obj.name
+    name_changed = False
+    
+    # Сохраняем текущих пользователей для отслеживания изменений
+    current_users = set(user.id for user in board_obj.users)
+    
     # Update basic board info
     if 'name' in data:
+        name_changed = old_name != data['name']
         board_obj.name = data['name']
     
     if 'admin_only' in data and current_user.is_admin:
@@ -117,24 +143,61 @@ def update_board(board_id):
     
     # Update board users
     if 'user_ids' in data:
-        # Clear existing users and re-add them
+        new_user_ids = set(data['user_ids'])
+        
+        # Сохраняем создателя доски
+        creator_id = board_obj.user_id
+        if creator_id not in new_user_ids:
+            new_user_ids.add(creator_id)
+        
+        # Находим пользователей, которые будут добавлены
+        users_to_add = new_user_ids - current_users
+        
+        # Находим пользователей, которые будут удалены
+        users_to_remove = current_users - new_user_ids
+        
+        # Обновляем список пользователей доски
         board_obj.users = []
         
-        # Always add the board creator
-        creator = User.query.get(board_obj.user_id)
-        if creator:
-            board_obj.users.append(creator)
-        
-        # Add the specified users
-        for user_id in data['user_ids']:
+        # Добавляем всех указанных пользователей
+        for user_id in new_user_ids:
             user = User.query.get(user_id)
             if user:
                 board_obj.users.append(user)
+        
+        # Уведомляем новых пользователей
+        for user_id in users_to_add:
+            notify_user(
+                user_id=user_id,
+                message=f"Вы были добавлены к доске '{board_obj.name}'",
+                category='info',
+                link=f"/kanban?board_id={board_id}"
+            )
+        
+        # Уведомляем удаленных пользователей
+        for user_id in users_to_remove:
+            notify_user(
+                user_id=user_id,
+                message=f"Вы были удалены из доски '{board_obj.name}'",
+                category='warning',
+                link="/kanban"  # Ссылка на общий список досок
+            )
     
     db.session.commit()
+    
+    # Если название доски изменилось, уведомляем всех участников
+    if name_changed:
+        for user in board_obj.users:
+            # Не отправляем уведомление пользователю, который сделал изменение
+            if user.id != current_user.id:
+                notify_user(
+                    user_id=user.id,
+                    message=f"Название доски изменено на '{board_obj.name}'",
+                    category='info',
+                    link=f"/kanban?board_id={board_id}"
+                )
+    
     return jsonify(board_obj.to_dict())
-
-# Add a new endpoint to manage board users
 @kanban_bp.route('/boards/<int:board_id>/users', methods=['POST'])
 @login_required
 def add_board_user(board_id):
@@ -164,8 +227,17 @@ def add_board_user(board_id):
     board.users.append(user)
     db.session.commit()
     
+    # Отправляем уведомление пользователю о добавлении его к доске
+    notify_user(
+        user_id=user_id,
+        message=f"Вы были добавлены к доске '{board.name}'",
+        category='info',
+        link=f"/kanban?board_id={board_id}"
+    )
+    
     return jsonify({"message": "User added to board successfully"}), 200
 
+# Обновите функцию remove_board_user для отправки уведомлений
 @kanban_bp.route('/boards/<int:board_id>/users/<int:user_id>', methods=['DELETE'])
 @login_required
 def remove_board_user(board_id, user_id):
@@ -189,6 +261,15 @@ def remove_board_user(board_id, user_id):
     if user in board.users:
         board.users.remove(user)
         db.session.commit()
+        
+        # Отправляем уведомление пользователю об удалении его из доски
+        notify_user(
+            user_id=user_id,
+            message=f"Вы были удалены из доски '{board.name}'",
+            category='warning',
+            link="/kanban"  # Ссылка на общий список досок
+        )
+        
         return jsonify({"message": "User removed from board successfully"}), 200
     else:
         return jsonify({"error": "User does not have access to this board"}), 404
@@ -376,6 +457,7 @@ def get_single_card(board_id, list_id, card_id):
 
     return jsonify(card.to_dict())
 
+# Изменения для функции создания карточки (create_card)
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards', methods=['POST'])
 @login_required
 @admin_required  # Only admins can create cards
@@ -395,9 +477,28 @@ def create_card(board_id, list_id):
         priority=PriorityLevel(data.get('priority', 'low')),
         position=max_position + 1  # Устанавливаем позицию в конце списка
     )
+    
+    # Если карточка сразу назначается на пользователя, получаем его
+    assigned_to = data.get('assigned_to')
+    if assigned_to:
+        user = User.query.get(assigned_to)
+        if user:
+            new_card.assigned_to = assigned_to
+            
+            # Если карточка назначается пользователю при создании, отправляем уведомление
+            board = Board.query.get(board_id)
+            if board and assigned_to != current_user.id:
+                notify_user(
+                    user_id=assigned_to,
+                    message=f"Вам назначена новая карточка '{data['title']}' в доске '{board.name}'",
+                    category='info',
+                    link=f"/kanban?board_id={board_id}"
+                )
+    
     db.session.add(new_card)
     db.session.commit()
     return jsonify(new_card.to_dict()), 201
+# Обновите функцию обновления карточки, чтобы назначенные пользователи получали уведомления
 @kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['PUT'])
 @login_required
 @admin_required  # Only admins can update card details
@@ -415,30 +516,40 @@ def update_card(board_id, list_id, card_id):
         return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
 
     data = request.json
+    
+    # Сохраняем старые значения для сравнения
+    old_title = card.title
+    old_description = card.description
+    
+    # Обновляем карточку
     card.title = data.get('title', card.title)
     card.description = data.get('description', card.description)
+    
+    # Проверяем, изменилось ли название или описание
+    title_changed = old_title != card.title
+    description_changed = old_description != card.description
+    
     db.session.commit()
+    
+    # Если карточка назначена пользователю и не текущему пользователю,
+    # отправляем уведомление об изменениях
+    if card.assigned_to and card.assigned_to != current_user.id and (title_changed or description_changed):
+        change_type = []
+        if title_changed:
+            change_type.append("название")
+        if description_changed:
+            change_type.append("описание")
+        
+        changes = " и ".join(change_type)
+        
+        notify_user(
+            user_id=card.assigned_to,
+            message=f"Изменено {changes} карточки '{card.title}' в доске '{board.name}'",
+            category='info',
+            link=f"/kanban?board_id={board_id}"
+        )
+    
     return jsonify({"id": card.id, "title": card.title, "description": card.description})
-
-@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['DELETE'])
-@login_required
-@admin_required  # Only admins can delete cards
-def delete_card(board_id, list_id, card_id):
-    board = Board.query.get(board_id)
-    if not board:
-        return jsonify({"error": "Board not found"}), 404
-
-    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
-    if not list_obj:
-        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
-
-    card = Card.query.filter_by(id=card_id, list_id=list_id).first()
-    if not card:
-        return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
-
-    db.session.delete(card)
-    db.session.commit()
-    return '', 204
 
 # ===== USER ROUTES =====
 
@@ -460,13 +571,41 @@ def toggle_card_completion(board_id, list_id, card_id):
     
     # Get the completion status from the request
     data = request.json
+    old_completed = card.completed
+    
     if 'completed' in data:
         card.completed = data['completed']
     else:
         # Toggle if not specified
         card.completed = not card.completed
-        
+    
+    # Only send notification if status actually changed
+    status_changed = old_completed != card.completed
+    
     db.session.commit()
+    
+    # Получаем информацию о доске для ссылки в уведомлении
+    board = Board.query.get(board_id)
+    
+    # Отправляем уведомление создателю карточки, если карточка помечена как выполненная
+    if status_changed and card.completed and card.user_id != current_user.id:
+        if board:
+            notify_user(
+                user_id=card.user_id,
+                message=f"Карточка '{card.title}' в доске '{board.name}' была помечена как завершенная",
+                category='success',
+                link=f"/kanban?board_id={board_id}"
+            )
+    
+    # Если карточка была снова открыта и у неё есть назначенный пользователь
+    if status_changed and not card.completed and card.assigned_to and card.assigned_to != current_user.id:
+        if board:
+            notify_user(
+                user_id=card.assigned_to,
+                message=f"Карточка '{card.title}' в доске '{board.name}' была снова открыта",
+                category='warning',
+                link=f"/kanban?board_id={board_id}"
+            )
     
     return jsonify({
         'message': 'Card completion status updated',
@@ -474,6 +613,8 @@ def toggle_card_completion(board_id, list_id, card_id):
         'completed': card.completed
     })
 
+
+# Затем обновите функцию назначения пользователя на карточку
 @kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/assign', methods=['PUT'])
 @login_required
 @admin_required  # Only admins can assign users to cards
@@ -485,14 +626,38 @@ def assign_user_to_card(board_id, list_id, card_id):
     data = request.json
     user_id = data.get('user_id')
     
+    # Запоминаем предыдущего назначенного пользователя (для уведомления об отмене назначения)
+    previous_assigned_user_id = card.assigned_to
+    
     # Check if user exists if an ID was provided
     if user_id:
         user = User.query.get(user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
         card.assigned_to = user_id
+        
+        # Отправляем уведомление новому назначенному пользователю
+        board = Board.query.get(board_id)
+        if board:
+            notify_user(
+                user_id=user_id,
+                message=f"Вы были назначены ответственным за карточку '{card.title}' в доске '{board.name}'",
+                category='info',
+                link=f"/kanban?board_id={board_id}"
+            )
     else:
         card.assigned_to = None  # Unassign
+        
+        # Если пользователь был снят, отправляем ему уведомление
+        if previous_assigned_user_id:
+            board = Board.query.get(board_id)
+            if board:
+                notify_user(
+                    user_id=previous_assigned_user_id,
+                    message=f"Вы были сняты с карточки '{card.title}' в доске '{board.name}'",
+                    category='info',
+                    link=f"/kanban?board_id={board_id}"
+                )
     
     db.session.commit()
     
@@ -502,7 +667,7 @@ def assign_user_to_card(board_id, list_id, card_id):
         'assigned_to': card.assigned_to,
         'assigned_to_name': card.assigned_user.username if card.assigned_user else None
     })
-
+# Обновите функцию установки крайнего срока
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/deadline', methods=['PUT'])
 @login_required
 @admin_required  # Only admins can set deadlines
@@ -516,8 +681,34 @@ def set_card_deadline(board_id, list_id, card_id):
     
     try:
         if deadline_str:
-            card.deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+            new_deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+            
+            # Проверяем, изменился ли крайний срок
+            deadline_changed = card.deadline != new_deadline
+            card.deadline = new_deadline
+            
+            # Отправляем уведомления пользователю, назначенному на карточку
+            if deadline_changed and card.assigned_to:
+                board = Board.query.get(board_id)
+                if board:
+                    deadline_formatted = new_deadline.strftime('%d.%m.%Y %H:%M')
+                    notify_user(
+                        user_id=card.assigned_to,
+                        message=f"Установлен новый срок ({deadline_formatted}) для карточки '{card.title}' в доске '{board.name}'",
+                        category='warning',
+                        link=f"/kanban?board_id={board_id}"
+                    )
         else:
+            # Если крайний срок был удален
+            if card.deadline and card.assigned_to:
+                board = Board.query.get(board_id)
+                if board:
+                    notify_user(
+                        user_id=card.assigned_to,
+                        message=f"Крайний срок для карточки '{card.title}' в доске '{board.name}' был удален",
+                        category='info',
+                        link=f"/kanban?board_id={board_id}"
+                    )
             card.deadline = None
         
         db.session.commit()
@@ -530,6 +721,7 @@ def set_card_deadline(board_id, list_id, card_id):
     except ValueError as e:
         return jsonify({"error": f"Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS): {str(e)}"}), 400
 
+# Обновите функцию изменения приоритета карточки
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/priority', methods=['PUT'])
 @login_required
 @admin_required  # Only admins can update card priority
@@ -541,10 +733,30 @@ def update_card_priority(board_id, list_id, card_id):
     data = request.json
     if 'priority' not in data:
         return jsonify({"error": "Priority is required"}), 400
-        
+    
     try:
-        card.priority = PriorityLevel(data['priority'])
+        old_priority = card.priority.value if card.priority else 'low'
+        new_priority = data['priority']
+        
+        # Проверяем, изменился ли приоритет
+        priority_changed = old_priority != new_priority
+        
+        card.priority = PriorityLevel(new_priority)
         db.session.commit()
+        
+        # Отправляем уведомление при повышении приоритета
+        if priority_changed and card.assigned_to and new_priority in ['medium', 'high'] and old_priority != new_priority:
+            # Приоритет был повышен
+            board = Board.query.get(board_id)
+            if board:
+                priority_text = "высокий" if new_priority == 'high' else "средний"
+                notify_user(
+                    user_id=card.assigned_to,
+                    message=f"Установлен {priority_text} приоритет для карточки '{card.title}' в доске '{board.name}'",
+                    category='warning' if new_priority == 'high' else 'info',
+                    link=f"/kanban?board_id={board_id}"
+                )
+        
         return jsonify(card.to_dict())
     except ValueError:
         return jsonify({"error": "Invalid priority value"}), 400
@@ -588,6 +800,7 @@ def get_card_todos(card_id):
     except Exception as e:
         print(f"Error getting todos: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
+# Обновляем обработчик создания задач в карточке
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>/todos', methods=['POST'])
 @login_required
 @admin_required  # Only admins can create todos
@@ -606,10 +819,21 @@ def create_todo(board_id, list_id, card_id):
     db.session.add(todo)
     db.session.commit()
     
+    # Отправляем уведомление о добавлении новой задачи
+    if card.assigned_to:
+        board = Board.query.get(board_id)
+        if board:
+            notify_user(
+                user_id=card.assigned_to,
+                message=f"Добавлена новая задача в карточку '{card.title}' в доске '{board.name}'",
+                category='info',
+                link=f"/kanban?board_id={board_id}"
+            )
+    
     return jsonify(todo.to_dict()), 201
-
 # Replace your existing update_todo route with this one
 
+# Изменения к функциям обновления задач в карточке (update_todo)
 @kanban_bp.route('/todos/<int:todo_id>', methods=['PUT'])
 @login_required
 def update_todo(todo_id):
@@ -620,6 +844,10 @@ def update_todo(todo_id):
     
     data = request.json
     is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+    
+    # Сохраняем старое состояние для отслеживания изменений
+    old_completed = todo.completed
+    old_content = todo.content
     
     # For content updates, user must be an admin
     if 'content' in data and not is_admin:
@@ -634,14 +862,44 @@ def update_todo(todo_id):
     
     db.session.commit()
     
+    # Проверяем, изменился ли статус завершения
+    completion_changed = old_completed != todo.completed
+    content_changed = old_content != todo.content
+    
+    # Если произошли изменения, получаем информацию о карточке и доске для отправки уведомления
+    if (completion_changed or content_changed) and todo.card_id:
+        card = Card.query.get(todo.card_id)
+        if card and card.assigned_to and card.assigned_to != current_user.id:
+            # Находим список и доску для формирования ссылки
+            list_obj = List.query.get(card.list_id)
+            if list_obj:
+                board = Board.query.get(list_obj.board_id)
+                if board:
+                    # Формируем соответствующее уведомление
+                    if completion_changed:
+                        status_text = "выполнена" if todo.completed else "возобновлена"
+                        notify_user(
+                            user_id=card.assigned_to,
+                            message=f"Задача '{todo.content}' в карточке '{card.title}' была {status_text}",
+                            category='success' if todo.completed else 'info',
+                            link=f"/kanban?board_id={board.id}"
+                        )
+                    
+                    elif content_changed and current_user.id != card.assigned_to:
+                        notify_user(
+                            user_id=card.assigned_to,
+                            message=f"Задача в карточке '{card.title}' была обновлена",
+                            category='info',
+                            link=f"/kanban?board_id={board.id}"
+                        )
+    
     return jsonify({
         "success": True,
         "message": "Todo updated successfully",
         "todo": todo.to_dict()
     })
 
-# Update your delete todo route handler in the backend to ensure valid JSON is returned
-
+# Изменения к функции удаления задач (delete_todo)
 @kanban_bp.route('/todos/<int:todo_id>', methods=['DELETE'])
 @admin_required
 @login_required
@@ -656,10 +914,28 @@ def delete_todo(todo_id):
             
         # Store card_id before deleting the todo to return in the response
         card_id = todo.card_id
+        todo_content = todo.content
+        
+        # Получаем информацию о карточке для отправки уведомления
+        card = Card.query.get(card_id)
         
         # Delete the todo
         db.session.delete(todo)
         db.session.commit()
+        
+        # Отправляем уведомление, если у карточки есть назначенный пользователь
+        if card and card.assigned_to and card.assigned_to != current_user.id:
+            # Находим список и доску для формирования ссылки
+            list_obj = List.query.get(card.list_id)
+            if list_obj:
+                board = Board.query.get(list_obj.board_id)
+                if board:
+                    notify_user(
+                        user_id=card.assigned_to,
+                        message=f"Задача '{todo_content}' была удалена из карточки '{card.title}'",
+                        category='info',
+                        link=f"/kanban?board_id={board.id}"
+                    )
         
         print(f"Todo deleted successfully: {todo_id}")
         # Ensure we're returning a proper JSON response
@@ -676,6 +952,7 @@ def delete_todo(todo_id):
 
 # ===== CARD MOVEMENT ROUTES =====
 
+# Обновите функцию перемещения карточки между списками
 @kanban_bp.route('/boards/<int:board_id>/lists/<int:source_list_id>/cards/<int:card_id>/move/<int:target_list_id>', methods=['PUT'])
 @login_required
 @admin_required  # Only admins can move cards
@@ -698,6 +975,15 @@ def move_card(board_id, source_list_id, card_id, target_list_id):
 
     card.list_id = target_list_id
     db.session.commit()
+    
+    # Отправляем уведомление о перемещении карточки
+    if card.assigned_to:
+        notify_user(
+            user_id=card.assigned_to,
+            message=f"Карточка '{card.title}' перемещена из '{source_list.name}' в '{target_list.name}' в доске '{board.name}'",
+            category='info',
+            link=f"/kanban?board_id={board_id}"
+        )
 
     return jsonify({"id": card.id, "title": card.title, "description": card.description, "list_id": card.list_id}), 200
 
