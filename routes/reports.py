@@ -4,523 +4,677 @@ from flask_login import login_required, current_user
 from fpdf import FPDF
 import os
 import pandas as pd
-from routes.models import db, Board, List, Card, Todo, User, PriorityLevel
-from datetime import datetime, timedelta
 import json
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from io import BytesIO
-import base64
-import numpy as np
+from datetime import datetime, timedelta
+import calendar
+from sqlalchemy import func
+from routes.models import db, Board, List, Card, Todo, User, PriorityLevel
 
 reports_bp = Blueprint('reports', __name__, url_prefix='/reports')
 EXPORT_FOLDER = 'exports'
 os.makedirs(EXPORT_FOLDER, exist_ok=True)
 
-# Модель для отчетов
-class Report(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    date = db.Column(db.String(10), nullable=False)
-    author = db.Column(db.String(255))
-    category = db.Column(db.String(255))
+# === Report Types ===
+REPORT_TYPES = {
+    'project_status': 'Project Status',
+    'user_workload': 'User Workload',
+    'deadline_statistics': 'Deadline Statistics',
+    'completion_rates': 'Completion Rates',
+    'priority_distribution': 'Priority Distribution'
+}
 
-# Функция для получения всех отчетов
-def get_reports(date_filter=None, author_filter=None, category_filter=None):
-    query = Report.query
-
-    if date_filter:
-        query = query.filter(Report.date == date_filter)
-    if author_filter:
-        query = query.filter(Report.author == author_filter)
-    if category_filter:
-        query = query.filter(Report.category == category_filter)
-
-    return query.all()
-
-# === Роуты === 
-@reports_bp.route('/reports')
-@login_required
-def view_reports():
-    date_filter = request.args.get('date_filter')
-    author_filter = request.args.get('author_filter')
-    category_filter = request.args.get('category_filter')
-
-    reports = get_reports(date_filter, author_filter, category_filter)
-    return render_template('reports/reports.html', reports=reports)
-
-@reports_bp.route('/reports/add', methods=['GET', 'POST'])
-@login_required
-def add_report():
-    if request.method == 'POST':
-        title = request.form['title']
-        content = request.form['content']
-        date = request.form['date']
-        author = request.form['author']
-        category = request.form['category']
-
-        new_report = Report(title=title, content=content, date=date, author=author, category=category)
-        db.session.add(new_report)
-        db.session.commit()
-
-        flash('Отчет успешно добавлен!', 'success')
-        return redirect(url_for('reports.view_reports'))
-
-    return render_template('add_report.html')
-
-@reports_bp.route('/reports/edit/<int:report_id>', methods=['GET', 'POST'])
-@login_required
-def edit_report(report_id):
-    report = Report.query.get_or_404(report_id)
-
-    if request.method == 'POST':
-        report.title = request.form['title']
-        report.content = request.form['content']
-        report.date = request.form['date']
-        report.author = request.form['author']
-        report.category = request.form['category']
-
-        db.session.commit()
-
-        flash('Отчет успешно обновлен!', 'success')
-        return redirect(url_for('reports.view_reports'))
-
-    return render_template('reports/edit_report.html', report=report)
-
-@reports_bp.route('/reports/delete/<int:report_id>', methods=['POST'])
-@login_required
-def delete_report(report_id):
-    report = Report.query.get_or_404(report_id)
-    db.session.delete(report)
-    db.session.commit()
-
-    flash('Отчет успешно удален!', 'success')
-    return redirect(url_for('reports.view_reports'))
-
-@reports_bp.route('/reports/export/pdf/<int:report_id>')
-@login_required
-def export_pdf(report_id):
-    report = Report.query.get_or_404(report_id)
-
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, report.title, ln=True, align='C')
-    pdf.set_font('Arial', '', 12)
-    pdf.multi_cell(0, 10, f"Дата: {report.date}\n\n{report.content}")
-
-    pdf_path = os.path.join(EXPORT_FOLDER, f"report_{report_id}.pdf")
-    pdf.output(pdf_path)
-
-    return send_file(pdf_path, as_attachment=True)
-
-@reports_bp.route('/reports/export/excel')
-@login_required
-def export_excel():
-    reports = get_reports()
-
-    if not reports:
-        flash('Нет отчетов для экспорта!', 'danger')
-        return redirect(url_for('reports.view_reports'))
-
-    df = pd.DataFrame([(r.id, r.title, r.content, r.date, r.author, r.category) for r in reports],
-                      columns=['ID', 'Заголовок', 'Содержание', 'Дата', 'Автор', 'Категория'])
-    excel_path = os.path.join(EXPORT_FOLDER, 'reports.xlsx')
-    df.to_excel(excel_path, index=False)
-
-    return send_file(excel_path, as_attachment=True)
-
-# === DASHBOARD И АНАЛИТИКА KANBAN ===
-
-@reports_bp.route('/dashboard')
-@login_required
-def dashboard():
-    # Проверяем права доступа
-    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+# === Helper Functions ===
+def get_date_range(period_type):
+    """Generate date range based on period type"""
+    today = datetime.now().date()
     
-    # Получаем общие статистические данные
-    stats = get_kanban_statistics(is_admin)
-    
-    return render_template('reports/dashboard.html', stats=stats, is_admin=is_admin)
+    if period_type == 'today':
+        return today, today
+    elif period_type == 'yesterday':
+        yesterday = today - timedelta(days=1)
+        return yesterday, yesterday
+    elif period_type == 'this_week':
+        start_of_week = today - timedelta(days=today.weekday())
+        return start_of_week, today
+    elif period_type == 'last_week':
+        start_of_last_week = today - timedelta(days=today.weekday() + 7)
+        end_of_last_week = start_of_last_week + timedelta(days=6)
+        return start_of_last_week, end_of_last_week
+    elif period_type == 'this_month':
+        start_of_month = today.replace(day=1)
+        return start_of_month, today
+    elif period_type == 'last_month':
+        # First day of current month
+        first_day_current = today.replace(day=1)
+        # Last day of previous month
+        last_day_previous = first_day_current - timedelta(days=1)
+        # First day of previous month
+        first_day_previous = last_day_previous.replace(day=1)
+        return first_day_previous, last_day_previous
+    elif period_type == 'custom':
+        # Handled separately when custom dates are provided
+        return None, None
+    else:
+        # Default to last 30 days
+        return today - timedelta(days=30), today
 
-def get_kanban_statistics(is_admin=False):
-    """Получить статистику по Kanban-доске"""
-    stats = {}
+# === Data Collection Functions ===
+def get_project_status_data(board_id=None, period_start=None, period_end=None):
+    """Get project status data for reports"""
+    query = Card.query
     
-    # Доски
+    if board_id:
+        # Find all lists in the specified board
+        lists = List.query.filter_by(board_id=board_id).all()
+        list_ids = [list_obj.id for list_obj in lists]
+        query = query.filter(Card.list_id.in_(list_ids))
+    
+    # Apply date filters if provided
+    if period_start:
+        query = query.filter(Card.created_at >= period_start)
+    if period_end:
+        # Include the entire end day
+        end_date = datetime.combine(period_end, datetime.max.time())
+        query = query.filter(Card.created_at <= end_date)
+    
+    # Get all cards matching the criteria
+    cards = query.all()
+    
+    # Calculate statistics
+    total_cards = len(cards)
+    completed_cards = sum(1 for card in cards if card.completed)
+    completion_rate = (completed_cards / total_cards * 100) if total_cards > 0 else 0
+    
+    # Cards by list
+    cards_by_list = {}
+    for card in cards:
+        list_obj = List.query.get(card.list_id)
+        if list_obj:
+            list_name = list_obj.name
+            if list_name not in cards_by_list:
+                cards_by_list[list_name] = {
+                    'total': 0,
+                    'completed': 0,
+                    'completion_rate': 0
+                }
+            cards_by_list[list_name]['total'] += 1
+            if card.completed:
+                cards_by_list[list_name]['completed'] += 1
+    
+    # Calculate completion rate for each list
+    for list_name in cards_by_list:
+        list_data = cards_by_list[list_name]
+        list_data['completion_rate'] = (list_data['completed'] / list_data['total'] * 100) if list_data['total'] > 0 else 0
+    
+    return {
+        'total_cards': total_cards,
+        'completed_cards': completed_cards,
+        'completion_rate': completion_rate,
+        'cards_by_list': cards_by_list
+    }
+
+def get_user_workload_data(board_id=None, period_start=None, period_end=None):
+    """Get user workload data for reports"""
+    query = Card.query
+    
+    if board_id:
+        # Find all lists in the specified board
+        lists = List.query.filter_by(board_id=board_id).all()
+        list_ids = [list_obj.id for list_obj in lists]
+        query = query.filter(Card.list_id.in_(list_ids))
+    
+    # Apply date filters if provided
+    if period_start:
+        query = query.filter(Card.created_at >= period_start)
+    if period_end:
+        # Include the entire end day
+        end_date = datetime.combine(period_end, datetime.max.time())
+        query = query.filter(Card.created_at <= end_date)
+    
+    # Get all cards matching the criteria
+    cards = query.all()
+    
+    # Calculate workload by user
+    user_workload = {}
+    for card in cards:
+        if card.assigned_to:
+            user = User.query.get(card.assigned_to)
+            if user:
+                username = user.username
+                if username not in user_workload:
+                    user_workload[username] = {
+                        'total': 0,
+                        'completed': 0,
+                        'overdue': 0,
+                        'priority': {
+                            'low': 0,
+                            'medium': 0,
+                            'high': 0,
+                        }
+                    }
+                user_workload[username]['total'] += 1
+                if card.completed:
+                    user_workload[username]['completed'] += 1
+                if card.deadline and card.deadline < datetime.now() and not card.completed:
+                    user_workload[username]['overdue'] += 1
+                
+                # Count by priority
+                priority = str(card.priority).lower()
+                if priority in user_workload[username]['priority']:
+                    user_workload[username]['priority'][priority] += 1
+    
+    return {
+        'user_workload': user_workload
+    }
+
+def get_deadline_statistics(board_id=None, period_start=None, period_end=None):
+    """Get deadline statistics for reports"""
+    query = Card.query
+    
+    if board_id:
+        # Find all lists in the specified board
+        lists = List.query.filter_by(board_id=board_id).all()
+        list_ids = [list_obj.id for list_obj in lists]
+        query = query.filter(Card.list_id.in_(list_ids))
+    
+    # Apply date filters if provided
+    if period_start:
+        query = query.filter(Card.created_at >= period_start)
+    if period_end:
+        # Include the entire end day
+        end_date = datetime.combine(period_end, datetime.max.time())
+        query = query.filter(Card.created_at <= end_date)
+    
+    # Get all cards matching the criteria
+    cards = query.all()
+    
+    # Calculate deadline statistics
+    cards_with_deadline = [card for card in cards if card.deadline]
+    total_with_deadline = len(cards_with_deadline)
+    
+    now = datetime.now()
+    overdue = sum(1 for card in cards_with_deadline if card.deadline < now and not card.completed)
+    completed_on_time = sum(1 for card in cards_with_deadline if card.completed and card.deadline >= now)
+    completed_late = sum(1 for card in cards_with_deadline if card.completed and card.deadline < now)
+    
+    upcoming_deadlines = {}
+    for card in cards_with_deadline:
+        if not card.completed and card.deadline > now:
+            days_left = (card.deadline.date() - now.date()).days
+            if days_left <= 1:
+                period = "today_tomorrow"
+            elif days_left <= 7:
+                period = "this_week"
+            elif days_left <= 30:
+                period = "this_month"
+            else:
+                period = "future"
+                
+            if period not in upcoming_deadlines:
+                upcoming_deadlines[period] = []
+                
+            upcoming_deadlines[period].append({
+                'id': card.id,
+                'title': card.title,
+                'deadline': card.deadline.strftime('%Y-%m-%d %H:%M'),
+                'days_left': days_left,
+                'assigned_to': User.query.get(card.assigned_to).username if card.assigned_to else None
+            })
+    
+    return {
+        'total_cards': len(cards),
+        'total_with_deadline': total_with_deadline,
+        'overdue': overdue,
+        'completed_on_time': completed_on_time,
+        'completed_late': completed_late,
+        'upcoming_deadlines': upcoming_deadlines
+    }
+
+def get_priority_distribution(board_id=None, period_start=None, period_end=None):
+    """Get priority distribution data for reports"""
+    query = Card.query
+    
+    if board_id:
+        lists = List.query.filter_by(board_id=board_id).all()
+        list_ids = [list_obj.id for list_obj in lists]
+        query = query.filter(Card.list_id.in_(list_ids))
+    
+    if period_start:
+        query = query.filter(Card.created_at >= period_start)
+    if period_end:
+        end_date = datetime.combine(period_end, datetime.max.time())
+        query = query.filter(Card.created_at <= end_date)
+    
+    cards = query.all()
+    
+    # Инициализация словарей на основе PriorityLevel
+    priority_counts = {priority.name.lower(): 0 for priority in PriorityLevel}
+    priority_completion = {
+        priority.name.lower(): {'total': 0, 'completed': 0} for priority in PriorityLevel
+    }
+    priority_tasks = {priority.name.lower(): [] for priority in PriorityLevel}
+    
+    for card in cards:
+        if not hasattr(card, 'priority') or not card.priority:
+            continue  # Пропускаем карточки без приоритета
+        priority = card.priority.name.lower()  # Извлекаем имя приоритета
+        if priority in priority_counts:
+            priority_counts[priority] += 1
+            priority_completion[priority]['total'] += 1
+            if card.completed:
+                priority_completion[priority]['completed'] += 1
+            
+            task_data = {
+                'id': card.id,
+                'title': card.title,
+                'completed': card.completed,
+                'deadline': card.deadline.strftime('%Y-%m-%d') if card.deadline else None,
+                'assigned_to': User.query.get(card.assigned_to).username if card.assigned_to else None
+            }
+            priority_tasks[priority].append(task_data)
+    
+    for priority in priority_completion:
+        data = priority_completion[priority]
+        data['completion_rate'] = (data['completed'] / data['total'] * 100) if data['total'] > 0 else 0
+    
+    return {
+        'priority_counts': priority_counts,
+        'priority_completion': priority_completion,
+        'priority_tasks': priority_tasks
+    }
+
+# === Routes ===
+@reports_bp.route('/')
+@login_required
+def reports_dashboard():
+    """Main reports dashboard"""
+    # Get all boards for the filter dropdown
+    is_admin = getattr(current_user, 'is_admin', False)
+    
     if is_admin:
         boards = Board.query.all()
     else:
+        # Non-admins see only public boards and their own boards
         if hasattr(Board, 'admin_only'):
             boards = Board.query.filter(
                 (Board.user_id == current_user.id) | (Board.admin_only == False)
             ).all()
         else:
-        # Fallback if admin_only field doesn't exist
-            boards = Board.query.filter_by(user_id=current_user.id).all()
+            boards = Board.query.all()
     
-    stats['total_boards'] = len(boards)
+    # Calculate quick stats
+    total_active_cards = Card.query.filter_by(completed=False).count()
+    completed_cards = Card.query.filter_by(completed=True).count()
     
-    # Карточки
-    all_cards = []
-    for board in boards:
-        lists = List.query.filter_by(board_id=board.id).all()
-        for lst in lists:
-            cards = Card.query.filter_by(list_id=lst.id).all()
-            all_cards.extend(cards)
+    # Cards with upcoming deadlines (due in next 7 days)
+    upcoming_deadline = Card.query.filter(
+        Card.deadline > datetime.now(),
+        Card.deadline <= (datetime.now() + timedelta(days=7)),
+        Card.completed == False
+    ).count()
     
-    stats['total_cards'] = len(all_cards)
-    stats['completed_cards'] = sum(1 for card in all_cards if card.completed)
-    stats['pending_cards'] = stats['total_cards'] - stats['completed_cards']
+    # Overdue cards
+    overdue_cards = Card.query.filter(
+        Card.deadline < datetime.now(),
+        Card.completed == False
+    ).count()
     
-    if stats['total_cards'] > 0:
-        stats['completion_rate'] = (stats['completed_cards'] / stats['total_cards']) * 100
-    else:
-        stats['completion_rate'] = 0
-    
-    # Приоритеты
-    priorities = {}
-    for priority in PriorityLevel:
-        priorities[priority.name] = sum(1 for card in all_cards if hasattr(card, 'priority') and card.priority == priority)
-    stats['priorities'] = priorities
-    
-    # Сроки выполнения
-    today = datetime.now().date()
-    
-    stats['overdue'] = sum(1 for card in all_cards if 
-                         hasattr(card, 'deadline') and card.deadline and 
-                         card.deadline.date() < today and not card.completed)
-    
-    stats['due_today'] = sum(1 for card in all_cards if 
-                          hasattr(card, 'deadline') and card.deadline and 
-                          card.deadline.date() == today and not card.completed)
-    
-    stats['due_this_week'] = sum(1 for card in all_cards if 
-                              hasattr(card, 'deadline') and card.deadline and 
-                              today < card.deadline.date() <= today + timedelta(days=7) and 
-                              not card.completed)
-    
-    # Задачи по пользователям
-    users = User.query.all()
-    user_tasks = {}
-    for user in users:
-        assigned = [card for card in all_cards if hasattr(card, 'assigned_to') and card.assigned_to == user.id]
-        completed = [card for card in assigned if card.completed]
-        
-        user_tasks[user.username] = {
-            'total': len(assigned),
-            'completed': len(completed),
-            'completion_rate': (len(completed) / len(assigned) * 100) if len(assigned) > 0 else 0
+    return render_template(
+        'reports/reports.html',
+        boards=boards,
+        report_types=REPORT_TYPES,
+        is_admin=is_admin,
+        quick_stats={
+            'total_active': total_active_cards,
+            'completed': completed_cards,
+            'upcoming': upcoming_deadline,
+            'overdue': overdue_cards
         }
-    stats['user_tasks'] = user_tasks
-    
-    return stats
+    )
 
-@reports_bp.route('/charts/tasks-by-status')
+@reports_bp.route('/generate', methods=['GET'])
 @login_required
-def tasks_by_status_chart():
-    """API для получения данных о состоянии задач"""
-    stats = get_kanban_statistics(hasattr(current_user, 'is_admin') and current_user.is_admin)
+def generate_report():
+    """Generate report based on parameters"""
+    report_type = request.args.get('report_type')
+    board_id = request.args.get('board_id')
+    period_type = request.args.get('period_type', 'this_month')
     
-    data = {
-        'labels': ['Завершено', 'В процессе'],
-        'datasets': [{
-            'data': [stats['completed_cards'], stats['pending_cards']],
-            'backgroundColor': ['#4caf50', '#ff9800']
-        }]
+    if board_id:
+        board_id = int(board_id)
+    
+    # Get date range based on period type
+    start_date, end_date = get_date_range(period_type)
+    
+    # Handle custom date range
+    if period_type == 'custom':
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Invalid date format. Please use YYYY-MM-DD.', 'error')
+                return redirect(url_for('reports.reports_dashboard'))
+    
+    # Get board name if board_id is provided
+    board_name = "All Boards"
+    if board_id:
+        board = Board.query.get(board_id)
+        if board:
+            board_name = board.name
+    
+    # Generate report data based on type
+    report_data = {}
+    if report_type == 'project_status':
+        report_data = get_project_status_data(board_id, start_date, end_date)
+    elif report_type == 'user_workload':
+        report_data = get_user_workload_data(board_id, start_date, end_date)
+    elif report_type == 'deadline_statistics':
+        report_data = get_deadline_statistics(board_id, start_date, end_date)
+    elif report_type == 'priority_distribution':
+        report_data = get_priority_distribution(board_id, start_date, end_date)
+    elif report_type == 'completion_rates':
+        # This combines project status data with additional time analysis
+        project_data = get_project_status_data(board_id, start_date, end_date)
+        priority_data = get_priority_distribution(board_id, start_date, end_date)
+        report_data = {
+            'project_status': project_data,
+            'priority_data': priority_data
+        }
+    
+    # Prepare context for the template
+    context = {
+        'report_type': report_type,
+        'report_title': REPORT_TYPES.get(report_type, 'Custom Report'),
+        'board_id': board_id,
+        'board_name': board_name,
+        'period_type': period_type,
+        'start_date': start_date,
+        'end_date': end_date,
+        'report_data': report_data,
+        'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M')
     }
     
-    return jsonify(data)
+    # Render the appropriate template based on report type
+    return render_template(f'reports/{report_type}.html', **context)
 
-@reports_bp.route('/charts/tasks-by-priority')
+@reports_bp.route('/export/<report_type>', methods=['GET'])
 @login_required
-def tasks_by_priority_chart():
-    """API для получения данных о приоритетах задач"""
-    stats = get_kanban_statistics(hasattr(current_user, 'is_admin') and current_user.is_admin)
+def export_report(report_type):
+    """Export report data in various formats"""
+    export_format = request.args.get('format', 'pdf')
+    board_id = request.args.get('board_id')
+    period_type = request.args.get('period_type', 'this_month')
     
-    labels = list(stats['priorities'].keys())
-    values = list(stats['priorities'].values())
+    if board_id:
+        board_id = int(board_id)
     
-    background_colors = []
-    for priority in labels:
-        if priority == 'HIGH':
-            background_colors.append('#f44336')  # Красный для High
-        elif priority == 'MEDIUM':
-            background_colors.append('#ffc107')  # Желтый для Medium (используем ffс107 вместо ff9800)
-        elif priority == 'LOW':
-            background_colors.append('#4caf50')  # Зеленый для Low
-        else:
-            background_colors.append('#2196f3')  # Синий по умолчанию для других приоритетов
+    # Get date range based on period type
+    start_date, end_date = get_date_range(period_type)
     
-    data = {
-        'labels': labels,
-        'datasets': [{
-            'data': values,
-            'backgroundColor': background_colors  # Используем наш кастомный список цветов
-        }]
-    }
+    # Handle custom date range
+    if period_type == 'custom':
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Invalid date format. Please use YYYY-MM-DD.', 'error')
+                return redirect(url_for('reports.reports_dashboard'))
     
-    return jsonify(data)
-
-@reports_bp.route('/charts/tasks-by-user')
-@login_required
-def tasks_by_user_chart():
-    """API для получения данных о задачах по пользователям"""
-    stats = get_kanban_statistics(hasattr(current_user, 'is_admin') and current_user.is_admin)
+    # Get board name if board_id is provided
+    board_name = "All_Boards"
+    if board_id:
+        board = Board.query.get(board_id)
+        if board:
+            board_name = board.name.replace(' ', '_')
     
-    users = list(stats['user_tasks'].keys())
-    completed_tasks = [stats['user_tasks'][user]['completed'] for user in users]
-    pending_tasks = [stats['user_tasks'][user]['total'] - stats['user_tasks'][user]['completed'] for user in users]
+    # Generate report data based on type
+    report_data = {}
+    if report_type == 'project_status':
+        report_data = get_project_status_data(board_id, start_date, end_date)
+    elif report_type == 'user_workload':
+        report_data = get_user_workload_data(board_id, start_date, end_date)
+    elif report_type == 'deadline_statistics':
+        report_data = get_deadline_statistics(board_id, start_date, end_date)
+    elif report_type == 'priority_distribution':
+        report_data = get_priority_distribution(board_id, start_date, end_date)
+    elif report_type == 'completion_rates':
+        # This combines project status data with additional time analysis
+        project_data = get_project_status_data(board_id, start_date, end_date)
+        priority_data = get_priority_distribution(board_id, start_date, end_date)
+        report_data = {
+            'project_status': project_data,
+            'priority_data': priority_data
+        }
     
-    data = {
-        'labels': users,
-        'datasets': [
-            {
-                'label': 'Завершено',
-                'data': completed_tasks,
-                'backgroundColor': '#4caf50'
-            },
-            {
-                'label': 'В процессе',
-                'data': pending_tasks,
-                'backgroundColor': '#ff9800'
-            }
-        ]
-    }
+    # Generate filename
+    date_str = datetime.now().strftime('%Y%m%d')
+    filename = f"{report_type}_{board_name}_{date_str}"
     
-    return jsonify(data)
-
-@reports_bp.route('/api/tasks/due-dates')
-@login_required
-def tasks_due_dates():
-    """API для получения данных о сроках задач"""
-    stats = get_kanban_statistics(hasattr(current_user, 'is_admin') and current_user.is_admin)
-    
-    data = {
-        'overdue': stats['overdue'],
-        'due_today': stats['due_today'],
-        'due_this_week': stats['due_this_week']
-    }
-    
-    return jsonify(data)
-
-@reports_bp.route('/reports/kanban/export')
-@login_required
-def export_kanban_report():
-    """Экспорт отчёта по Kanban-доске в Excel"""
-    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
-    
-    # Получаем доски
-    if is_admin:
-        boards = Board.query.all()
+    # Export based on format
+    if export_format == 'pdf':
+        return export_as_pdf(report_type, report_data, filename, board_name, start_date, end_date)
+    elif export_format == 'excel':
+        return export_as_excel(report_type, report_data, filename, board_name, start_date, end_date)
+    elif export_format == 'json':
+        return export_as_json(report_type, report_data, filename, board_name, start_date, end_date)
     else:
-        boards = Board.query.filter(
-            (Board.user_id == current_user.id) | 
-            (~hasattr(Board, 'admin_only') or Board.admin_only == False)
-        ).all()
-    
-    # Формируем данные для отчета
-    report_data = []
-    
-    for board in boards:
-        lists = List.query.filter_by(board_id=board.id).all()
-        for lst in lists:
-            cards = Card.query.filter_by(list_id=lst.id).all()
-            for card in cards:
-                # Получаем имя пользователя для assigned_to
-                assigned_to_name = None
-                if card.assigned_to:
-                    user = User.query.get(card.assigned_to)
-                    if user:
-                        assigned_to_name = user.username
-                
-                # Получаем список задач для карточки
-                todos = Todo.query.filter_by(card_id=card.id).all()
-                todos_completed = len([t for t in todos if t.completed])
-                todos_total = len(todos)
-                todos_progress = f"{todos_completed}/{todos_total}" if todos_total > 0 else "0/0"
-                
-                report_data.append({
-                    'board_name': board.name,
-                    'list_name': lst.name,
-                    'card_title': card.title,
-                    'card_description': card.description,
-                    'priority': card.priority.name if hasattr(card, 'priority') else 'Не указан',
-                    'completed': 'Да' if card.completed else 'Нет',
-                    'assigned_to': assigned_to_name or 'Не назначено',
-                    'deadline': card.deadline.strftime('%Y-%m-%d') if card.deadline else 'Не указан',
-                    'todos_progress': todos_progress
-                })
-    
-    # Создаем DataFrame и экспортируем в Excel
-    df = pd.DataFrame(report_data)
-    
-    # Переименовываем столбцы на русский
-    df.columns = [
-        'Доска', 'Список', 'Заголовок карточки', 'Описание', 
-        'Приоритет', 'Завершено', 'Исполнитель', 'Срок', 'Подзадачи'
-    ]
-    
-    excel_path = os.path.join(EXPORT_FOLDER, 'kanban_report.xlsx')
-    df.to_excel(excel_path, index=False)
-    
-    return send_file(excel_path, as_attachment=True, download_name='kanban_report.xlsx')
+        flash('Unsupported export format', 'error')
+        return redirect(url_for('reports.reports_dashboard'))
 
-@reports_bp.route('/reports/generate-pdf-report', methods=['POST'])
-@login_required
-def generate_pdf_report():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'message': 'Неверные данные запроса'}), 400
-            
-        report_type = data.get('report_type', 'default')
-        date_range = data.get('date_range', 'all')
-        user_id = data.get('user_id', None)
-        
-        # Ваша логика генерации PDF
-        
-        return jsonify({
-            'success': True,
-            'message': 'Отчет успешно сгенерирован',
-            'download_url': url_for('reports.download_report', filename=report_filename)
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    
+def export_as_pdf(report_type, report_data, filename, board_name, start_date, end_date):
+    """Export report as PDF"""
     pdf = FPDF()
     pdf.add_page()
     
-    # Заголовок отчета
+    # Add header
     pdf.set_font('Arial', 'B', 16)
-    if report_type == 'user_productivity':
-        title = "Отчет по продуктивности пользователей"
-    elif report_type == 'tasks':
-        title = "Отчет по задачам"
-    else:
-        title = "Общий отчет по Kanban-доске"
+    pdf.cell(0, 10, f"{REPORT_TYPES.get(report_type, 'Custom Report')}", ln=True, align='C')
+    pdf.set_font('Arial', 'I', 12)
+    pdf.cell(0, 10, f"Board: {board_name}", ln=True)
+    pdf.cell(0, 10, f"Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
+    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
+    pdf.ln(10)
     
-    pdf.cell(0, 10, title, ln=True, align='C')
-    
-    # Дата формирования отчета
+    # Add report content based on type
     pdf.set_font('Arial', '', 12)
-    pdf.cell(0, 10, f"Дата формирования: {datetime.now().strftime('%Y-%m-%d')}", ln=True)
     
-    # Содержимое отчета в зависимости от типа
-    if report_type == 'user_productivity':
+    if report_type == 'project_status':
         pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Продуктивность пользователей", ln=True)
+        pdf.cell(0, 10, "Project Overview", ln=True)
         pdf.set_font('Arial', '', 12)
+        pdf.cell(0, 10, f"Total Cards: {report_data['total_cards']}", ln=True)
+        pdf.cell(0, 10, f"Completed Cards: {report_data['completed_cards']}", ln=True)
+        pdf.cell(0, 10, f"Completion Rate: {report_data['completion_rate']:.1f}%", ln=True)
         
-        for username, user_stats in stats['user_tasks'].items():
-            pdf.cell(0, 10, f"Пользователь: {username}", ln=True)
-            pdf.cell(0, 10, f"Всего задач: {user_stats['total']}", ln=True)
-            pdf.cell(0, 10, f"Выполнено: {user_stats['completed']}", ln=True)
-            pdf.cell(0, 10, f"Процент выполнения: {user_stats['completion_rate']:.2f}%", ln=True)
+        pdf.ln(5)
+        pdf.set_font('Arial', 'B', 14)
+        pdf.cell(0, 10, "Lists Overview", ln=True)
+        
+        for list_name, list_data in report_data['cards_by_list'].items():
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 10, f"{list_name}", ln=True)
+            pdf.set_font('Arial', '', 12)
+            pdf.cell(0, 10, f"Total Cards: {list_data['total']}", ln=True)
+            pdf.cell(0, 10, f"Completed: {list_data['completed']}", ln=True)
+            pdf.cell(0, 10, f"Completion Rate: {list_data['completion_rate']:.1f}%", ln=True)
+            pdf.ln(5)
+            
+    elif report_type == 'user_workload':
+        pdf.set_font('Arial', 'B', 14)
+        pdf.cell(0, 10, "User Workload Summary", ln=True)
+        
+        for username, user_data in report_data['user_workload'].items():
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 10, f"User: {username}", ln=True)
+            pdf.set_font('Arial', '', 12)
+            pdf.cell(0, 10, f"Total Tasks: {user_data['total']}", ln=True)
+            pdf.cell(0, 10, f"Completed: {user_data['completed']}", ln=True)
+            pdf.cell(0, 10, f"Overdue: {user_data['overdue']}", ln=True)
+            
+            pdf.set_font('Arial', 'I', 12)
+            pdf.cell(0, 10, "Tasks by Priority:", ln=True)
+            for priority, count in user_data['priority'].items():
+                if count > 0:
+                    pdf.cell(0, 10, f"{priority.capitalize()}: {count}", ln=True)
             pdf.ln(5)
     
-    elif report_type == 'tasks':
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Статистика по задачам", ln=True)
-        pdf.set_font('Arial', '', 12)
-        
-        pdf.cell(0, 10, f"Всего задач: {stats['total_cards']}", ln=True)
-        pdf.cell(0, 10, f"Выполнено: {stats['completed_cards']}", ln=True)
-        pdf.cell(0, 10, f"В процессе: {stats['pending_cards']}", ln=True)
-        pdf.cell(0, 10, f"Процент выполнения: {stats['completion_rate']:.2f}%", ln=True)
-        
-        pdf.ln(5)
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Распределение по приоритетам", ln=True)
-        pdf.set_font('Arial', '', 12)
-        
-        for priority, count in stats['priorities'].items():
-            pdf.cell(0, 10, f"{priority}: {count}", ln=True)
-            
-        pdf.ln(5)
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Сроки выполнения", ln=True)
-        pdf.set_font('Arial', '', 12)
-        
-        pdf.cell(0, 10, f"Просрочено: {stats['overdue']}", ln=True)
-        pdf.cell(0, 10, f"На сегодня: {stats['due_today']}", ln=True)
-        pdf.cell(0, 10, f"На этой неделе: {stats['due_this_week']}", ln=True)
-    
-    else:  # Общий отчет
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Общая статистика", ln=True)
-        pdf.set_font('Arial', '', 12)
-        
-        pdf.cell(0, 10, f"Количество досок: {stats['total_boards']}", ln=True)
-        pdf.cell(0, 10, f"Всего задач: {stats['total_cards']}", ln=True)
-        pdf.cell(0, 10, f"Выполнено задач: {stats['completed_cards']}", ln=True)
-        pdf.cell(0, 10, f"В процессе: {stats['pending_cards']}", ln=True)
-        pdf.cell(0, 10, f"Процент выполнения: {stats['completion_rate']:.2f}%", ln=True)
-        
-        pdf.ln(5)
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Топ пользователей по выполненным задачам", ln=True)
-        pdf.set_font('Arial', '', 12)
-        
-        # Сортируем пользователей по количеству выполненных задач
-        top_users = sorted(
-            stats['user_tasks'].items(), 
-            key=lambda x: x[1]['completed'], 
-            reverse=True
-        )[:5]  # Берем топ-5
-        
-        for username, user_stats in top_users:
-            pdf.cell(0, 10, f"{username}: {user_stats['completed']} задач", ln=True)
-
-    # Сохраняем PDF
-    report_filename = f"kanban_report_{report_type}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-    pdf_path = os.path.join(EXPORT_FOLDER, report_filename)
+    # Save the PDF
+    pdf_path = os.path.join(EXPORT_FOLDER, f"{filename}.pdf")
     pdf.output(pdf_path)
     
-    return jsonify({
-        'success': True,
-        'message': 'Отчет успешно сгенерирован',
-        'download_url': url_for('reports.download_report', filename=report_filename)
+    return send_file(pdf_path, as_attachment=True)
+
+def export_as_excel(report_type, report_data, filename, board_name, start_date, end_date):
+    """Export report as Excel"""
+    # Create a Pandas Excel writer using XlsxWriter as the engine
+    excel_path = os.path.join(EXPORT_FOLDER, f"{filename}.xlsx")
+    writer = pd.ExcelWriter(excel_path, engine='xlsxwriter')
+    
+    # Create a metadata sheet with report info
+    metadata = pd.DataFrame({
+        'Report Type': [REPORT_TYPES.get(report_type, 'Custom Report')],
+        'Board': [board_name],
+        'Start Date': [start_date.strftime('%Y-%m-%d')],
+        'End Date': [end_date.strftime('%Y-%m-%d')],
+        'Generated': [datetime.now().strftime('%Y-%m-%d %H:%M')]
     })
-
-@reports_bp.route('/reports/download/<filename>')
-@login_required
-def download_report(filename):
-    """Скачивание сгенерированного отчета"""
-    return send_file(os.path.join(EXPORT_FOLDER, filename), as_attachment=True)
-
-@reports_bp.route('/user-productivity')
-@login_required
-def user_productivity():
-    """Страница с отчетом по продуктивности пользователей"""
-    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
-    stats = get_kanban_statistics(is_admin)
-    users = User.query.all()
+    metadata.to_excel(writer, sheet_name='Report Info', index=False)
     
-    return render_template('user_productivity.html', stats=stats, users=users)
-
-@reports_bp.route('/task-statistics')
-@login_required
-def task_statistics():
-    """Страница со статистикой по задачам"""
-    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
-    stats = get_kanban_statistics(is_admin)
+    # Create data sheets based on report type
+    if report_type == 'project_status':
+        # Overall stats
+        overall = pd.DataFrame({
+            'Metric': ['Total Cards', 'Completed Cards', 'Completion Rate (%)'],
+            'Value': [
+                report_data['total_cards'], 
+                report_data['completed_cards'],
+                f"{report_data['completion_rate']:.1f}%"
+            ]
+        })
+        overall.to_excel(writer, sheet_name='Overall Stats', index=False)
+        
+        # Lists data
+        lists_data = []
+        for list_name, list_data in report_data['cards_by_list'].items():
+            lists_data.append({
+                'List Name': list_name,
+                'Total Cards': list_data['total'],
+                'Completed Cards': list_data['completed'],
+                'Completion Rate (%)': f"{list_data['completion_rate']:.1f}%"
+            })
+        
+        if lists_data:
+            lists_df = pd.DataFrame(lists_data)
+            lists_df.to_excel(writer, sheet_name='Lists Data', index=False)
     
-    return render_template('task_statistics.html', stats=stats)
-
-@reports_bp.route('/dashboard/stats')
-@login_required
-def dashboard_stats():
-    """API для получения статистики дашборда"""
-    is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
-    stats = get_kanban_statistics(is_admin)
+    elif report_type == 'user_workload':
+        # User workload data
+        user_data = []
+        priority_data = []
+        
+        for username, data in report_data['user_workload'].items():
+            user_data.append({
+                'Username': username,
+                'Total Tasks': data['total'],
+                'Completed': data['completed'],
+                'Completion Rate (%)': f"{(data['completed'] / data['total'] * 100):.1f}%" if data['total'] > 0 else '0%',
+                'Overdue Tasks': data['overdue']
+            })
+            
+            # Priority breakdown by user
+            for priority, count in data['priority'].items():
+                if count > 0:
+                    priority_data.append({
+                        'Username': username,
+                        'Priority': priority.capitalize(),
+                        'Count': count
+                    })
+        
+        if user_data:
+            users_df = pd.DataFrame(user_data)
+            users_df.to_excel(writer, sheet_name='User Workload', index=False)
+        
+        if priority_data:
+            priority_df = pd.DataFrame(priority_data)
+            priority_df.to_excel(writer, sheet_name='Priority by User', index=False)
     
-    return jsonify({
-        'total_cards': stats['total_cards'],
-        'completed_cards': stats['completed_cards'],
-        'pending_cards': stats['pending_cards'],
-        'total_boards': stats['total_boards'],
-        'completion_rate': stats['completion_rate'],
-        'user_tasks': stats['user_tasks']
-    })
+    # Save the Excel file
+    writer.close()
+    
+    return send_file(excel_path, as_attachment=True)
+
+def export_as_json(report_type, report_data, filename, board_name, start_date, end_date):
+    """Export report as JSON"""
+    # Create JSON structure with metadata
+    json_data = {
+        'metadata': {
+            'report_type': report_type,
+            'report_name': REPORT_TYPES.get(report_type, 'Custom Report'),
+            'board': board_name,
+            'period': {
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date.strftime('%Y-%m-%d')
+            },
+            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        },
+        'data': report_data
+    }
+    
+    # Save to file
+    json_path = os.path.join(EXPORT_FOLDER, f"{filename}.json")
+    with open(json_path, 'w') as f:
+        json.dump(json_data, f, indent=2, default=str)
+    
+    return send_file(json_path, as_attachment=True)
+
+@reports_bp.route('/api/data/<report_type>')
+@login_required
+def get_report_data(report_type):
+    """API endpoint to get report data for charts"""
+    board_id = request.args.get('board_id')
+    period_type = request.args.get('period_type', 'this_month')
+    
+    if board_id:
+        board_id = int(board_id)
+    
+    # Get date range based on period type
+    start_date, end_date = get_date_range(period_type)
+    
+    # Handle custom date range
+    if period_type == 'custom':
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD.'}), 400
+    
+    # Generate report data based on type
+    if report_type == 'project_status':
+        data = get_project_status_data(board_id, start_date, end_date)
+    elif report_type == 'user_workload':
+        data = get_user_workload_data(board_id, start_date, end_date)
+    elif report_type == 'deadline_statistics':
+        data = get_deadline_statistics(board_id, start_date, end_date)
+    elif report_type == 'priority_distribution':
+        data = get_priority_distribution(board_id, start_date, end_date)
+    elif report_type == 'completion_rates':
+        # This combines project status data with additional time analysis
+        project_data = get_project_status_data(board_id, start_date, end_date)
+        priority_data = get_priority_distribution(board_id, start_date, end_date)
+        data = {
+            'project_status': project_data,
+            'priority_data': priority_data
+        }
+    else:
+        return jsonify({'error': 'Invalid report type'}), 400
+    
+    return jsonify(data)

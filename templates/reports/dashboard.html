@@ -8,27 +8,19 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-       :root {
-          /* Color variables */
-          --primary-color: #C71320;
-          --primary-hover: #4338ca;
-          --danger-color: #ef4444;
-          --danger-hover: #dc2626;
-          --success-color: #10b981;
-          --success-hover: #059669;
-          --bg-color: #f4f6f9;
-          --card-bg: #ffffff;
-          --border-color: #e5e7eb;
-          --text-primary: #111827;
-          --text-secondary: #4b5563;
-          --text-muted: #6b7280;
-        }
-
-        /* Base styling */
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
+        :root {
+            --primary-color: #C71320;
+            --primary-hover: #4338ca;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --success-color: #10b981;
+            --success-hover: #059669;
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --border-color: #e5e7eb;
+            --text-primary: #111827;
+            --text-secondary: #4b5563;
+            --text-muted: #6b7280;
         }
 
         body {
@@ -41,96 +33,24 @@
             flex-direction: column;
         }
 
-        a {
-          text-decoration: none;
-          color: inherit;
-        }
-
-        /* Modified Navbar Styles */
         .navbar {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          height: 64px;
-          padding: 0 16px;
-          background-color: white;
-          border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 64px;
+            padding: 0 16px;
+            background-color: white;
+            border-bottom: 1px solid var(--border-color);
+            width: 100%;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
 
-        .navbar-left {
-          display: flex;
-          align-items: center;
-        }
-
-        .navbar-right {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-
-        .logo-group {
-          display: flex;
-          align-items: center;
-          margin-right: 36px;  /* Add space after logo */
-        }
-
-        .app-logo {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          color: var(--primary-color);
-          font-weight: 600;
-          font-size: 24px;  /* Larger font size */
-        }
-
-        .app-logo i {
-          font-size: 28px;  /* Larger icon */
-        }
-
-        .main-nav {
-          display: flex;
-          gap: 24px;
-        }
-
-        .nav-link {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: var(--text-secondary);
-          transition: all 0.2s;
-          padding: 6px 0;
-          position: relative;
-        }
-
-        .nav-link::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          width: 0;
-          height: 2px;
-          background-color: var(--primary-color);
-          transition: width 0.2s;
-        }
-
-        .nav-link:hover {
-          color: var(--text-primary);
-        }
-
-        .nav-link:hover::after {
-          width: 100%;
-        }
-
-        .nav-link.active {
-          color: var(--primary-color);
-        }
-
-        .nav-link.active::after {
-          width: 100%;
-        }
-
-        /* Dashboard specific styles */
         .container {
+            max-width: 1320px;
+            margin-left: auto;
+            margin-right: auto;
             background-color: white;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
@@ -145,6 +65,7 @@
             padding: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             margin-bottom: 20px;
+            height: 100%;
             transition: transform 0.2s;
         }
         
@@ -219,7 +140,6 @@
             margin-bottom: 20px;
         }
         
-        /* Добавленные стили для модального окна и уведомлений */
         .toast-container {
             position: fixed;
             top: 20px;
@@ -230,6 +150,17 @@
         .custom-toast {
             min-width: 250px;
         }
+        .btn-kanban {
+            background-color: #C71320;
+            border-color: #C71320;
+            color: white;
+            }
+
+        .btn-kanban:hover {
+            background-color: #a81019;
+            border-color: #a81019;
+            color: white;
+            }
         
         .loader {
             border: 4px solid #f3f3f3;
@@ -253,75 +184,237 @@
             margin-top: 5px;
             margin-bottom: 15px;
         }
+        
+        .chart-toggle {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        
+        .chart-toggle-btn {
+            padding: 6px 16px;
+            border: 1px solid var(--border-color);
+            background-color: #fff;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .chart-toggle-btn:first-child {
+            border-top-left-radius: 4px;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .chart-toggle-btn:last-child {
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .chart-toggle-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        .chart-container.hidden {
+            display: none;
+        }
+
+        .task-list {
+            max-height: 300px;
+            overflow-y: auto;
+            width: 100%;
+        }
+        
+        .task-item {
+            padding: 8px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-left: 3px solid;
+            font-size: 0.9rem;
+            width: 100%;
+        }
+        
+        .task-item.priority-HIGH {
+            border-left-color: #f44336;
+        }
+        
+        .task-item.priority-MEDIUM {
+            border-left-color: #ffc107;
+        }
+        
+        .task-item.priority-LOW {
+            border-left-color: #4caf50;
+        }
+        
+        .task-item .task-title {
+            font-weight: 500;
+            display: block;
+            margin-bottom: 3px;
+            word-break: break-word;
+        }
+        
+        .task-item .task-meta {
+            color: #6c757d;
+            font-size: 0.8rem;
+            word-break: break-word;
+        }
+        
+        .priority-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 5px;
+            display: inline-block;
+        }
+        
+        .priority-badge.priority-HIGH {
+            background-color: #f44336;
+            color: white;
+        }
+        
+        .priority-badge.priority-MEDIUM {
+            background-color: #ffc107;
+            color: black;
+        }
+        
+        .priority-badge.priority-LOW {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .global-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+        }
+        .stat-card.clickable {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .stat-card.clickable:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+        
+        /* Стили для модального окна с деталями */
+        .stats-modal .modal-body {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        
+        .stats-table {
+            width: 100%;
+        }
+        
+        .stats-table th {
+            text-align: left;
+            padding: 8px;
+            background-color: #f8f9fa;
+        }
+        
+        .stats-table td {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .stats-table tr:hover {
+            background-color: #f5f5f5;
+        }
     </style>
 </head>
 <body>
-    {% set active_page = 'reports' %}
+    {% set active_page = 'kanban' %}
     {% include 'navbar/navbar.html' %}
+    
+    <!-- Глобальный лоадер -->
+    <div class="global-loader" id="globalLoader">
+        <div class="loader"></div>
+        <p class="mt-3">Загрузка данных...</p>
+    </div>
     
     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2><i class="fas fa-tachometer-alt me-2"></i> Дашборд</h2>
             <div>
-                <a href="{{ url_for('reports.view_reports') }}" class="btn btn-outline-primary me-2">
-                    <i class="fas fa-chart-bar me-1"></i> Отчеты
-                </a>
-                <a href="{{ url_for('reports.export_kanban_report') }}" class="btn btn-success">
+                <select id="boardSelector" class="form-select me-2" style="width: 200px; display: inline-block;">
+                    <option value="">Все доски</option>
+                    {% for board in boards %}
+                        <option value="{{ board.id }}">{{ board.name }}</option>
+                    {% endfor %}
+                </select>
+                <a href="{{ url_for('dashboard.export_kanban_report') }}" class="btn btn-success" id="exportBtn">
                     <i class="fas fa-file-excel me-1"></i> Экспорт Kanban отчета
                 </a>
             </div>
         </div>
         
-        <!-- Stats Overview -->
-        <div class="row mb-4">
+         <!-- Stats Overview -->
+         <div class="row mb-4">
             <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showStatsDetails('total')">
                     <div class="stat-icon bg-primary-light">
                         <i class="fas fa-tasks"></i>
                     </div>
                     <h6 class="text-muted">Всего задач</h6>
-                    <h3>{{ stats.total_cards }}</h3>
+                    <h3 id="totalTasks">0</h3>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showStatsDetails('completed')">
                     <div class="stat-icon bg-success-light">
                         <i class="fas fa-check-circle"></i>
                     </div>
                     <h6 class="text-muted">Выполненных задач</h6>
-                    <h3>{{ stats.completed_cards }}</h3>
+                    <h3 id="completedTasks">0</h3>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showStatsDetails('pending')">
                     <div class="stat-icon bg-warning-light">
                         <i class="fas fa-clipboard-list"></i>
                     </div>
                     <h6 class="text-muted">В процессе</h6>
-                    <h3>{{ stats.pending_cards }}</h3>
+                    <h3 id="pendingTasks">0</h3>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card clickable" onclick="showStatsDetails('boards')">
                     <div class="stat-icon bg-info-light">
                         <i class="fas fa-columns"></i>
                     </div>
                     <h6 class="text-muted">Количество досок</h6>
-                    <h3>{{ stats.total_boards }}</h3>
+                    <h3 id="totalBoards">0</h3>
                 </div>
             </div>
         </div>
-        
-        <!-- Charts -->
+        <!-- Combined Charts Section -->
         <div class="row mb-4">
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="card-title">Задачи по статусу</h5>
+                        <h5 class="card-title mb-0">Статистика задач</h5>
+                        <div class="chart-toggle mt-2">
+                            <button class="chart-toggle-btn active" data-chart="status">По статусу</button>
+                            <button class="chart-toggle-btn" data-chart="priority">По приоритету</button>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <div class="chart-container">
+                        <div class="chart-container" id="statusChartContainer">
                             <canvas id="tasksStatusChart"></canvas>
+                        </div>
+                        <div class="chart-container hidden" id="priorityChartContainer">
+                            <canvas id="tasksPriorityChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -329,11 +422,11 @@
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="card-title">Задачи по приоритету</h5>
+                        <h5 class="card-title mb-0">Задачи по исполнителям</h5>
                     </div>
                     <div class="card-body">
                         <div class="chart-container">
-                            <canvas id="tasksPriorityChart"></canvas>
+                            <canvas id="tasksUserChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -344,11 +437,33 @@
             <div class="col-md-8">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="card-title">Задачи по исполнителям</h5>
+                        <h5 class="card-title mb-0">Процент выполнения задач</h5>
                     </div>
                     <div class="card-body">
-                        <div class="chart-container">
-                            <canvas id="tasksUserChart"></canvas>
+                        <div class="progress completion-progress">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                id="completionProgress" 
+                                style="width: 0%;" 
+                                aria-valuenow="0" 
+                                aria-valuemin="0" 
+                                aria-valuemax="100">0%</div>
+                        </div>
+                        
+                        <h6 class="mt-4 mb-3">Топ исполнителей</h6>
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="usersTable">
+                                <thead>
+                                    <tr>
+                                        <th>Пользователь</th>
+                                        <th>Завершено задач</th>
+                                        <th>Всего задач</th>
+                                        <th>Процент выполнения</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTableBody">
+                                    <!-- Данные будут загружены через JavaScript -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -356,149 +471,96 @@
             <div class="col-md-4">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="card-title">Сроки выполнения</h5>
+                        <h5 class="card-title mb-0">Сроки выполнения</h5>
                     </div>
                     <div class="card-body">
                         <div id="dueDatesContainer">
+                            <!-- Просроченные задачи -->
                             <div class="due-date-card border-danger">
-                                <h6 class="mb-1">Просрочено</h6>
-                                <span class="badge bg-danger">0</span>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-1">Просрочено</h6>
+                                    <span class="badge bg-danger" id="overdueCount">0</span>
+                                </div>
+                                
+                                <div class="task-list mt-2" id="overdueTasks"></div>
+                                
+                                <div class="mt-2 text-center" id="overdueViewAll" style="display: none;">
+                                    <button class="btn btn-sm btn-outline-danger view-all-tasks" 
+                                            data-category="overdue">Показать все</button>
+                                </div>
                             </div>
+                            
+                            <!-- Задачи на сегодня -->
                             <div class="due-date-card border-warning">
-                                <h6 class="mb-1">На сегодня</h6>
-                                <span class="badge bg-warning text-dark">0</span>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-1">На сегодня</h6>
+                                    <span class="badge bg-warning text-dark" id="todayCount">0</span>
+                                </div>
+                                
+                                <div class="task-list mt-2" id="todayTasks"></div>
+                                
+                                <div class="mt-2 text-center" id="todayViewAll" style="display: none;">
+                                    <button class="btn btn-sm btn-outline-warning view-all-tasks" 
+                                           data-category="due_today">Показать все</button>
+                                </div>
                             </div>
+                            
+                            <!-- Задачи на неделю -->
                             <div class="due-date-card border-info">
-                                <h6 class="mb-1">На этой неделе</h6>
-                                <span class="badge bg-info">0</span>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-1">На этой неделе</h6>
+                                    <span class="badge bg-info" id="weekCount">0</span>
+                                </div>
+                                
+                                <div class="task-list mt-2" id="weekTasks"></div>
+                                
+                                <div class="mt-2 text-center" id="weekViewAll" style="display: none;">
+                                    <button class="btn btn-sm btn-outline-info view-all-tasks" 
+                                           data-category="due_this_week">Показать все</button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <!-- Generate Reports Section -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="card-title">Сгенерировать отчет</h5>
-            </div>
-            <div class="card-body">
-                <div class="report-options">
-                    <form id="reportForm">
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Тип отчета</label>
-                                <select class="form-select" id="reportType" name="report_type">
-                                    <option value="default">Общий отчет</option>
-                                    <option value="user_productivity">Продуктивность пользователей</option>
-                                    <option value="tasks">Статистика по задачам</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Период</label>
-                                <select class="form-select" id="dateRange" name="date_range">
-                                    <option value="all">Все время</option>
-                                    <option value="week">Последняя неделя</option>
-                                    <option value="month">Последний месяц</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Пользователь</label>
-                                <select class="form-select" id="userId" name="user_id">
-                                    <option value="">Все пользователи</option>
-                                    {% for user, tasks in stats.user_tasks.items() %}
-                                        <option value="{{ user }}">{{ user }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
+
+        <!-- Модальное окно для просмотра всех задач -->
+        <div class="modal fade tasks-modal" id="allTasksModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="taskModalTitle">Все задачи</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="task-list" id="allTasksContainer">
+                            <!-- Задачи будут добавлены через JavaScript -->
                         </div>
-                        <button type="button" id="generateReportBtn" class="btn btn-primary">
-                            <i class="fas fa-file-pdf me-1"></i> Сгенерировать PDF отчет
-                        </button>
-                    </form>
-                </div>
-                
-                <div class="mt-3">
-                    <h6>Быстрые отчеты</h6>
-                    <div class="row">
-                        <div class="col-md-4">
-                            <a href="{{ url_for('reports.user_productivity') }}" class="btn btn-outline-primary report-type-btn">
-                                <i class="fas fa-users me-2"></i> Продуктивность пользователей
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('reports.task_statistics') }}" class="btn btn-outline-primary report-type-btn">
-                                <i class="fas fa-chart-pie me-2"></i> Статистика по задачам
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('reports.export_kanban_report') }}" class="btn btn-outline-primary report-type-btn">
-                                <i class="fas fa-file-excel me-2"></i> Полный Kanban отчет
-                            </a>
-                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Completion Rate Section -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="card-title">Процент выполнения задач</h5>
-            </div>
-            <div class="card-body">
-                <div class="progress completion-progress">
-                    <div class="progress-bar bg-success" role="progressbar" 
-                         style="width: {{ stats.completion_rate }}%;" 
-                         aria-valuenow="{{ stats.completion_rate }}" 
-                         aria-valuemin="0" 
-                         aria-valuemax="100">{{ stats.completion_rate|round(1) }}%</div>
-                </div>
-                
-                <h6>Топ исполнителей</h6>
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Пользователь</th>
-                                <th>Завершено задач</th>
-                                <th>Всего задач</th>
-                                <th>Процент выполнения</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for username, user_stats in stats.user_tasks.items() %}
-                                <tr>
-                                    <td>{{ username }}</td>
-                                    <td>{{ user_stats.completed }}</td>
-                                    <td>{{ user_stats.total }}</td>
-                                    <td>
-                                        <div class="progress">
-                                            <div class="progress-bar" role="progressbar" 
-                                                style="width: {{ user_stats.completion_rate }}%;" 
-                                                aria-valuenow="{{ user_stats.completion_rate }}" 
-                                                aria-valuemin="0" 
-                                                aria-valuemax="100">{{ user_stats.completion_rate|round(1) }}%</div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Модальное окно загрузки отчета -->
-    <div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-body text-center p-4">
-                    <div class="loader"></div>
-                    <h5 class="mt-3">Генерация отчета...</h5>
-                    <p class="text-muted">Пожалуйста, подождите. Это может занять несколько секунд.</p>
+        <!-- Модальное окно для просмотра деталей статистики -->
+        <div class="modal fade stats-modal" id="statsDetailsModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="statsModalTitle">Детали</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="statsDetailsContent">
+                            <!-- Содержимое будет загружено динамически -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -506,17 +568,23 @@
     
     <!-- Toast контейнер для уведомлений -->
     <div class="toast-container">
-        <div class="toast custom-toast" role="alert" aria-live="assertive" aria-atomic="true" id="reportToast">
-            <div class="toast-header">
-                <i class="fas fa-check-circle text-success me-2"></i>
-                <strong class="me-auto">Отчет готов</strong>
-                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-            <div class="toast-body">
-                Отчет успешно сгенерирован и готов к загрузке.
-                <div class="mt-2">
-                    <a href="#" id="downloadReportLink" class="btn btn-sm btn-primary">Скачать</a>
+        <div class="toast align-items-center text-white bg-success" role="alert" aria-live="assertive" aria-atomic="true" id="successToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <span id="successToastMessage">Операция выполнена успешно</span>
                 </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        
+        <div class="toast align-items-center text-white bg-danger" role="alert" aria-live="assertive" aria-atomic="true" id="errorToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <span id="errorToastMessage">Произошла ошибка</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
         </div>
     </div>
@@ -525,63 +593,171 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
+        // Глобальные переменные для хранения данных и экземпляров графиков
+        let allTasksData = {};
+        let tasksStatusChart = null;
+        let tasksPriorityChart = null;
+        let tasksUserChart = null;
+        
         document.addEventListener('DOMContentLoaded', function() {
-            // Загрузка данных для графиков
-            fetchChartData('/reports/charts/tasks-by-status', tasksStatusChartInit);
-            fetchChartData('/reports/charts/tasks-by-priority', tasksPriorityChartInit);
-            fetchChartData('/reports/charts/tasks-by-user', tasksUserChartInit);
-            fetchDueDates();
+            // Инициализация данных при загрузке
+            loadDashboardData();
             
-            // Обработчик для генерации отчета
-            document.getElementById('generateReportBtn').addEventListener('click', function() {
-                const reportType = document.getElementById('reportType').value;
-                const dateRange = document.getElementById('dateRange').value;
-                const userId = document.getElementById('userId').value;
-
-                if (!reportType) {
-                    alert('Пожалуйста, выберите тип отчета');
-                        return;
+            // Обработчик изменения выбора доски
+            document.getElementById('boardSelector').addEventListener('change', function() {
+                const boardId = this.value || null;
+                loadDashboardData(boardId);
+                
+                // Обновляем URL для экспорта с учетом выбранной доски
+                const exportBtn = document.getElementById('exportBtn');
+                if (boardId) {
+                    exportBtn.href = `/dashboard/reports/kanban/export?board_id=${boardId}`;
+                } else {
+                    exportBtn.href = '/dashboard/reports/kanban/export';
+                }
+            });
+            
+            // Обработчик для переключения между графиками
+            document.querySelectorAll('.chart-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // Удаляем класс active у всех кнопок
+                    document.querySelectorAll('.chart-toggle-btn').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    
+                    // Скрываем все контейнеры с графиками
+                    document.getElementById('statusChartContainer').classList.add('hidden');
+                    document.getElementById('priorityChartContainer').classList.add('hidden');
+                    
+                    // Добавляем класс active текущей кнопке
+                    this.classList.add('active');
+                    
+                    // Отображаем нужный график
+                    const chartType = this.getAttribute('data-chart');
+                    if (chartType === 'status') {
+                        document.getElementById('statusChartContainer').classList.remove('hidden');
+                    } else if (chartType === 'priority') {
+                        document.getElementById('priorityChartContainer').classList.remove('hidden');
                     }
-    
-                generatePdfReport(reportType, dateRange, userId);
+                });
+            });
+            
+            // Обработчики для кнопок "Показать все"
+            document.querySelectorAll('.view-all-tasks').forEach(button => {
+                button.addEventListener('click', function() {
+                    const category = this.getAttribute('data-category');
+                    showAllTasks(category);
+                });
             });
         });
         
-        function fetchChartData(endpoint, callback) {
-            fetch(endpoint)
+        // Функция загрузки данных дашборда
+        function loadDashboardData(boardId = null) {
+            showLoading(true);
+            
+            let url = '/dashboard/api/stats';
+            if (boardId) {
+                url += `?board_id=${boardId}`;
+            }
+            
+            fetch(url)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok: ' + response.statusText);
                     }
-                    return response.json()
-                })
-                .then(data => callback(data))
-                .catch(error => console.error('Error fetching chart data:', error));
-        }
-        
-        function fetchDueDates() {
-            fetch('/reports/api/tasks/due-dates')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
-                    }
-                    return response.json()
+                    return response.json();
                 })
                 .then(data => {
-                    // Update counters
-                    const dueDatesContainer = document.getElementById('dueDatesContainer');
-                    const badges = dueDatesContainer.querySelectorAll('.badge');
+                    // Обновляем карточки статистики
+                    document.getElementById('totalTasks').textContent = data.total_cards;
+                    document.getElementById('completedTasks').textContent = data.completed_cards;
+                    document.getElementById('pendingTasks').textContent = data.pending_cards;
+                    document.getElementById('totalBoards').textContent = data.total_boards;
                     
-                    badges[0].textContent = data.overdue;
-                    badges[1].textContent = data.due_today;
-                    badges[2].textContent = data.due_this_week;
+                    // Обновляем прогресс выполнения
+                    const progressBar = document.getElementById('completionProgress');
+                    const completionRate = data.completion_rate || 0;
+                    progressBar.style.width = `${completionRate}%`;
+                    progressBar.setAttribute('aria-valuenow', completionRate);
+                    progressBar.textContent = `${completionRate.toFixed(1)}%`;
+                    
+                    // Обновляем графики
+                    updateCharts(boardId);
+                    
+                    // Обновляем таблицу пользователей
+                    updateUsersTable(data.user_tasks);
+                    
+                    // Обновляем задачи по срокам
+                    fetchDueDates(boardId);
                 })
-                .catch(error => console.error('Error fetching due dates:', error));
+                .catch(error => {
+                    console.error('Error loading dashboard data:', error);
+                    showToast('error', 'Ошибка загрузки данных дашборда');
+                })
+                .finally(() => showLoading(false));
         }
         
-        function tasksStatusChartInit(data) {
+        // Функция обновления графиков с учетом выбранной доски
+        function updateCharts(boardId = null) {
+            let baseUrl = '/dashboard/charts';
+            let query = boardId ? `?board_id=${boardId}` : '';
+            
+            // Обновляем график по статусу задач
+            fetch(`${baseUrl}/tasks-by-status${query}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    if (tasksStatusChart) {
+                        tasksStatusChart.destroy();
+                    }
+                    tasksStatusChart = createStatusChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching status chart data:', error);
+                    showToast('error', 'Ошибка загрузки графика по статусам');
+                });
+            
+            // Обновляем график по приоритетам задач
+            fetch(`${baseUrl}/tasks-by-priority${query}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    if (tasksPriorityChart) {
+                        tasksPriorityChart.destroy();
+                    }
+                    tasksPriorityChart = createPriorityChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching priority chart data:', error);
+                    showToast('error', 'Ошибка загрузки графика по приоритетам');
+                });
+            
+            // Обновляем график по исполнителям
+            fetch(`${baseUrl}/tasks-by-user${query}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    if (tasksUserChart) {
+                        tasksUserChart.destroy();
+                    }
+                    tasksUserChart = createUserChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching user chart data:', error);
+                    showToast('error', 'Ошибка загрузки графика по исполнителям');
+                });
+        }
+        
+        // Функция создания графика по статусу задач
+        function createStatusChart(data) {
             const ctx = document.getElementById('tasksStatusChart').getContext('2d');
-            new Chart(ctx, {
+            return new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: data.labels,
@@ -597,21 +773,33 @@
                     plugins: {
                         legend: {
                             position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
                         }
                     }
                 }
             });
         }
         
-        function tasksPriorityChartInit(data) {
+        // Функция создания графика по приоритетам задач
+        function createPriorityChart(data) {
             const ctx = document.getElementById('tasksPriorityChart').getContext('2d');
-            new Chart(ctx, {
+            return new Chart(ctx, {
                 type: 'pie',
                 data: {
                     labels: data.labels,
                     datasets: [{
                         data: data.datasets[0].data,
-                        backgroundColor: data.datasets[0].backgroundColor, // Цвета берутся из данных
+                        backgroundColor: data.datasets[0].backgroundColor,
                         borderWidth: 1
                     }]
                 },
@@ -621,29 +809,54 @@
                     plugins: {
                         legend: {
                             position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
                         }
                     }
                 }
             });
         }
         
-        function tasksUserChartInit(data) {
+        // Функция создания графика по исполнителям
+        function createUserChart(data) {
+            // Фильтруем только тех пользователей, у которых есть задачи
+            const filteredLabels = [];
+            const filteredCompleted = [];
+            const filteredPending = [];
+            
+            for (let i = 0; i < data.labels.length; i++) {
+                if (data.datasets[0].data[i] > 0 || data.datasets[1].data[i] > 0) {
+                    filteredLabels.push(data.labels[i]);
+                    filteredCompleted.push(data.datasets[0].data[i]);
+                    filteredPending.push(data.datasets[1].data[i]);
+                }
+            }
+            
             const ctx = document.getElementById('tasksUserChart').getContext('2d');
-            new Chart(ctx, {
+            return new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.labels,
+                    labels: filteredLabels,
                     datasets: [
                         {
-                            label: data.datasets[0].label,
-                            data: data.datasets[0].data,
-                            backgroundColor: data.datasets[0].backgroundColor,
+                            label: 'Завершено',
+                            data: filteredCompleted,
+                            backgroundColor: '#4caf50',
                             borderWidth: 1
                         },
                         {
-                            label: data.datasets[1].label,
-                            data: data.datasets[1].data,
-                            backgroundColor: data.datasets[1].backgroundColor,
+                            label: 'В процессе',
+                            data: filteredPending,
+                            backgroundColor: '#ff9800',
                             borderWidth: 1
                         }
                     ]
@@ -663,91 +876,308 @@
                     plugins: {
                         legend: {
                             position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const dataset = context.dataset;
+                                    const total = dataset.data.reduce((a, b) => a + b, 0);
+                                    const value = context.raw || 0;
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `Всего: ${total}\nПроцент: ${percentage}%`;
+                                }
+                            }
                         }
                     }
                 }
             });
         }
         
-        function generatePdfReport(reportType, dateRange, userId) {
-            // Показываем модальное окно загрузки
-            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
-            loadingModal.show();
+        // Функция обновления таблицы пользователей
+        function updateUsersTable(userTasks) {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
             
-            // Отправляем запрос на генерацию отчета
-            fetch('/reports/generate-pdf-report', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    report_type: reportType,
-                    date_range: dateRange,
-                    user_id: userId
-                })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok: ' + response.statusText);
-                }
-                return response.json();
-            })
-            .then(data => {
-                // Скрываем модальное окно загрузки
-                loadingModal.hide();
+            // Сортируем пользователей по количеству выполненных задач
+            const sortedUsers = Object.entries(userTasks)
+                .filter(([_, stats]) => stats.total > 0)
+                .sort((a, b) => b[1].completed - a[1].completed);
+            
+            if (sortedUsers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Нет данных о пользователях</td></tr>';
+                return;
+            }
+            
+            sortedUsers.forEach(([username, stats]) => {
+                const row = document.createElement('tr');
+                const completionRate = stats.completion_rate || 0;
                 
-                if (data.success) {
-                    // Обновляем ссылку для скачивания
-                    document.getElementById('downloadReportLink').href = data.download_url;
-                    
-                    // Показываем уведомление
-                    const toast = new bootstrap.Toast(document.getElementById('reportToast'));
-                    toast.show();
-                } else {
-                    alert('Ошибка при генерации отчета: ' + data.message);
-                }
-            })
-            .catch(error => {
-                loadingModal.hide();
-                console.error('Error generating report:', error);
-                alert('Произошла ошибка при генерации отчета. Пожалуйста, попробуйте еще раз.');
+                row.innerHTML = `
+                    <td>${username}</td>
+                    <td>${stats.completed}</td>
+                    <td>${stats.total}</td>
+                    <td>
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" 
+                                style="width: ${completionRate}%;" 
+                                aria-valuenow="${completionRate}" 
+                                aria-valuemin="0" 
+                                aria-valuemax="100">${completionRate.toFixed(1)}%</div>
+                        </div>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
             });
         }
         
-        // Функция для обновления данных дашборда
-        function refreshDashboard() {
-            fetchChartData('/reports/charts/tasks-by-status', tasksStatusChartInit);
-            fetchChartData('/reports/charts/tasks-by-priority', tasksPriorityChartInit);
-            fetchChartData('/reports/charts/tasks-by-user', tasksUserChartInit);
-            fetchDueDates();
+        // Функция загрузки данных о задачах по срокам
+        function fetchDueDates(boardId = null) {
+            showLoading(true);
             
-            // Также можно добавить обновление других данных дашборда
-            fetch('/reports/dashboard/stats')
+            let url = '/dashboard/api/tasks/due-dates-detailed';
+            if (boardId) {
+                url += `?board_id=${boardId}`;
+            }
+            
+            fetch(url)
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
-                    }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(data => {
-                    // Обновление статистики
-                    document.querySelector('.stat-card:nth-child(1) h3').textContent = data.total_cards;
-                    document.querySelector('.stat-card:nth-child(2) h3').textContent = data.completed_cards;
-                    document.querySelector('.stat-card:nth-child(3) h3').textContent = data.pending_cards;
-                    document.querySelector('.stat-card:nth-child(4) h3').textContent = data.total_boards;
-                    
-                    // Обновление прогресс-бара
-                    const progressBar = document.querySelector('.completion-progress .progress-bar');
-                    progressBar.style.width = data.completion_rate + '%';
-                    progressBar.textContent = data.completion_rate.toFixed(1) + '%';
-                    progressBar.setAttribute('aria-valuenow', data.completion_rate);
+                    allTasksData = data;
+                    updateTasksLists(data);
                 })
-                .catch(error => console.error('Error fetching dashboard stats:', error));
+                .catch(error => {
+                    console.error('Error fetching due dates:', error);
+                    showToast('error', 'Ошибка загрузки данных о сроках задач');
+                })
+                .finally(() => showLoading(false));
         }
         
-        // Автообновление дашборда каждые 5 минут
-        setInterval(refreshDashboard, 5 * 60 * 1000);
+        // Функция обновления списков задач
+        function updateTasksLists(data) {
+            // Обновляем счетчики
+            document.getElementById('overdueCount').textContent = data.overdue.count;
+            document.getElementById('todayCount').textContent = data.due_today.count;
+            document.getElementById('weekCount').textContent = data.due_this_week.count;
+            
+            // Обновляем списки задач
+            updateTaskList('overdueTasks', data.overdue.tasks);
+            updateTaskList('todayTasks', data.due_today.tasks);
+            updateTaskList('weekTasks', data.due_this_week.tasks);
+            
+            // Показываем кнопки "Показать все", если задач больше 3
+            document.getElementById('overdueViewAll').style.display = 
+                data.overdue.count > 3 ? 'block' : 'none';
+            document.getElementById('todayViewAll').style.display = 
+                data.due_today.count > 3 ? 'block' : 'none';
+            document.getElementById('weekViewAll').style.display = 
+                data.due_this_week.count > 3 ? 'block' : 'none';
+        }
+        
+        // Функция обновления одного списка задач
+        function updateTaskList(containerId, tasks) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            // Показываем максимум 3 задачи
+            const displayTasks = tasks.slice(0, 3);
+            
+            if (displayTasks.length === 0) {
+                container.innerHTML = '<div class="text-muted text-center py-2">Нет задач</div>';
+                return;
+            }
+            
+            displayTasks.forEach(task => {
+                const taskElement = document.createElement('div');
+                taskElement.className = `task-item priority-${task.priority}`;
+                
+                taskElement.innerHTML = `
+                    <span class="task-title">${task.title}
+                        <span class="priority-badge priority-${task.priority}">${task.priority}</span>
+                    </span>
+                    <span class="task-meta">
+                        ${task.board_name} / ${task.list_name} <br>
+                        <i class="far fa-calendar-alt"></i> ${task.deadline}
+                    </span>
+                `;
+                
+                container.appendChild(taskElement);
+            });
+        }
+        
+        // Функция показа всех задач в модальном окне
+        function showAllTasks(category) {
+            const modal = new bootstrap.Modal(document.getElementById('allTasksModal'));
+            const modalTitle = document.getElementById('taskModalTitle');
+            const tasksContainer = document.getElementById('allTasksContainer');
+            
+            let tasks = [];
+            let title = '';
+            
+            // Определяем заголовок и список задач в зависимости от категории
+            if (category === 'overdue') {
+                title = 'Просроченные задачи';
+                tasks = allTasksData.overdue.tasks;
+            } else if (category === 'due_today') {
+                title = 'Задачи на сегодня';
+                tasks = allTasksData.due_today.tasks;
+            } else if (category === 'due_this_week') {
+                title = 'Задачи на этой неделе';
+                tasks = allTasksData.due_this_week.tasks;
+            }
+            
+            modalTitle.textContent = title;
+            tasksContainer.innerHTML = '';
+            
+            if (tasks.length === 0) {
+                tasksContainer.innerHTML = '<div class="text-muted text-center py-3">Нет задач</div>';
+            } else {
+                tasks.forEach(task => {
+                    const taskElement = document.createElement('div');
+                    taskElement.className = `task-item priority-${task.priority} mb-2`;
+                    
+                    taskElement.innerHTML = `
+                        <span class="task-title">${task.title}
+                            <span class="priority-badge priority-${task.priority}">${task.priority}</span>
+                        </span>
+                        <span class="task-meta">
+                            <strong>Доска:</strong> ${task.board_name}<br>
+                            <strong>Список:</strong> ${task.list_name}<br>
+                            <strong>Срок:</strong> ${task.deadline}
+                        </span>
+                    `;
+                    
+                    tasksContainer.appendChild(taskElement);
+                });
+            }
+            
+            modal.show();
+        }
+        
+        // Функция показа/скрытия лоадера
+        function showLoading(show) {
+            document.getElementById('globalLoader').style.display = show ? 'flex' : 'none';
+        }
+        
+        // Функция показа уведомлений
+        function showToast(type, message) {
+            const toastEl = type === 'success' 
+                ? document.getElementById('successToast') 
+                : document.getElementById('errorToast');
+            
+            const toastMessage = type === 'success'
+                ? document.getElementById('successToastMessage')
+                : document.getElementById('errorToastMessage');
+            
+            toastMessage.textContent = message;
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+
+        // Функция для отображения деталей статистики
+        function showStatsDetails(statType) {
+            const modal = new bootstrap.Modal(document.getElementById('statsDetailsModal'));
+            const modalTitle = document.getElementById('statsModalTitle');
+            const content = document.getElementById('statsDetailsContent');
+            
+            // Показываем лоадер
+            content.innerHTML = '<div class="text-center py-4"><div class="loader"></div><p>Загрузка данных...</p></div>';
+            modal.show();
+            
+            // Получаем ID выбранной доски
+            const boardId = document.getElementById('boardSelector').value || null;
+            
+            // Формируем URL для запроса
+            let url = '/dashboard/api/stats/details?type=' + statType;
+            if (boardId) {
+                url += '&board_id=' + boardId;
+            }
+            
+            // Загружаем данные
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    // Обновляем заголовок модального окна
+                    modalTitle.textContent = data.title;
+                    
+                    // Формируем содержимое в зависимости от типа статистики
+                    let html = '';
+                    
+                    if (statType === 'boards') {
+                        // Для досок
+                        html = `
+                            <p>Всего досок: ${data.count}</p>
+                            <div class="table-responsive">
+                                <table class="stats-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Название доски</th>
+                                            <th>ID</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.items.map(board => `
+                                            <tr>
+                                                <td>${board.name}</td>
+                                                <td>${board.id}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } else {
+                        // Для задач (total, completed, pending)
+                        html = `
+                            <p>Всего: ${data.count}</p>
+                            <div class="table-responsive">
+                                <table class="stats-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Название</th>
+                                            <th>Доска</th>
+                                            <th>Список</th>
+                                            <th>Статус</th>
+                                            ${statType === 'completed' ? '<th>Дата завершения</th>' : ''}
+                                            ${statType !== 'completed' ? '<th>Срок</th>' : ''}
+                                            <th>Приоритет</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.items.map(task => `
+                                            <tr>
+                                                <td>${task.title}</td>
+                                                <td>${task.board_name}</td>
+                                                <td>${task.list_name}</td>
+                                                <td>${task.status || (task.completed ? 'Завершено' : 'В процессе')}</td>
+                                                ${statType === 'completed' ? `<td>${task.completed_at || 'Не указано'}</td>` : ''}
+                                                ${statType !== 'completed' ? `<td>${task.deadline || 'Не указан'}</td>` : ''}
+                                                <td>${task.priority}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    }
+                    
+                    content.innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error loading stats details:', error);
+                    content.innerHTML = `
+                        <div class="alert alert-danger">
+                            Произошла ошибка при загрузке данных: ${error.message}
+                        </div>
+                    `;
+                });
+        }
     </script>
 </body>
 </html>

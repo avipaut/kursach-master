@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Отчет о статусе проекта</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
+    
+    <style>
+       :root {
+          /* Цветовые переменные */
+          --primary-color: #C71320;
+          --primary-hover: #4338ca;
+          --danger-color: #ef4444;
+          --danger-hover: #dc2626;
+          --success-color: #10b981;
+          --success-hover: #059669;
+          --bg-color: #f4f6f9;
+          --card-bg: #ffffff;
+          --border-color: #e5e7eb;
+          --text-primary: #111827;
+          --text-secondary: #4b5563;
+          --text-muted: #6b7280;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .report-header {
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 25px;
+        }
+        
+        .report-meta {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .report-meta i {
+            width: 20px;
+            text-align: center;
+            margin-right: 5px;
+        }
+        
+        .stat-card {
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+            margin-top: 8px;
+        }
+        
+        .list-stats {
+            margin-top: 30px;
+        }
+        
+        .list-card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .export-btn {
+            margin-right: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .chart-container {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Подключаем навбар с активной страницей 'reports' -->
+    {% set active_page = 'reports' %}
+    {% include 'navbar/navbar.html' %}
+    
+    <div class="container mt-4">
+        <!-- Заголовок отчета -->
+        <div class="report-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-tasks me-2"></i> {{ report_title }}</h2>
+                <div>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='pdf', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-danger export-btn">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='excel', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-success export-btn">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='json', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-primary export-btn">
+                        <i class="fas fa-file-code"></i> JSON
+                    </a>
+                    <a href="{{ url_for('reports.reports_dashboard') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Назад
+                    </a>
+                </div>
+            </div>
+            <div class="report-meta mt-3">
+                <div class="row">
+                    <div class="col-md-4">
+                        <p><i class="fas fa-project-diagram"></i> <strong>Доска:</strong> {{ board_name }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <p><i class="fas fa-calendar-alt"></i> <strong>Период:</strong> {{ start_date.strftime('%Y-%m-%d') }} по {{ end_date.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <p><i class="fas fa-clock"></i> <strong>Сгенерировано:</strong> {{ generated_at }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Общая статистика -->
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ report_data.total_cards|default(0) }}</div>
+                    <div class="stat-label">Всего карточек</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ report_data.completed_cards|default(0) }}</div>
+                    <div class="stat-label">Завершено</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ "%.1f"|format(report_data.completion_rate|default(0)) }}%</div>
+                    <div class="stat-label">Процент завершения</div>
+                    <div class="progress">
+                        <div class="progress-bar bg-success" role="progressbar" 
+                             style="width: {{ report_data.completion_rate|default(0) }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- График выполнения -->
+        <div class="chart-container">
+            <canvas id="completionChart"></canvas>
+        </div>
+        
+        <!-- Статистика по спискам -->
+        <div class="list-stats">
+            <h4 class="mb-3">Детализация по спискам</h4>
+            
+            <div class="row">
+                {% for list_name, list_data in report_data.cards_by_list.items() %}
+                <div class="col-md-6 mb-4">
+                    <div class="card list-card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">{{ list_name }}</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>Всего карточек:</strong> {{ list_data.total }}</p>
+                                    <p><strong>Завершено:</strong> {{ list_data.completed }}</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>Процент завершения:</strong> {{ "%.1f"|format(list_data.completion_rate) }}%</p>
+                                    <div class="progress">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ list_data.completion_rate }}%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Кнопка возврата -->
+        <div class="text-center mt-4">
+            <a href="{{ url_for('reports.reports_dashboard') }}" class="btn btn-primary">
+                <i class="fas fa-arrow-left me-2"></i> Вернуться к отчетам
+            </a>
+        </div>
+    </div>
+
+    <!-- Скрипты -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Подготовка данных для графика выполнения
+            const ctx = document.getElementById('completionChart').getContext('2d');
+            
+            // Извлекаем названия списков и данные о выполнении
+            const listNames = [];
+            const completedCounts = [];
+            const incompleteCounts = [];
+            
+            {% for list_name, list_data in report_data.cards_by_list.items() %}
+                listNames.push("{{ list_name }}");
+                completedCounts.push({{ list_data.completed }});
+                incompleteCounts.push({{ list_data.total - list_data.completed }});
+            {% endfor %}
+            
+            // Создаем stacked bar chart
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: listNames,
+                    datasets: [
+                        {
+                            label: 'Завершено',
+                            data: completedCounts,
+                            backgroundColor: '#10b981',
+                            borderColor: '#059669',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Не завершено',
+                            data: incompleteCounts,
+                            backgroundColor: '#e5e7eb',
+                            borderColor: '#d1d5db',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Выполнение задач по спискам',
+                            font: {
+                                size: 16
+                            }
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true,
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
