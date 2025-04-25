@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Отчет о нагрузке пользователей</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
+    
+    <style>
+       :root {
+          /* Цветовые переменные */
+          --primary-color: #C71320;
+          --primary-hover: #4338ca;
+          --danger-color: #ef4444;
+          --danger-hover: #dc2626;
+          --success-color: #10b981;
+          --success-hover: #059669;
+          --bg-color: #f4f6f9;
+          --card-bg: #ffffff;
+          --border-color: #e5e7eb;
+          --text-primary: #111827;
+          --text-secondary: #4b5563;
+          --text-muted: #6b7280;
+          
+          /* Цвета приоритетов */
+          --priority-low-bg: #d1fae5;
+          --priority-low-text: #065f46;
+          --priority-medium-bg: #fef3c7;
+          --priority-medium-text: #92400e;
+          --priority-high-bg: #fee2e2;
+          --priority-high-text: #b91c1c;
+          --priority-urgent-bg: #f8d7da;
+          --priority-urgent-text: #842029;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .report-header {
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 25px;
+        }
+        
+        .report-meta {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .report-meta i {
+            width: 20px;
+            text-align: center;
+            margin-right: 5px;
+        }
+        
+        .stat-card {
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+            margin-top: 8px;
+        }
+        
+        .user-card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .export-btn {
+            margin-right: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .chart-container {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .badge {
+            font-size: 0.85rem;
+            padding: 0.35em 0.65em;
+            border-radius: 4px;
+        }
+        
+        .badge-low {
+            background-color: var(--priority-low-bg);
+            color: var(--priority-low-text);
+        }
+        
+        .badge-medium {
+            background-color: var(--priority-medium-bg);
+            color: var(--priority-medium-text);
+        }
+        
+        .badge-high {
+            background-color: var(--priority-high-bg);
+            color: var(--priority-high-text);
+        }
+        
+        .badge-urgent {
+            background-color: var(--priority-urgent-bg);
+            color: var(--priority-urgent-text);
+        }
+        
+        .priority-indicator {
+            width: 100%;
+            height: 8px;
+            margin-top: 5px;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+        }
+        
+        .priority-bar {
+            height: 100%;
+        }
+        
+        .priority-low {
+            background-color: var(--priority-low-bg);
+        }
+        
+        .priority-medium {
+            background-color: var(--priority-medium-bg);
+        }
+        
+        .priority-high {
+            background-color: var(--priority-high-bg);
+        }
+        
+        .priority-urgent {
+            background-color: var(--priority-urgent-bg);
+        }
+    </style>
+</head>
+<body>
+    <!-- Подключаем навбар с активной страницей 'reports' -->
+    {% set active_page = 'reports' %}
+    {% include 'navbar/navbar.html' %}
+    
+    <div class="container mt-4">
+        <!-- Заголовок отчета -->
+        <div class="report-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-users me-2"></i> {{ report_title }}</h2>
+                <div>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='pdf', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-danger export-btn">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='excel', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-success export-btn">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='json', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-primary export-btn">
+                        <i class="fas fa-file-code"></i> JSON
+                    </a>
+                    <a href="{{ url_for('reports.reports_dashboard') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Назад
+                    </a>
+                </div>
+            </div>
+            <div class="report-meta mt-3">
+                <div class="row">
+                    <div class="col-md-4">
+                        <p><i class="fas fa-project-diagram"></i> <strong>Доска:</strong> {{ board_name }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <p><i class="fas fa-calendar-alt"></i> <strong>Период:</strong> {{ start_date.strftime('%Y-%m-%d') }} по {{ end_date.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <p><i class="fas fa-clock"></i> <strong>Сгенерировано:</strong> {{ generated_at }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Общая сводка -->
+        <h4 class="mb-3">Сводка по нагрузке</h4>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="chart-container">
+                    <canvas id="workloadChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Детализация по пользователям -->
+        <div class="user-workload-section mt-4">
+            <h4 class="mb-3">Детализация по пользователям</h4>
+            
+            <div class="row">
+                {% for username, user_data in report_data.user_workload.items() %}
+                <div class="col-md-6 mb-4">
+                    <div class="card user-card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-user me-2"></i> {{ username }}</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="text-center">
+                                        <div class="stat-value">{{ user_data.total }}</div>
+                                        <div class="stat-label">Всего задач</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="text-center">
+                                        <div class="stat-value text-success">{{ user_data.completed }}</div>
+                                        <div class="stat-label">Завершено</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="text-center">
+                                        <div class="stat-value text-danger">{{ user_data.overdue }}</div>
+                                        <div class="stat-label">Просрочено</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Процент выполнения -->
+                            <p><strong>Процент выполнения:</strong> 
+                                {% if user_data.total > 0 %}
+                                    {{ "%.1f"|format(user_data.completed / user_data.total * 100) }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </p>
+                            <div class="progress mb-4">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                    style="width: {% if user_data.total > 0 %}{{ (user_data.completed / user_data.total * 100)|round(1) }}{% else %}0{% endif %}%">
+                                </div>
+                            </div>
+                            
+                            <!-- Распределение по приоритетам -->
+                            <p><strong>Задачи по приоритетам:</strong></p>
+                            <div class="d-flex justify-content-between mb-2">
+                                {% if user_data.priority.low > 0 %}
+                                <span class="badge badge-low">Низкий: {{ user_data.priority.low }}</span>
+                                {% endif %}
+                                {% if user_data.priority.medium > 0 %}
+                                <span class="badge badge-medium">Средний: {{ user_data.priority.medium }}</span>
+                                {% endif %}
+                                {% if user_data.priority.high > 0 %}
+                                <span class="badge badge-high">Высокий: {{ user_data.priority.high }}</span>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Индикатор приоритетов -->
+                            <div class="priority-indicator">
+                                {% if user_data.total > 0 %}
+                                    {% if user_data.priority.low > 0 %}
+                                    <div class="priority-bar priority-low" style="width: {{ (user_data.priority.low / user_data.total * 100)|round(1) }}%"></div>
+                                    {% endif %}
+                                    {% if user_data.priority.medium > 0 %}
+                                    <div class="priority-bar priority-medium" style="width: {{ (user_data.priority.medium / user_data.total * 100)|round(1) }}%"></div>
+                                    {% endif %}
+                                    {% if user_data.priority.high > 0 %}
+                                    <div class="priority-bar priority-high" style="width: {{ (user_data.priority.high / user_data.total * 100)|round(1) }}%"></div>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Кнопка возврата -->
+        <div class="text-center mt-4">
+            <a href="{{ url_for('reports.reports_dashboard') }}" class="btn btn-primary">
+                <i class="fas fa-arrow-left me-2"></i> Вернуться к отчетам
+            </a>
+        </div>
+    </div>
+
+    <!-- Скрипты -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Подготовка данных для графика нагрузки
+            const ctx = document.getElementById('workloadChart').getContext('2d');
+            
+            // Извлекаем данные пользователей
+            const usernames = [];
+            const totalTasks = [];
+            const completedTasks = [];
+            const overdueTasks = [];
+            
+            {% for username, user_data in report_data.user_workload.items() %}
+                usernames.push("{{ username }}");
+                totalTasks.push({{ user_data.total }});
+                completedTasks.push({{ user_data.completed }});
+                overdueTasks.push({{ user_data.overdue }});
+            {% endfor %}
+            
+            // Создаем grouped bar chart
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: usernames,
+                    datasets: [
+                        {
+                            label: 'Всего задач',
+                            data: totalTasks,
+                            backgroundColor: '#94a3b8',
+                            borderColor: '#64748b',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Завершено',
+                            data: completedTasks,
+                            backgroundColor: '#10b981',
+                            borderColor: '#059669',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Просрочено',
+                            data: overdueTasks,
+                            backgroundColor: '#ef4444',
+                            borderColor: '#dc2626',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Распределение нагрузки пользователей',
+                            font: {
+                                size: 16
+                            }
+                        },
+                        legend: {
+                            position: 'top'
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
