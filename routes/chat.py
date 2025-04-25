@@ -627,6 +627,7 @@ def handle_leave_lobby(data):
     if lobby_id:
         leave_room(f'lobby_{lobby_id}')
 
+
 @socketio.on('send_message')
 def handle_send_message(data):
     """Handle sending a text message"""
@@ -656,7 +657,7 @@ def handle_send_message(data):
         db.session.add(new_message)
         db.session.commit()
         
-        # Автоматически отмечаем сообщение как прочитанное отправителем
+        # Automatically mark message as read by sender
         receipt = ReadReceipt(message_id=new_message.id, user_id=current_user.id)
         db.session.add(receipt)
         db.session.commit()
@@ -665,10 +666,23 @@ def handle_send_message(data):
         message_data = new_message.to_dict()
         print(f"Created message: {message_data}")
         
-        # Emit message to all users in the lobby
+        # Import notification module
+        from routes.notifications import create_message_notification
+        
+        # Emit message to all users in the lobby and create notifications
         for user in lobby.users:
             print(f"Emitting message to user {user.id}")
             emit('new_message', message_data, room=f'user_{user.id}')
+            
+            # Create notification for other users
+            if user.id != current_user.id:
+                # Create notification - do this after message emission
+                try:
+                    # Use a separate database session to avoid conflicts
+                    create_message_notification(user.id, current_user.id, lobby_id, message_text)
+                except Exception as notification_error:
+                    print(f"Error creating notification: {str(notification_error)}")
+                    # Don't roll back the main transaction if notification fails
 
         print("Message sent successfully")
     except Exception as e:
