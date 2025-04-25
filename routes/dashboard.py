@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, send_file, flash, jsonify, url_for
+from flask import Blueprint, redirect, render_template, request, send_file, flash, jsonify, url_for
 from flask_login import login_required, current_user
 from fpdf import FPDF
 import os
@@ -17,7 +17,7 @@ os.makedirs(EXPORT_FOLDER, exist_ok=True)
 
 # === DASHBOARD И АНАЛИТИКА KANBAN ===
 
-@dashboard_bp.route('/')
+@dashboard_bp.route('/dashboard')
 @login_required
 def dashboard():
     # Проверяем права доступа
@@ -172,7 +172,7 @@ def board_statistics(board_id):
             flash('У вас нет доступа к этой доске', 'danger')
             return redirect(url_for('dashboard.dashboard'))
     
-    return render_template('reports/board_statistics.html', stats=stats, board=board, is_admin=is_admin)
+    return render_template('dashboard/board_statistics.html', stats=stats, board=board, is_admin=is_admin)
 
 @dashboard_bp.route('/api/stats')
 @login_required

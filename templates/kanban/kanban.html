@@ -13,6 +13,8 @@
   <!-- Custom CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/board-sharing-styles.css') }}">
+
 </head>
 
 <body>
@@ -48,6 +50,10 @@
       <div id="boardActions" class="board-actions" style="display: none;">
         <h1 id="activeBoardTitle">Kanban Board</h1>
         <div class="board-controls">
+          <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-info">
+            <i class="fas fa-tachometer-alt"></i>
+            <span>Дашборд</span>
+          </a>
           <button id="editBoardBtn" class="btn btn-edit">
             <i class="fas fa-edit"></i>
             <span>Edit Board</span>
@@ -61,6 +67,10 @@
       
       <div id="selectBoardMessage" class="select-board-message">
         <p>Select a board or create a new one</p>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-info mt-3">
+          <i class="fas fa-tachometer-alt"></i>
+          <span>Перейти на дашборд</span>
+        </a>
       </div>
       
       <div id="listsContainer" class="lists-container" style="display: none;">
@@ -282,6 +292,8 @@
   <!-- Bootstrap Bundle with Popper -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="{{ url_for('static', filename='js/kanban.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/board-sharing.js') }}"></script>
+
 </body>
 
 </html>

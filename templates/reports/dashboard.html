@@ -147,6 +147,21 @@
             z-index: 1050;
         }
         
+        .custom-toast {
+            min-width: 250px;
+        }
+        .btn-kanban {
+            background-color: #C71320;
+            border-color: #C71320;
+            color: white;
+            }
+
+        .btn-kanban:hover {
+            background-color: #a81019;
+            border-color: #a81019;
+            color: white;
+            }
+        
         .loader {
             border: 4px solid #f3f3f3;
             border-top: 4px solid var(--primary-color);
@@ -319,7 +334,7 @@
     </style>
 </head>
 <body>
-    {% set active_page = 'dashboard' %}
+    {% set active_page = 'kanban' %}
     {% include 'navbar/navbar.html' %}
     
     <!-- Глобальный лоадер -->

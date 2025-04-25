@@ -14,11 +14,18 @@ from wtforms.validators import DataRequired, Email, Length, Optional
 db =  SQLAlchemy()
 # В models.py добавьте в начало файла:
 from flask_login import UserMixin
+
+
 # Таблица связи пользователей и ролей
 roles_users = db.Table('roles_users',
     db.Column('user_id', db.Integer(), db.ForeignKey('users.id')),  # Изменено с 'user.id' на 'users.id'
     db.Column('role_id', db.Integer(), db.ForeignKey('role.id'))
 )
+board_users = db.Table('board_users',
+    db.Column('board_id', db.Integer(), db.ForeignKey('board.id', ondelete="CASCADE"), primary_key=True),
+    db.Column('user_id', db.Integer(), db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
+)
+
 class Role(db.Model, RoleMixin):
     id = db.Column(db.Integer(), primary_key=True)
     name = db.Column(db.String(80), unique=True)
@@ -70,7 +77,8 @@ class User(UserMixin, db.Model):
     def has_role(self, role_name):
         """Проверяет, имеет ли пользователь указанную роль"""
         return any(role.name == role_name for role in self.roles)
-    
+
+
 class MessageType(PyEnum):
     TEXT = "text"
     IMAGE = "image"
@@ -219,6 +227,7 @@ class KPITemplate(db.Model):
     def repr(self):
         return f"<KPITemplate: {self.column_name} [{self.row_index}] = {self.value}>"
 
+# Then modify the Board class to add the relationship with users
 class Board(db.Model):
     __tablename__ = 'board'
     id = Column(Integer, primary_key=True)
@@ -228,6 +237,9 @@ class Board(db.Model):
     admin_only = db.Column(db.Boolean, default=False)
     
     lists = db.relationship('List', backref='board', cascade="all, delete-orphan", lazy=True)
+    # Add the new relationship
+    users = db.relationship('User', secondary=board_users, 
+                           backref=db.backref('accessible_boards', lazy='dynamic'))
 
     def to_dict(self):
         return {
@@ -235,7 +247,8 @@ class Board(db.Model):
             'name': self.name,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'user_id': self.user_id,
-            'admin_only': self.admin_only  # Include admin_only status in API responses
+            'admin_only': self.admin_only,
+            'users': [{'id': user.id, 'username': user.username} for user in self.users]
         }
 
     def __repr__(self):
@@ -265,6 +278,7 @@ class List(db.Model):
     def __repr__(self):
         return f"<List {self.name}>"
 
+
 class Card(db.Model):
     __tablename__ = 'card'
     id = Column(Integer, primary_key=True)
@@ -277,15 +291,11 @@ class Card(db.Model):
     completed = Column(db.Boolean, default=False)  # Field for completion status
     assigned_to = Column(Integer, ForeignKey('users.id'), nullable=True)  # Field for assignment
     deadline = Column(DateTime, nullable=True)  # Field for deadline
-    custom_color = Column(String(50), nullable=True)  # Новое поле для хранения пользовательского цвета
+    custom_color = Column(String(50), nullable=True)  # Поле для хранения пользовательского цвета
+    position = Column(Integer, default=0)  # Новое поле для сортировки карточек
     
     # Relationships
     todos = db.relationship('Todo', backref='card', cascade="all, delete-orphan", lazy=True)
-    
-    # REMOVED the duplicate relationship that was causing the error
-    # This line was causing the conflict:
-    # assigned_user = db.relationship('User', foreign_keys=[assigned_to], backref='assigned_cards', lazy=True)
-    # It's already defined in the User model with assigned_cards relationship
 
     def to_dict(self):
         return {
@@ -300,9 +310,9 @@ class Card(db.Model):
             'assigned_to': self.assigned_to,
             'deadline': self.deadline.isoformat() if self.deadline else None,
             'custom_color': self.custom_color,
+            'position': self.position,  # Добавляем позицию в вывод
             'todos': [todo.to_dict() for todo in self.todos]  # Include todos in the card data
         }
-
     def __repr__(self):
         return f"<Card {self.title} (Priority: {self.priority.name if self.priority else 'None'})>"
 
