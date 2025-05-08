@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         markAllReadBtn.addEventListener('click', function() {
-            fetch('{{ url_for("notifications.mark_all_as_read") }}', {
+            fetch('/notifications/mark_all_as_read', {
                 method: 'POST'
             }).then(() => loadNotifications());
         });

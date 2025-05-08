@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статистика по срокам</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
+    
+    <style>
+       :root {
+          /* Color variables */
+          --primary-color: #C71320;
+          --primary-hover: #4338ca;
+          --danger-color: #ef4444;
+          --danger-hover: #dc2626;
+          --success-color: #10b981;
+          --success-hover: #059669;
+          --bg-color: #f4f6f9;
+          --card-bg: #ffffff;
+          --border-color: #e5e7eb;
+          --text-primary: #111827;
+          --text-secondary: #4b5563;
+          --text-muted: #6b7280;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .report-header {
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 25px;
+        }
+        
+        .report-meta {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .report-meta i {
+            width: 20px;
+            text-align: center;
+            margin-right: 5px;
+        }
+        
+        .stat-card {
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+            margin-top: 8px;
+        }
+        
+        .list-stats {
+            margin-top: 30px;
+        }
+        
+        .list-card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .export-btn {
+            margin-right: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .chart-container {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .deadline-card {
+            border-left: 4px solid;
+            margin-bottom: 10px;
+        }
+        
+        .deadline-today {
+            border-left-color: var(--danger-color);
+        }
+        
+        .deadline-week {
+            border-left-color: #f59e0b;
+        }
+        
+        .deadline-month {
+            border-left-color: #3b82f6;
+        }
+        
+        .deadline-future {
+            border-left-color: var(--success-color);
+        }
+    </style>
+</head>
+<body>
+    <!-- Include navbar with active page set to 'reports' -->
+    {% set active_page = 'reports' %}
+    {% include 'navbar/navbar.html' %}
+    
+    <div class="container mt-4">
+        <!-- Report Header -->
+        <div class="report-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-calendar-check me-2"></i> {{ report_title }}</h2>
+                <div>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='pdf', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-danger export-btn">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='excel', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-success export-btn">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='json', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-primary export-btn">
+                        <i class="fas fa-file-code"></i> JSON
+                    </a>
+                    <a href="{{ url_for('reports.reports_dashboard') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Назад
+                    </a>
+                </div>
+            </div>
+            <div class="report-meta mt-3">
+                <div class="row">
+                    <div class="col-md-4">
+                        <p><i class="fas fa-project-diagram"></i> <strong>Доска:</strong> {{ board_name }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <p><i class="fas fa-calendar-alt"></i> <strong>Период:</strong> {{ start_date.strftime('%Y-%m-%d') }} по {{ end_date.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <p><i class="fas fa-clock"></i> <strong>Сгенерировано:</strong> {{ generated_at }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Overall Stats -->
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ report_data.total_cards|default(0) }}</div>
+                    <div class="stat-label">Всего карточек</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ report_data.total_with_deadline|default(0) }}</div>
+                    <div class="stat-label">Карточки со сроками</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ report_data.overdue|default(0) }}</div>
+                    <div class="stat-label">Просроченные</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Completion Stats -->
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ report_data.completed_on_time }}</div>
+                    <div class="stat-label">Выполнено вовремя</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="stat-card bg-light">
+                    <div class="stat-value">{{ report_data.completed_late }}</div>
+                    <div class="stat-label">Выполнено с опозданием</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Deadline Chart -->
+        <div class="chart-container">
+            <canvas id="deadlineChart"></canvas>
+        </div>
+        
+        <!-- Upcoming Deadlines -->
+        <div class="list-stats">
+            <h4 class="mb-3">Приближающиеся сроки</h4>
+            
+            <!-- Today/Tomorrow -->
+            {% if report_data.upcoming_deadlines %}
+    {% for period, cards in report_data.upcoming_deadlines.items() %}
+        {% if cards %}
+        <h5 class="mt-4">
+            {% if period == 'today_tomorrow' %}
+            <i class="fas fa-exclamation-circle text-danger me-2"></i>Сегодня/Завтра
+            {% elif period == 'this_week' %}
+            <i class="fas fa-calendar-week text-warning me-2"></i>Эта неделя
+            {% elif period == 'this_month' %}
+            <i class="fas fa-calendar-alt text-primary me-2"></i>Этот месяц
+            {% else %}
+            <i class="fas fa-calendar text-success me-2"></i>Будущие
+            {% endif %}
+        </h5>
+        <div class="row">
+            {% for card in cards %}
+            <div class="col-md-6 mb-3">
+                <div class="card deadline-card deadline-{{ period }}">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ card.title }}</h5>
+                        <p class="card-text">
+                            <strong>Срок:</strong> {{ card.deadline }}<br>
+                            <strong>Осталось дней:</strong> {{ card.days_left }}<br>
+                            <strong>Исполнитель:</strong> {{ card.assigned_to or 'Не назначен' }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endfor %}
+{% else %}
+    <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Нет задач с приближающимися сроками
+    </div>
+{% endif %}
+        
+        <!-- Back to Dashboard -->
+        <div class="text-center mt-4">
+            <a href="{{ url_for('reports.reports_dashboard') }}" class="btn btn-primary">
+                <i class="fas fa-arrow-left me-2"></i> Вернуться к панели отчетов
+            </a>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Prepare data for the deadline chart
+            const ctx = document.getElementById('deadlineChart').getContext('2d');
+            
+            // Chart data
+            const deadlineData = {
+                labels: ['Завершено вовремя', 'Завершено с опозданием', 'Просрочено', 'В работе со сроком'],
+                datasets: [{
+                    data: [
+                        {{ report_data.completed_on_time }},
+                        {{ report_data.completed_late }},
+                        {{ report_data.overdue }},
+                        {{ report_data.total_with_deadline - report_data.completed_on_time - report_data.completed_late - report_data.overdue }}
+                    ],
+                    backgroundColor: [
+                        '#10b981', // Зеленый - вовремя
+                        '#f59e0b', // Оранжевый - с опозданием
+                        '#ef4444', // Красный - просрочено
+                        '#3b82f6'  // Синий - в работе
+                    ],
+                    borderColor: [
+                        '#059669',
+                        '#d97706',
+                        '#dc2626',
+                        '#2563eb'
+                    ],
+                    borderWidth: 1
+                }]
+            };
+            
+            // Create pie chart
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: deadlineData,
+                options: {
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Распределение по срокам выполнения',
+                            font: {
+                                size: 16
+                            }
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 const KPIApp = {
-    isAdmin: false, // Will be set dynamically
-    selectedUserId: null, // Will be set dynamically
+    isAdmin: false,
+    selectedUserId: null,
+    currentUserId: null,
     currentCharts: { bar: null, pie: null },
     debounceTimers: {},
     autoSaveTimeout: null,
@@ -8,66 +9,486 @@ const KPIApp = {
     notificationTimeout: null,
     isSaving: false,
     userTriggeredSave: false,
+    formulaDependencies: {},
+    formulaCache: {},
+    lastSaveTime: null,
 
     init: function() {
-        
         console.log('Initializing KPIApp with:', {
             isAdmin: this.isAdmin,
             selectedUserId: this.selectedUserId,
             currentUserId: this.currentUserId
         });
-    
+        console.log('Initializing KPIApp...');
         this.cacheElements();
         this.setupEventListeners();
         
-        // Инициализация только если есть таблица KPI
         if (this.elements.kpiTable) {
             this.setupAutoSave();
             this.setupTableSearch();
             this.setupDynamicRowAddition();
             this.setupFormulaAutocomplete();
             this.setupRealTimeValidation();
+            this.buildDependencyGraph();
             this.processTableFormulas();
+            this.setupFormulaModalButtons();
+            this.setupRealTimeFormulaEngine();
+            this.setupMutationObserver();
         }
+        setTimeout(() => {
+            this.buildDependencyGraph();
+            this.processAllFormulas();
+            this.setupRealTimeFormulaEngine();
+        }, 500);
+        
+        console.log('Initialization complete');
+        
         if (!this.isAdmin) {
             document.getElementById('submit-for-review')?.addEventListener('click', () => this.submitForReview());
         }
-    
-        // Инициализация графиков
+
         const activeTab = document.querySelector('.tab-button.active')?.dataset.tab;
         if (activeTab === 'chart-tab' && this.elements.chartColumnSelect?.options.length > 0) {
             this.generateCharts(this.elements.chartColumnSelect.value);
         }
         
         console.log('KPIApp initialized successfully');
-        
+        this.setupInstantFormulaUpdates();
     },
-    submitForReview: async function() {
-        if (!confirm('Отправить ваш KPI на проверку администратору?')) return;
-        
-        try {
-            const response = await fetch('/kpi/submit_for_review', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': this.getCsrfToken()
-                },
-                body: JSON.stringify({
-                    user_id: this.currentUserId
-                })
-            });
+    processAllFormulas: function() {
+    console.log('Processing all formulas...');
     
-            const data = await response.json();
-            if (data.status === 'success') {
-                this.showNotification('KPI отправлен на проверку администратору', 'success');
-            } else {
-                throw new Error(data.message || 'Ошибка отправки');
+    const tables = [
+        { table: this.elements.kpiTable, type: 'kpi' },
+        { table: this.elements.templateTable, type: 'template' }
+    ];
+
+    tables.forEach(({ table, type }) => {
+        if (!table) return;
+        
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach((row, rowIndex) => {
+            const formulaInputs = row.querySelectorAll('.cell-formula');
+            formulaInputs.forEach((input, colIndex) => {
+                if (input.value) {
+                    this.applyFormula(rowIndex, colIndex, input.value, type);
+                }
+            });
+        });
+    });
+},
+    setupRealTimeFormulaEngine: function() {
+        // Обработчик для всех изменений в таблице
+        document.addEventListener('input', (e) => {
+            if (e.target.classList.contains('kpi-input')) {
+                console.log('Input changed:', e.target.name);
+                const input = e.target;
+                const [tableType, _, row, __, col] = input.name.split('_');
+                console.log(`Table: ${tableType}, Row: ${row}, Col: ${col}`);
+                this.updateAllFormulasThatDependOn(tableType, row, col);
             }
-        } catch (error) {
-            console.error('Ошибка:', error);
-            this.showNotification('Ошибка при отправке на проверку: ' + error.message, 'error');
+        });
+        
+        // Принудительный пересчёт при загрузке
+        setTimeout(() => this.processAllFormulas(), 1000);
+    },
+    updateAllFormulasThatDependOn: function(tableType, row, col) {
+        const cellKey = `${tableType}_${row}_${col}`;
+        const dependents = this.findAllDependentCells(cellKey);
+        
+        dependents.forEach(cell => {
+            const [tType, r, c] = cell.split('_');
+            const formulaInput = document.querySelector(
+                `input[name="${tType}_formula_${r}_col_${c}"]`
+            );
+            
+            if (formulaInput?.value) {
+                this.applyFormula(r, c, formulaInput.value, tType);
+            }
+        });
+    },
+    findAllDependentCells: function(cellKey, visited = new Set()) {
+        if (visited.has(cellKey)) return [];
+        visited.add(cellKey);
+    
+        const directDependents = this.formulaDependencies[cellKey] || [];
+        let allDependents = [...directDependents];
+    
+        directDependents.forEach(dep => {
+            allDependents = [...allDependents, ...this.findAllDependentCells(dep, visited)];
+        });
+    
+        return [...new Set(allDependents)];
+    },
+    setupMutationObserver: function() {
+        // Отслеживаем изменения в DOM (на случай динамической загрузки таблиц)
+        const observer = new MutationObserver((mutations) => {
+            if (document.querySelector('.kpi-input')) {
+                this.setupRealTimeFormulaEngine();
+                this.buildDependencyGraph();
+            }
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    },
+    // ====================== Formula Handling ======================
+    buildDependencyGraph: function() {
+        console.log('Building dependency graph...');
+        this.formulaDependencies = {};
+        
+        const tables = [
+            { table: this.elements.kpiTable, type: 'kpi' },
+            { table: this.elements.templateTable, type: 'template' }
+        ];
+    
+        tables.forEach(({ table, type }) => {
+            if (!table) {
+                console.log(`${type} table not found`);
+                return;
+            }
+            
+            const tbody = table.querySelector('tbody');
+            if (!tbody) {
+                console.log('tbody not found');
+                return;
+            }
+            
+            const rows = tbody.querySelectorAll('tr');
+            console.log(`Found ${rows.length} rows in ${type} table`);
+            
+            rows.forEach((row, rowIndex) => {
+                const formulaInputs = row.querySelectorAll('.cell-formula');
+                console.log(`Row ${rowIndex} has ${formulaInputs.length} formulas`);
+                
+                formulaInputs.forEach((input, colIndex) => {
+                    if (input.value) {
+                        console.log(`Parsing formula at ${type}_${rowIndex}_${colIndex}: ${input.value}`);
+                        this.parseFormulaDependencies(input.value, rowIndex, colIndex, type);
+                    }
+                });
+            });
+        });
+        
+        console.log('Dependency graph:', this.formulaDependencies);
+    },
+    setupFormulaModalButtons: function() {
+        // Обработчики для кнопок операторов
+        document.querySelectorAll('.operator-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const operator = btn.textContent.trim();
+                this.insertIntoFormula(operator);
+            });
+        });
+        
+        // Обработчики для кнопок функций
+        document.querySelectorAll('.function-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const func = btn.textContent.trim() + '(';
+                this.insertIntoFormula(func);
+            });
+        });
+        
+        // Обработчики для тегов столбцов
+        document.querySelectorAll('.column-tag').forEach(tag => {
+            tag.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.insertColumnIntoFormula(tag.textContent);
+            });
+        });
+    },
+    insertIntoFormula: function(text) {
+        const input = this.elements.formulaInput;
+        if (!input) return;
+        
+        const startPos = input.selectionStart;
+        const endPos = input.selectionEnd;
+        const currentValue = input.value;
+        
+        // Проверяем, не вставляем ли мы дубликат оператора
+        const prevChar = currentValue.substring(startPos - 1, startPos);
+        const nextChar = currentValue.substring(endPos, endPos + 1);
+        
+        // Если вставляем оператор и перед/после уже есть такой же оператор - не вставляем
+        if (/[\+\-\*\/\^%=]/.test(text) && (prevChar === text || nextChar === text)) {
+            return;
+        }
+        
+        // Вставляем текст на место курсора или заменяем выделение
+        input.value = currentValue.substring(0, startPos) + text + currentValue.substring(endPos);
+        
+        // Устанавливаем курсор после вставленного текста
+        input.focus();
+        input.selectionStart = startPos + text.length;
+        input.selectionEnd = startPos + text.length;
+        
+        // Триггерим событие input для валидации
+        input.dispatchEvent(new Event('input'));
+    },
+    parseFormulaDependencies: function(formula, row, col, tableType) {
+        const cellKey = `${tableType}_${row}_${col}`;
+        this.formulaDependencies[cellKey] = [];
+        
+        console.log(`Parsing dependencies for ${cellKey}: ${formula}`);
+        
+        const columnRefs = formula.match(/\[([^\]]+)\]/g) || [];
+        console.log('Found references:', columnRefs);
+        
+        columnRefs.forEach(ref => {
+            const columnName = ref.slice(1, -1);
+            console.log(`Processing reference to column: ${columnName}`);
+            
+            const headerRowId = tableType === 'template' ? 'template-column-names-row' : 'column-names-row';
+            const headerRow = document.getElementById(headerRowId);
+            
+            if (headerRow) {
+                const columns = Array.from(headerRow.querySelectorAll('th span'));
+                const columnIndex = columns.findIndex(span => {
+                    const text = span.textContent.trim();
+                    console.log(`Checking column "${text}" against "${columnName}"`);
+                    return text === columnName;
+                });
+                
+                console.log(`Column "${columnName}" found at index: ${columnIndex}`);
+                
+                if (columnIndex !== -1) {
+                    const dependentCellKey = `${tableType}_${row}_${columnIndex}`;
+                    console.log(`Adding dependency: ${dependentCellKey} -> ${cellKey}`);
+                    
+                    if (!this.formulaDependencies[dependentCellKey]) {
+                        this.formulaDependencies[dependentCellKey] = [];
+                    }
+                    
+                    if (!this.formulaDependencies[dependentCellKey].includes(cellKey)) {
+                        this.formulaDependencies[dependentCellKey].push(cellKey);
+                    }
+                }
+            }
+        });
+    },
+    clearOldDependencies: function(oldFormula, row, col, tableType) {
+        const cellKey = `${tableType}_${row}_${col}`;
+        const oldDependencies = oldFormula.match(/\[([^\]]+)\]/g) || [];
+        
+        oldDependencies.forEach(ref => {
+            const columnName = ref.slice(1, -1);
+            const headerRowId = tableType === 'template' ? 'template-column-names-row' : 'column-names-row';
+            const headerRow = document.getElementById(headerRowId);
+            
+            if (headerRow) {
+                const columnIndex = Array.from(headerRow.querySelectorAll('th span'))
+                    .findIndex(span => span.textContent === columnName);
+                
+                if (columnIndex !== -1) {
+                    const dependentCellKey = `${tableType}_${row}_${columnIndex}`;
+                    if (this.formulaDependencies[dependentCellKey]) {
+                        this.formulaDependencies[dependentCellKey] = 
+                            this.formulaDependencies[dependentCellKey].filter(key => key !== cellKey);
+                    }
+                }
+            }
+        });
+    },
+
+    updateDependentCells: function(row, col, tableType) {
+        const cellKey = `${tableType}_${row}_${col}`;
+        const dependentCells = this.formulaDependencies[cellKey] || [];
+        
+        dependentCells.forEach(depCellKey => {
+            const [depTableType, depRow, depCol] = depCellKey.split('_');
+            const formulaInput = document.querySelector(
+                `input[name="${depTableType}_formula_${depRow}_col_${depCol}"]`
+            );
+            
+            if (formulaInput && formulaInput.value) {
+                this.applyFormula(depRow, depCol, formulaInput.value, depTableType);
+                // Рекурсивно обновляем зависимости зависимостей
+                this.updateDependentCells(depRow, depCol, depTableType);
+            }
+        });
+    },
+
+    checkCircularDependency: function(formula, currentCellKey, visited = new Set()) {
+        if (visited.has(currentCellKey)) {
+            return true;
+        }
+
+        visited.add(currentCellKey);
+        const columnRefs = formula.match(/\[([^\]]+)\]/g) || [];
+        const tableType = currentCellKey.split('_')[0];
+
+        for (const ref of columnRefs) {
+            const columnName = ref.slice(1, -1);
+            const headerRowId = tableType === 'template' ? 'template-column-names-row' : 'column-names-row';
+            const headerRow = document.getElementById(headerRowId);
+            
+            if (headerRow) {
+                const columnIndex = Array.from(headerRow.querySelectorAll('th span'))
+                    .findIndex(span => span.textContent === columnName);
+                
+                if (columnIndex !== -1) {
+                    const [_, row, __] = currentCellKey.split('_');
+                    const refCellKey = `${tableType}_${row}_${columnIndex}`;
+                    const formulaInput = document.querySelector(
+                        `input[name="${tableType}_formula_${row}_col_${columnIndex}"]`
+                    );
+                    
+                    if (formulaInput && formulaInput.value) {
+                        if (this.checkCircularDependency(formulaInput.value, refCellKey, new Set(visited))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    },
+
+    applyFormula: function(row, col, formula, tableType) {
+            console.log(`Applying formula to ${tableType}_${row}_${col}: ${formula}`);
+        const cellInput = document.querySelector(`input[name="${tableType}_cell_${row}_col_${col}"]`);
+        if (!cellInput) return;
+    
+        const cellElement = cellInput.parentElement;
+        cellElement.classList.remove('formula-cell', 'formula-error');
+    
+        if (!formula.trim()) {
+            cellInput.value = '';
+            return;
+        }
+    
+        try {
+            const table = tableType === 'template' ? this.elements.templateTable : this.elements.kpiTable;
+            const headerRow = table.querySelector('thead tr');
+            if (!headerRow) throw new Error('Header row not found');
+            
+            const columnNames = Array.from(headerRow.querySelectorAll('th span')).map(span => span.textContent.trim());
+            const rowElement = cellInput.closest('tr');
+            const rowInputs = rowElement.querySelectorAll('.kpi-input');
+            const rowData = Array.from(rowInputs).map(input => input.value);
+    
+            const result = this.evaluateFormula(formula, rowData, columnNames);
+            
+            if (result === 'Error') {
+                throw new Error('Formula evaluation error');
+            }
+            
+            cellInput.value = result;
+            cellElement.classList.add('formula-cell');
+            
+            // Немедленное обновление зависимых ячеек
+            this.updateAllFormulasThatDependOn(tableType, row, col);
+        } catch (e) {
+            cellElement.classList.add('formula-error');
+            cellInput.value = 'Error: ' + (e.message || 'Invalid formula');
         }
     },
+    setupAutoSaveHandler: function(input) {
+        if (!input.id) {
+            input.id = 'kpi-input-' + Math.random().toString(36).substr(2, 9);
+        }
+    
+        if (!this.debounceTimers[input.id]) {
+            const handler = (e) => {
+                const tableType = this.isAdmin && e.target.name.startsWith('template_') ? 'template' : 'kpi';
+                const parts = e.target.name.split('_');
+                const rowIndex = parseInt(parts[1]);
+                const colIndex = parseInt(parts[3]);
+                
+                // Немедленное обновление зависимых формул
+                this.updateDependentCells(rowIndex, colIndex, tableType);
+                
+                this.debouncedAutoSave(e);
+            };
+            
+            input.addEventListener('input', handler);
+            this.debounceTimers[input.id] = handler;
+        }
+    },
+    evaluateFormula: function(formula, rowData, columnNames) {
+        if (!formula || !formula.trim()) return '';
+        
+        const cacheKey = `${formula}_${rowData.join('_')}`;
+        if (this.formulaCache[cacheKey]) {
+            return this.formulaCache[cacheKey];
+        }
+        
+        try {
+            formula = formula.trim();
+            
+            // Простая ссылка на столбец
+            if (/^\[[^\]]+\]$/.test(formula)) {
+                const columnName = formula.slice(1, -1);
+                const columnIndex = columnNames.indexOf(columnName);
+                if (columnIndex !== -1 && columnIndex < rowData.length) {
+                    return rowData[columnIndex] || '';
+                }
+                return '';
+            }
+    
+            // Заменяем ссылки на столбцы их значениями
+            const evaluatedFormula = formula.replace(/\[([^\]]+)\]/g, (match, columnName) => {
+                const columnIndex = columnNames.indexOf(columnName);
+                if (columnIndex !== -1 && columnIndex < rowData.length) {
+                    const value = rowData[columnIndex];
+                    if (value === '' || value === undefined) return '0';
+                    const numValue = parseFloat(value);
+                    return isNaN(numValue) ? '0' : numValue.toString();
+                }
+                return '0';
+            });
+    
+            if (!evaluatedFormula.trim()) return '';
+    
+            // Безопасное вычисление формулы
+            const result = new Function('return ' + evaluatedFormula)();
+            
+            if (typeof result === 'number' && !isNaN(result)) {
+                const roundedResult = Math.round(result * 100) / 100;
+                this.formulaCache[cacheKey] = roundedResult.toString();
+                return roundedResult.toString();
+            }
+            
+            return 'Error';
+        } catch (error) {
+            console.error('Ошибка вычисления формулы:', error);
+            return 'Error';
+        }
+    },
+
+    clearFormulaCache: function() {
+        this.formulaCache = {};
+    },
+
+    updateDependenciesOnStructureChange: function() {
+        this.buildDependencyGraph();
+        this.clearFormulaCache();
+        
+        const tables = [
+            { table: this.elements.kpiTable, type: 'kpi' },
+            { table: this.elements.templateTable, type: 'template' }
+        ];
+        
+        tables.forEach(({ table, type }) => {
+            if (!table) return;
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach((row, rowIndex) => {
+                const formulaInputs = row.querySelectorAll('.cell-formula');
+                formulaInputs.forEach((input, colIndex) => {
+                    if (input.value) {
+                        this.applyFormula(rowIndex, colIndex, input.value, type);
+                    }
+                });
+            });
+        });
+    },
+
+    // ====================== Core Functions ======================
     cacheElements: function() {
         this.elements = {
             kpiTable: document.getElementById('kpi-table'),
@@ -96,26 +517,7 @@ const KPIApp = {
             availableColumns: document.getElementById('available-columns')
         };
     },
-    loadKpiData: async function() {
-        if (!this.selectedUserId) {
-            this.showNotification('Пользователь не выбран', 'error');
-            return;
-        }
-    
-        try {
-            const response = await fetch(`/kpi?user_id=${this.selectedUserId}`);
-            const html = await response.text();
-            // Обновляем содержимое страницы (предполагается, что сервер возвращает HTML)
-            document.querySelector('.tab-content.active').innerHTML = html;
-            // Переинициализируем элементы и слушатели
-            this.cacheElements();
-            this.setupEventListeners();
-            this.setupAutoSave();
-        } catch (error) {
-            console.error('Ошибка загрузки KPI:', error);
-            this.showNotification('Ошибка загрузки данных', 'error');
-        }
-    },
+
     setupEventListeners: function() {
         // Tab switching
         this.elements.tabButtons.forEach(button => {
@@ -131,15 +533,15 @@ const KPIApp = {
                 }
             });
         });
+
         const userSelect = document.getElementById('user-select');
         if (userSelect) {
             userSelect.addEventListener('change', (e) => {
                 this.selectedUserId = parseInt(e.target.value) || null;
-                console.log('Обновлён selectedUserId:', this.selectedUserId);
-                // Перезагружаем данные KPI для выбранного пользователя
                 this.loadKpiData();
             });
         }
+
         // Button event listeners
         if (this.elements.addColumnBtn) {
             this.elements.addColumnBtn.addEventListener('click', () => this.addColumn('kpi'));
@@ -175,7 +577,7 @@ const KPIApp = {
             });
         }
 
-        // Click events for dynamic elements
+        // Dynamic elements
         document.addEventListener('click', (e) => {
             if (e.target.closest('.delete-row')) {
                 this.deleteRow(e.target.closest('.delete-row'), 'kpi');
@@ -200,15 +602,49 @@ const KPIApp = {
         });
 
         // Column tag insertion
-        this.elements.availableColumns.addEventListener('click', (e) => {
-            if (e.target.classList.contains('column-tag')) {
-                this.insertColumnIntoFormula(e.target.textContent);
+        
+    },
+    setupInstantFormulaUpdates: function() {
+        console.log('Setting up instant formula updates...');
+        
+        document.addEventListener('input', (e) => {
+            if (e.target.classList.contains('kpi-input')) {
+                console.log('Input detected:', e.target.name);
+                
+                const input = e.target;
+                const nameParts = input.name.split('_');
+                
+                // Determine table type (template or kpi)
+                const tableType = nameParts[0] === 'template' ? 'template' : 'kpi';
+                const rowIndex = parseInt(nameParts[1]);
+                const colIndex = parseInt(nameParts[3]);
+                
+                console.log(`Cell changed: ${tableType}_${rowIndex}_${colIndex}`);
+                
+                // Find all formulas that depend on this cell
+                const cellKey = `${tableType}_${rowIndex}_${colIndex}`;
+                console.log('Dependencies:', this.formulaDependencies[cellKey]);
+                
+                if (this.formulaDependencies[cellKey]) {
+                    this.formulaDependencies[cellKey].forEach(depCellKey => {
+                        console.log('Updating dependent cell:', depCellKey);
+                        const [depTableType, depRow, depCol] = depCellKey.split('_');
+                        const formulaInput = document.querySelector(
+                            `input[name="${depTableType}_formula_${depRow}_col_${depCol}"]`
+                        );
+                        
+                        if (formulaInput && formulaInput.value) {
+                            console.log(`Recalculating formula: ${formulaInput.value}`);
+                            this.applyFormula(depRow, depCol, formulaInput.value, depTableType);
+                        }
+                    });
+                }
             }
         });
     },
-
+    // ====================== Table Operations ======================
     addColumn: async function(tableType) {
-        const columnName = prompt('Enter column name:');
+        const columnName = prompt('Введите название столбца:');
         if (!columnName) return;
 
         this.showSavingIndicator(true);
@@ -279,14 +715,15 @@ const KPIApp = {
                 span.textContent = `[${columnName}]`;
                 this.elements.availableColumns.appendChild(span);
 
+                this.updateDependenciesOnStructureChange();
                 this.performAutoSave(tableType);
-                this.showNotification('Column added successfully');
+                this.showNotification('Столбец успешно добавлен');
             } else {
-                this.showNotification(data.message || 'Error adding column', 'error');
+                this.showNotification(data.message || 'Ошибка при добавлении столбца', 'error');
             }
         } catch (error) {
-            console.error('Error:', error);
-            this.showNotification('Error adding column', 'error');
+            console.error('Ошибка:', error);
+            this.showNotification('Ошибка при добавлении столбца', 'error');
         } finally {
             this.showSavingIndicator(false);
         }
@@ -332,7 +769,8 @@ const KPIApp = {
 
         tbody.appendChild(newRow);
         this.addAutoSaveHandlers();
-        this.showNotification('Row added successfully');
+        this.updateDependenciesOnStructureChange();
+        this.showNotification('Строка успешно добавлена');
         this.performAutoSave(tableType);
     },
 
@@ -340,7 +778,7 @@ const KPIApp = {
         const row = button.closest('tr');
         const rowIndex = Array.from(row.parentNode.children).indexOf(row);
 
-        if (!confirm('Are you sure you want to delete this row?')) return;
+        if (!confirm('Вы уверены, что хотите удалить эту строку?')) return;
 
         this.showSavingIndicator(true);
         const endpoint = tableType === 'template' ? '/kpi/delete_template_row' : '/kpi/delete_row';
@@ -376,14 +814,15 @@ const KPIApp = {
                     });
                 });
 
+                this.updateDependenciesOnStructureChange();
                 this.performAutoSave(tableType);
-                this.showNotification('Row deleted successfully');
+                this.showNotification('Строка успешно удалена');
             } else {
-                this.showNotification(data.message || 'Error deleting row', 'error');
+                this.showNotification(data.message || 'Ошибка при удалении строки', 'error');
             }
         } catch (error) {
-            console.error('Error:', error);
-            this.showNotification('Error deleting row', 'error');
+            console.error('Ошибка:', error);
+            this.showNotification('Ошибка при удалении строки', 'error');
         } finally {
             this.showSavingIndicator(false);
         }
@@ -391,7 +830,7 @@ const KPIApp = {
 
     deleteColumn: async function(button, tableType) {
         const column = button.getAttribute('data-column');
-        if (!confirm(`Are you sure you want to delete column "${column}"? All data in this column will be lost.`)) return;
+        if (!confirm(`Вы уверены, что хотите удалить столбец "${column}"? Все данные в этом столбце будут потеряны.`)) return;
 
         this.showSavingIndicator(true);
         this.setUiEnabled(false);
@@ -426,7 +865,7 @@ const KPIApp = {
                     }
                 }
 
-                if (colIndex === -1) throw new Error('Column not found');
+                if (colIndex === -1) throw new Error('Столбец не найден');
 
                 const rows = table.querySelectorAll('tr');
                 rows.forEach(row => {
@@ -450,18 +889,19 @@ const KPIApp = {
                     if (tag.textContent === `[${column}]`) tag.remove();
                 });
 
+                this.updateDependenciesOnStructureChange();
                 this.performAutoSave(tableType);
-                this.showNotification(`Column "${column}" deleted successfully`);
+                this.showNotification(`Столбец "${column}" успешно удален`);
 
                 if (tableType !== 'template' && this.elements.chartColumnSelect.value === column) {
                     this.elements.chartColumnSelect.value = '';
                 }
             } else {
-                this.showNotification(data.message || 'Error deleting column', 'error');
+                this.showNotification(data.message || 'Ошибка при удалении столбца', 'error');
             }
         } catch (error) {
-            console.error('Error:', error);
-            this.showNotification(`Error deleting column: ${error.message}`, 'error');
+            console.error('Ошибка:', error);
+            this.showNotification(`Ошибка при удалении столбца: ${error.message}`, 'error');
         } finally {
             this.showSavingIndicator(false);
             this.setUiEnabled(true);
@@ -511,11 +951,12 @@ const KPIApp = {
         });
     },
 
+    // ====================== Data Saving ======================
     saveTemplate: async function() {
         this.userTriggeredSave = true;
-        const savingNotification = this.showNotification('Saving template...', 'info', 0);
+        const savingNotification = this.showNotification('Сохранение шаблона...', 'info', 0);
         this.elements.saveTemplateBtn.disabled = true;
-        this.elements.saveTemplateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        this.elements.saveTemplateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
 
         const formData = this.collectFormData('template');
 
@@ -532,24 +973,24 @@ const KPIApp = {
             const data = await response.json();
             if (data.status === 'success') {
                 this.lastSaveTime = new Date();
-                savingNotification.update('Template saved successfully', 'success');
+                savingNotification.update('Шаблон успешно сохранен', 'success');
             } else {
-                throw new Error(data.message || 'Server error');
+                throw new Error(data.message || 'Ошибка сервера');
             }
         } catch (error) {
-            console.error('Error saving template:', error);
-            savingNotification.update(`Error saving template: ${error.message}`, 'error');
+            console.error('Ошибка сохранения шаблона:', error);
+            savingNotification.update(`Ошибка сохранения шаблона: ${error.message}`, 'error');
         } finally {
             setTimeout(() => {
                 this.elements.saveTemplateBtn.disabled = false;
-                this.elements.saveTemplateBtn.innerHTML = '<i class="fas fa-save"></i> Save Template';
+                this.elements.saveTemplateBtn.innerHTML = '<i class="fas fa-save"></i> Сохранить шаблон';
                 savingNotification.hide();
             }, 1000);
         }
     },
 
     applyTemplateToAll: async function() {
-        if (!confirm('Are you sure you want to apply this template to ALL users? Existing data will be overwritten.')) return;
+        if (!confirm('Вы уверены, что хотите применить этот шаблон ко ВСЕМ пользователям? Существующие данные будут перезаписаны.')) return;
 
         this.showSavingIndicator(true);
         this.elements.applyToAllBtn.disabled = true;
@@ -568,13 +1009,13 @@ const KPIApp = {
 
             const data = await response.json();
             if (data.status === 'success') {
-                this.showNotification('Template applied to all users successfully');
+                this.showNotification('Шаблон успешно применен ко всем пользователям');
             } else {
-                this.showNotification(data.message || 'Error applying template', 'error');
+                this.showNotification(data.message || 'Ошибка применения шаблона', 'error');
             }
         } catch (error) {
-            console.error('Error:', error);
-            this.showNotification('Error applying template', 'error');
+            console.error('Ошибка:', error);
+            this.showNotification('Ошибка применения шаблона', 'error');
         } finally {
             this.showSavingIndicator(false);
             this.elements.applyToAllBtn.disabled = false;
@@ -584,13 +1025,11 @@ const KPIApp = {
     saveKpiData: async function() {
         this.userTriggeredSave = true;
         
-        // Проверяем, что пользователь имеет право сохранять данные
         if (!this.selectedUserId && !this.currentUserId) {
             this.showNotification('Пользователь не выбран', 'error');
             return;
         }
         
-        // Для обычных пользователей проверяем, что сохраняют свои данные
         if (!this.isAdmin && this.selectedUserId && this.selectedUserId !== this.currentUserId) {
             this.showNotification('Вы можете сохранять только свои данные', 'error');
             return;
@@ -651,7 +1090,7 @@ const KPIApp = {
         // Собираем данные ячеек
         const cellInputs = document.querySelectorAll(`[name^="${namePrefix}cell_"]`);
         cellInputs.forEach(input => {
-            if (input.value !== '') { // Сохраняем только непустые значения
+            if (input.value !== '') {
                 formData[input.name] = input.value;
             }
         });
@@ -664,28 +1103,23 @@ const KPIApp = {
             }
         });
     
-        console.log('Collected form data:', {
-            tableType: tableType,
-            formData: formData,
-            columnsCount: columnInputs.length,
-            cellsCount: cellInputs.length,
-            formulasCount: formulaInputs.length
-        });
-    
         return formData;
     },
 
+    // ====================== Formula Modal ======================
     openFormulaModal: function(row, col, tableType) {
         this.elements.currentRowInput.value = row;
         this.elements.currentColInput.value = col;
         this.elements.currentTableInput.value = tableType;
-
+    
         const formulaInput = document.querySelector(`input[name="${tableType}_formula_${row}_col_${col}"]`);
         this.elements.formulaInput.value = formulaInput ? formulaInput.value : '';
-
+    
         this.elements.formulaModal.classList.remove('hidden');
+        
+        // Добавляем обработчики для кнопок в модальном окне
+        this.setupFormulaModalButtons();
     },
-
     closeFormulaModal: function() {
         this.elements.formulaModal.classList.add('hidden');
     },
@@ -695,152 +1129,60 @@ const KPIApp = {
         const col = this.elements.currentColInput.value;
         const tableType = this.elements.currentTableInput.value;
         const formula = this.elements.formulaInput.value.trim();
-
+    
         const formulaField = document.querySelector(`input[name="${tableType}_formula_${row}_col_${col}"]`);
-        if (formulaField) formulaField.value = formula;
-
-        this.closeFormulaModal();
-
-        if (formula) {
-            this.applyFormulaImmediately(row, col, formula, tableType);
-        } else {
-            const cellInput = document.querySelector(`input[name="${tableType}_cell_${row}_col_${col}"]`);
-            if (cellInput) {
-                cellInput.value = '';
-                cellInput.parentElement.classList.remove('formula-cell', 'formula-error');
+        if (formulaField) {
+            const oldFormula = formulaField.value;
+            if (oldFormula) {
+                this.clearOldDependencies(oldFormula, row, col, tableType);
             }
+            
+            formulaField.value = formula;
+            
+            if (formula) {
+                this.parseFormulaDependencies(formula, row, col, tableType);
+                this.applyFormula(row, col, formula, tableType); // Немедленное применение
+            } else {
+                const cellInput = document.querySelector(`input[name="${tableType}_cell_${row}_col_${col}"]`);
+                if (cellInput) {
+                    cellInput.value = '';
+                    cellInput.parentElement.classList.remove('formula-cell', 'formula-error');
+                }
+            }
+            
+            // Обновляем все зависимые ячейки
+            this.updateDependentCells(row, col, tableType);
         }
-
+    
+        this.closeFormulaModal();
         this.performAutoSave(tableType);
     },
 
-    applyFormulaImmediately: function(row, col, formula, tableType) {
-        const cellInput = document.querySelector(`input[name="${tableType}_cell_${row}_col_${col}"]`);
-        if (!cellInput) return;
-
-        const cellElement = cellInput.parentElement;
-        cellElement.classList.remove('formula-cell', 'formula-error');
-
-        if (!formula || !formula.trim()) {
-            cellInput.value = '';
-            return;
-        }
-
-        const table = tableType === 'template' ? this.elements.templateTable : this.elements.kpiTable;
-        const headerRowId = tableType === 'template' ? 'template-column-names-row' : 'column-names-row';
-
-        const rowElement = cellInput.closest('tr');
-        const rowInputs = rowElement.querySelectorAll('.kpi-input');
-        const rowData = Array.from(rowInputs).map(input => input.value);
-
-        const headerRow = document.getElementById(headerRowId);
-        const columnNames = Array.from(headerRow.querySelectorAll('th span')).map(span => span.textContent);
-
-        try {
-            const result = this.evaluateFormula(formula, rowData, columnNames);
-            if (result === 'Error') {
-                cellElement.classList.add('formula-error');
-            } else if (result !== '') {
-                cellInput.value = result;
-                cellElement.classList.add('formula-cell');
-            }
-        } catch (e) {
-            console.error('Formula evaluation error:', e);
-            cellElement.classList.add('formula-error');
-        }
-    },
-
-    // Новая функция для пересчёта всех формул в строке
-    recalculateRowFormulas: function(rowIndex, tableType) {
-        // Проверяем права администратора и доступность таблицы
-        if (tableType === 'template' && !this.isAdmin) {
-            console.warn('Попытка пересчёта формул шаблона для не-администратора');
-            return;
-        }
-    
-        const table = tableType === 'template' ? this.elements.templateTable : this.elements.kpiTable;
-        const headerRowId = tableType === 'template' ? 'template-column-names-row' : 'column-names-row';
-    
-        // Проверяем существование таблицы
-        if (!table) {
-            console.warn(`Таблица для ${tableType} не найдена`);
-            return;
-        }
-    
-        const headerRow = document.getElementById(headerRowId);
-        if (!headerRow) {
-            console.warn(`Заголовочная строка ${headerRowId} не найдена`);
-            return;
-        }
-    
-        const columnNames = Array.from(headerRow.querySelectorAll('th span')).map(span => span.textContent);
-        const tbody = table.querySelector('tbody');
-        const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`) || tbody.children[rowIndex];
-        if (!row) {
-            console.warn(`Строка с индексом ${rowIndex} не найдена`);
-            return;
-        }
-    
-        const inputs = row.querySelectorAll('.kpi-input');
-        const formulaInputs = row.querySelectorAll('.cell-formula');
-        const rowData = Array.from(inputs).map(input => input.value);
-    
-        formulaInputs.forEach((formulaInput, colIndex) => {
-            const formula = formulaInput.value;
-            if (formula) {
-                this.applyFormulaImmediately(rowIndex, colIndex, formula, tableType);
-            }
-        });
-    },
-
-    evaluateFormula: function(formula, rowData, columnNames) {
-        if (!formula || !formula.trim()) return '';
-
-        try {
-            formula = formula.trim();
-            if (/^\[[^\]]+\]$/.test(formula)) {
-                const columnName = formula.slice(1, -1);
-                const columnIndex = columnNames.indexOf(columnName);
-                if (columnIndex !== -1 && columnIndex < rowData.length) {
-                    return rowData[columnIndex];
-                }
-                return '';
-            }
-
-            const evaluatedFormula = formula.replace(/\[([^\]]+)\]/g, (match, columnName) => {
-                const columnIndex = columnNames.indexOf(columnName);
-                if (columnIndex !== -1 && columnIndex < rowData.length) {
-                    const value = rowData[columnIndex];
-                    const numValue = parseFloat(value);
-                    return isNaN(numValue) ? '0' : numValue.toString();
-                }
-                return '0';
-            });
-
-            if (!evaluatedFormula.trim()) return '';
-
-            const result = new Function('return ' + evaluatedFormula)();
-            if (typeof result === 'number' && !isNaN(result)) {
-                return Math.round(result * 100) / 100;
-            }
-            return 'Error';
-        } catch (error) {
-            console.error('Formula evaluation error:', error);
-            return 'Error';
-        }
-    },
-
     insertColumnIntoFormula: function(columnText) {
-        const selStart = this.elements.formulaInput.selectionStart;
-        const selEnd = this.elements.formulaInput.selectionEnd;
-        const currentValue = this.elements.formulaInput.value;
+    const input = this.elements.formulaInput;
+    const selStart = input.selectionStart;
+    const selEnd = input.selectionEnd;
+    const currentValue = input.value;
 
-        this.elements.formulaInput.value = currentValue.substring(0, selStart) + columnText + currentValue.substring(selEnd);
-        this.elements.formulaInput.focus();
-        this.elements.formulaInput.selectionStart = selStart + columnText.length;
-        this.elements.formulaInput.selectionEnd = selStart + columnText.length;
-    },
+    // Проверяем, не вставляем ли мы дубликат столбца
+    const beforeText = currentValue.substring(0, selStart);
+    const afterText = currentValue.substring(selEnd);
+    
+    // Если столбец уже присутствует в формуле - не вставляем
+    if (beforeText.includes(columnText)) {
+        return;
+    }
 
+    input.value = beforeText + columnText + afterText;
+    input.focus();
+    input.selectionStart = selStart + columnText.length;
+    input.selectionEnd = selStart + columnText.length;
+    
+    // Триггерим событие input для валидации
+    input.dispatchEvent(new Event('input'));
+},
+
+    // ====================== Charts ======================
     generateCharts: async function(columnName) {
         if (!columnName) return;
 
@@ -909,16 +1251,17 @@ const KPIApp = {
                     }
                 });
 
-                this.showNotification('Charts updated successfully');
+                this.showNotification('Графики успешно обновлены');
             } else {
-                this.showNotification(data.message || 'Error generating charts', 'error');
+                this.showNotification(data.message || 'Ошибка при создании графиков', 'error');
             }
         } catch (error) {
-            console.error('Error:', error);
-            this.showNotification('Error generating charts', 'error');
+            console.error('Ошибка:', error);
+            this.showNotification('Ошибка при создании графиков', 'error');
         }
     },
 
+    // ====================== UI Helpers ======================
     showNotification: function(message, type = 'success', duration = 3000) {
         const notificationId = 'notification-' + Date.now();
         const notification = document.createElement('div');
@@ -964,10 +1307,6 @@ const KPIApp = {
         return icons[type] || 'fas fa-info-circle';
     },
 
-    getCsrfToken: function() {
-        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-    },
-
     setUiEnabled: function(enabled) {
         const elements = [
             this.elements.addColumnBtn,
@@ -989,8 +1328,29 @@ const KPIApp = {
         });
     },
 
+    showSavingIndicator: function(show) {
+        const indicator = document.getElementById('saving-indicator') || this.createSavingIndicator();
+        indicator.style.display = show ? 'block' : 'none';
+    },
+
+    createSavingIndicator: function() {
+        const indicator = document.createElement('div');
+        indicator.id = 'saving-indicator';
+        indicator.style.position = 'fixed';
+        indicator.style.bottom = '20px';
+        indicator.style.right = '20px';
+        indicator.style.padding = '5px 10px';
+        indicator.style.backgroundColor = '#4CAF50';
+        indicator.style.color = 'white';
+        indicator.style.borderRadius = '4px';
+        indicator.style.display = 'none';
+        indicator.textContent = 'Сохранение...';
+        document.body.appendChild(indicator);
+        return indicator;
+    },
+
+    // ====================== Auto-Save System ======================
     setupAutoSave: function() {
-        // Удаляем старые обработчики
         document.querySelectorAll('.kpi-input').forEach(input => {
             const handler = this.debounceTimers[input.id];
             if (handler) {
@@ -998,15 +1358,13 @@ const KPIApp = {
                 delete this.debounceTimers[input.id];
             }
         });
-    
-        // Добавляем новые обработчики
+
         this.addAutoSaveHandlers();
-    
-        // Наблюдатель за изменениями DOM
+
         if (this.autoSaveObserver) {
             this.autoSaveObserver.disconnect();
         }
-    
+
         this.autoSaveObserver = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.addedNodes.length) {
@@ -1024,13 +1382,11 @@ const KPIApp = {
                 }
             });
         });
-    
+
         this.autoSaveObserver.observe(document.body, {
             childList: true,
             subtree: true
         });
-        
-        console.log('Auto-save system initialized');
     },
 
     addAutoSaveHandlers: function() {
@@ -1046,12 +1402,17 @@ const KPIApp = {
     
         if (!this.debounceTimers[input.id]) {
             const handler = (e) => {
+                const tableType = e.target.name.split('_')[0] === 'template' ? 'template' : 'kpi';                const parts = e.target.name.split('_');
+                const rowIndex = parseInt(parts[1]);
+                const colIndex = parseInt(parts[3]);
+                
+                // Немедленное обновление всех зависимых формул
+                this.updateDependentCells(rowIndex, colIndex, tableType);
+                
+                // Отложенное автосохранение
                 this.debouncedAutoSave(e);
-                // Определяем tableType: для не-администраторов всегда 'kpi'
-                const tableType = this.isAdmin && e.target.name.startsWith('template_') ? 'template' : 'kpi';
-                const rowIndex = parseInt(e.target.name.split('_')[1]);
-                this.recalculateRowFormulas(rowIndex, tableType);
             };
+            
             input.addEventListener('input', handler);
             this.debounceTimers[input.id] = handler;
         }
@@ -1061,20 +1422,10 @@ const KPIApp = {
         this.showSavingIndicator(true);
         clearTimeout(this.autoSaveTimeout);
         
-        // Определяем tableType с учетом прав пользователя
-        let tableType = 'kpi';
-        if (this.isAdmin && e.target.name.startsWith('template_')) {
-            tableType = 'template';
-        }
+        const tableType = this.isAdmin && e.target.name.startsWith('template_') ? 'template' : 'kpi';
         
         this.autoSaveTimeout = setTimeout(() => {
             this.performAutoSave(tableType);
-            
-            // Пересчет формул только для таблицы kpi
-            if (tableType === 'kpi') {
-                const rowIndex = parseInt(e.target.name.split('_')[1]);
-                this.recalculateRowFormulas(rowIndex, tableType);
-            }
         }, 1500);
     },
 
@@ -1084,7 +1435,6 @@ const KPIApp = {
             return;
         }
     
-        // Для обычных пользователей разрешаем только таблицу kpi
         if (!this.isAdmin && tableType === 'template') {
             console.log('Regular users cannot save templates');
             return;
@@ -1093,8 +1443,7 @@ const KPIApp = {
         this.isSaving = true;
         const formData = this.collectFormData(tableType);
     
-        // Проверяем, есть ли данные для сохранения
-        const hasData = Object.keys(formData).length > 1; // кроме user_id
+        const hasData = Object.keys(formData).length > 1;
         
         if (!hasData) {
             console.log('No data to save, skipping auto-save');
@@ -1120,47 +1469,30 @@ const KPIApp = {
             if (data.status === 'success') {
                 console.log('Auto-save successful');
                 if (!this.userTriggeredSave) {
-                    this.showNotification('Changes auto-saved', 'success', 1000);
+                    this.showNotification('Изменения сохранены автоматически', 'success', 1000);
                 }
             } else {
                 throw new Error(data.message || 'Server error');
             }
         } catch (error) {
             console.error('Auto-save failed:', error);
-            this.showNotification('Auto-save error: ' + error.message, 'error');
+            this.showNotification('Ошибка автосохранения: ' + error.message, 'error');
         } finally {
             this.isSaving = false;
             this.userTriggeredSave = false;
+            this.showSavingIndicator(false);
         }
     },
-    getCsrfToken: function() {
-        return document.querySelector('meta[name="csrf-token"]')?.content || '';
-    },
-    showSavingIndicator: function(show) {
-        const indicator = document.getElementById('saving-indicator') || this.createSavingIndicator();
-        indicator.style.display = show ? 'block' : 'none';
-    },
 
-    createSavingIndicator: function() {
-        const indicator = document.createElement('div');
-        indicator.id = 'saving-indicator';
-        indicator.style.position = 'fixed';
-        indicator.style.bottom = '20px';
-        indicator.style.right = '20px';
-        indicator.style.padding = '5px 10px';
-        indicator.style.backgroundColor = '#4CAF50';
-        indicator.style.color = 'white';
-        indicator.style.borderRadius = '4px';
-        indicator.style.display = 'none';
-        indicator.textContent = 'Saving...';
-        document.body.appendChild(indicator);
-        return indicator;
+    // ====================== Utility Functions ======================
+    getCsrfToken: function() {
+        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
     },
 
     setupTableSearch: function() {
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
-        searchInput.placeholder = 'Search table...';
+        searchInput.placeholder = 'Поиск в таблице...';
         searchInput.className = 'px-3 py-2 border rounded mb-3 sm:mb-4 w-full text-sm';
 
         const tableHeader = document.querySelector('.bg-gray-50.border-b.border-gray-200');
@@ -1277,410 +1609,61 @@ const KPIApp = {
                 const formulaInputs = row.querySelectorAll('.cell-formula');
                 formulaInputs.forEach((input, colIndex) => {
                     if (input.value) {
-                        this.applyFormulaImmediately(rowIndex, colIndex, input.value, type);
+                        this.applyFormula(rowIndex, colIndex, input.value, type);
                     }
                 });
             });
         });
     },
 
-    recalculateRowFormulas: function(rowIndex, tableType) {
-        const table = tableType === 'template' ? this.elements.templateTable : this.elements.kpiTable;
-        const headerRowId = tableType === 'template' ? 'template-column-names-row' : 'column-names-row';
-        const headerRow = document.getElementById(headerRowId);
-        const columnNames = Array.from(headerRow.querySelectorAll('th span')).map(span => span.textContent);
-        const tbody = table.querySelector('tbody');
-        const row = tbody.querySelector(`tr[data-row-index="${rowIndex}"]`) || tbody.children[rowIndex];
-        if (!row) return;
-        const inputs = row.querySelectorAll('.kpi-input');
-        const formulaInputs = row.querySelectorAll('.cell-formula');
-        const rowData = Array.from(inputs).map(input => input.value);
-        formulaInputs.forEach((formulaInput, colIndex) => {
-            const formula = formulaInput.value;
-            if (formula) {
-                this.applyFormulaImmediately(rowIndex, colIndex, formula, tableType);
-            }
-        });
-    },
-
-    applyFormulaImmediately: function(row, col, formula, tableType) {
-        const cellInput = document.querySelector(`input[name="${tableType}_cell_${row}_col_${col}"]`);
-        if (!cellInput) return;
-
-        const cellElement = cellInput.parentElement;
-        cellElement.classList.remove('formula-cell', 'formula-error');
-
-        if (!formula || !formula.trim()) {
-            cellInput.value = '';
+    loadKpiData: async function() {
+        if (!this.selectedUserId) {
+            this.showNotification('Пользователь не выбран', 'error');
             return;
         }
-
-        const table = tableType === 'template' ? this.elements.templateTable : this.elements.kpiTable;
-        const headerRowId = tableType === 'template' ? 'template-column-names-row' : 'column-names-row';
-
-        const rowElement = cellInput.closest('tr');
-        const rowInputs = rowElement.querySelectorAll('.kpi-input');
-        const rowData = Array.from(rowInputs).map(input => input.value);
-
-        const headerRow = document.getElementById(headerRowId);
-        const columnNames = Array.from(headerRow.querySelectorAll('th span')).map(span => span.textContent);
-
+    
         try {
-            const result = this.evaluateFormula(formula, rowData, columnNames);
-            if (result === 'Error') {
-                cellElement.classList.add('formula-error');
-            } else if (result !== '') {
-                cellInput.value = result;
-                cellElement.classList.add('formula-cell');
-            }
-        } catch (e) {
-            console.error('Formula evaluation error:', e);
-            cellElement.classList.add('formula-error');
-        }
-    },
-
-    evaluateFormula: function(formula, rowData, columnNames) {
-        if (!formula || !formula.trim()) return '';
-
-        try {
-            formula = formula.trim();
-            if (/^\[[^\]]+\]$/.test(formula)) {
-                const columnName = formula.slice(1, -1);
-                const columnIndex = columnNames.indexOf(columnName);
-                if (columnIndex !== -1 && columnIndex < rowData.length) {
-                    return rowData[columnIndex];
-                }
-                return '';
-            }
-
-            const evaluatedFormula = formula.replace(/\[([^\]]+)\]/g, (match, columnName) => {
-                const columnIndex = columnNames.indexOf(columnName);
-                if (columnIndex !== -1 && columnIndex < rowData.length) {
-                    const value = rowData[columnIndex];
-                    const numValue = parseFloat(value);
-                    return isNaN(numValue) ? '0' : numValue.toString();
-                }
-                return '0';
-            });
-
-            if (!evaluatedFormula.trim()) return '';
-
-            const result = new Function('return ' + evaluatedFormula)();
-            if (typeof result === 'number' && !isNaN(result)) {
-                return Math.round(result * 100) / 100;
-            }
-            return 'Error';
+            const response = await fetch(`/kpi?user_id=${this.selectedUserId}`);
+            const html = await response.text();
+            document.querySelector('.tab-content.active').innerHTML = html;
+            this.cacheElements();
+            this.setupEventListeners();
+            this.setupAutoSave();
+            this.buildDependencyGraph();
+            this.processTableFormulas();
+            this.processAllFormulas(); // Важно: обработка всех формул
+            this.setupRealTimeFormulaEngine(); // Важно: инициализация обработчиков
         } catch (error) {
-            console.error('Formula evaluation error:', error);
-            return 'Error';
+            console.error('Ошибка загрузки KPI:', error);
+            this.showNotification('Ошибка загрузки данных', 'error');
         }
     },
 
-    insertColumnIntoFormula: function(columnText) {
-        const selStart = this.elements.formulaInput.selectionStart;
-        const selEnd = this.elements.formulaInput.selectionEnd;
-        const currentValue = this.elements.formulaInput.value;
-
-        this.elements.formulaInput.value = currentValue.substring(0, selStart) + columnText + currentValue.substring(selEnd);
-        this.elements.formulaInput.focus();
-        this.elements.formulaInput.selectionStart = selStart + columnText.length;
-        this.elements.formulaInput.selectionEnd = selStart + columnText.length;
-    },
-
-    generateCharts: async function(columnName) {
-        if (!columnName) return;
-
+    submitForReview: async function() {
+        if (!confirm('Отправить ваш KPI на проверку администратору?')) return;
+        
         try {
-            const response = await fetch(`/kpi/get_chart_data?column=${encodeURIComponent(columnName)}&user_id=${this.selectedUserId}`);
+            const response = await fetch('/kpi/submit_for_review', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify({
+                    user_id: this.currentUserId
+                })
+            });
+    
             const data = await response.json();
-
             if (data.status === 'success') {
-                const chartData = data.data;
-                const labels = chartData.map(item => item.label);
-                const values = chartData.map(item => item.value);
-
-                const colors = chartData.map(() => {
-                    const r = Math.floor(Math.random() * 200);
-                    const g = Math.floor(Math.random() * 200);
-                    const b = Math.floor(Math.random() * 200);
-                    return `rgba(${r}, ${g}, ${b}, 0.7)`;
-                });
-
-                if (this.currentCharts.bar) this.currentCharts.bar.destroy();
-                const barCtx = document.getElementById('barChart').getContext('2d');
-                this.currentCharts.bar = new Chart(barCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: columnName,
-                            data: values,
-                            backgroundColor: colors,
-                            borderColor: colors.map(c => c.replace('0.7', '1')),
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: true,
-                        scales: {
-                            y: { beginAtZero: true }
-                        },
-                        plugins: {
-                            legend: { position: 'top' }
-                        }
-                    }
-                });
-
-                if (this.currentCharts.pie) this.currentCharts.pie.destroy();
-                const pieCtx = document.getElementById('pieChart').getContext('2d');
-                this.currentCharts.pie = new Chart(pieCtx, {
-                    type: 'pie',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: columnName,
-                            data: values,
-                            backgroundColor: colors,
-                            borderColor: colors.map(c => c.replace('0.7', '1')),
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: true,
-                        plugins: {
-                            legend: { position: 'right' }
-                        }
-                    }
-                });
-
-                this.showNotification('Charts updated successfully');
+                this.showNotification('KPI отправлен на проверку администратору', 'success');
             } else {
-                this.showNotification(data.message || 'Error generating charts', 'error');
+                throw new Error(data.message || 'Ошибка отправки');
             }
         } catch (error) {
-            console.error('Error:', error);
-            this.showNotification('Error generating charts', 'error');
+            console.error('Ошибка:', error);
+            this.showNotification('Ошибка при отправке на проверку: ' + error.message, 'error');
         }
-    },
-
-    showNotification: function(message, type = 'success', duration = 3000) {
-        const notificationId = 'notification-' + Date.now();
-        const notification = document.createElement('div');
-        notification.id = notificationId;
-        notification.className = `notification notification-${type} fixed bottom-4 right-4 p-4 rounded shadow-lg transition-all duration-300`;
-        notification.innerHTML = `
-            <div class="flex items-center">
-                <i class="${this.getNotificationIcon(type)} mr-2"></i>
-                <span>${message}</span>
-            </div>
-        `;
-
-        document.body.appendChild(notification);
-        setTimeout(() => notification.classList.add('show'), 10);
-
-        if (duration > 0) {
-            setTimeout(() => {
-                notification.classList.remove('show');
-                setTimeout(() => notification.remove(), 300);
-            }, duration);
-        }
-
-        return {
-            update: (newMessage, newType) => {
-                notification.querySelector('span').textContent = newMessage;
-                notification.className = `notification notification-${newType} fixed bottom-4 right-4 p-4 rounded shadow-lg transition-all duration-300 show`;
-                notification.querySelector('i').className = this.getNotificationIcon(newType) + ' mr-2';
-            },
-            hide: () => {
-                notification.classList.remove('show');
-                setTimeout(() => notification.remove(), 300);
-            }
-        };
-    },
-
-    getNotificationIcon: function(type) {
-        const icons = {
-            'success': 'fas fa-check-circle',
-            'error': 'fas fa-exclamation-circle',
-            'warning': 'fas fa-exclamation-triangle',
-            'info': 'fas fa-info-circle'
-        };
-        return icons[type] || 'fas fa-info-circle';
-    },
-
-    getCsrfToken: function() {
-        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-    },
-
-    setUiEnabled: function(enabled) {
-        const elements = [
-            this.elements.addColumnBtn,
-            this.elements.addRowBtn,
-            this.elements.saveKpiBtn,
-            this.elements.addColumnTemplateBtn,
-            this.elements.addRowTemplateBtn,
-            this.elements.saveTemplateBtn,
-            this.elements.applyToAllBtn,
-            ...document.querySelectorAll('.delete-column'),
-            ...document.querySelectorAll('.delete-row'),
-            ...document.querySelectorAll('.delete-template-column'),
-            ...document.querySelectorAll('.delete-template-row'),
-            ...document.querySelectorAll('.formula-btn')
-        ].filter(el => el);
-
-        elements.forEach(el => {
-            el.disabled = !enabled;
-        });
-    },
-
-    setupAutoSave: function() {
-        document.querySelectorAll('.kpi-input').forEach(input => {
-            const handler = this.debounceTimers[input.id];
-            if (handler) {
-                input.removeEventListener('input', handler);
-                delete this.debounceTimers[input.id];
-            }
-        });
-
-        this.addAutoSaveHandlers();
-
-        if (this.autoSaveObserver) {
-            this.autoSaveObserver.disconnect();
-        }
-
-        this.autoSaveObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.addedNodes.length) {
-                    mutation.addedNodes.forEach(node => {
-                        if (node.nodeType === 1) {
-                            if (node.classList?.contains('kpi-input')) {
-                                this.addAutoSaveHandler(node);
-                            } else if (node.querySelectorAll) {
-                                node.querySelectorAll('.kpi-input').forEach(input => {
-                                    this.addAutoSaveHandler(input);
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-        });
-
-        this.autoSaveObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-    },
-
-    addAutoSaveHandlers: function() {
-        document.querySelectorAll('.kpi-input').forEach(input => {
-            this.addAutoSaveHandler(input);
-        });
-    },
-
-    addAutoSaveHandler: function(input) {
-        if (!input.id) {
-            input.id = 'kpi-input-' + Math.random().toString(36).substr(2, 9);
-        }
-    
-        if (!this.debounceTimers[input.id]) {
-            const handler = (e) => {
-                // Для обычных пользователей всегда 'kpi', для админов определяем по имени поля
-                const tableType = this.isAdmin && e.target.name.startsWith('template_') ? 'template' : 'kpi';
-                
-                console.log('Input change detected:', {
-                    input: e.target.name,
-                    tableType: tableType,
-                    userId: this.isAdmin ? this.selectedUserId : this.currentUserId
-                });
-    
-                this.debouncedAutoSave(e);
-                
-                // Пересчет формул только для таблицы kpi
-                if (tableType === 'kpi') {
-                    const rowIndex = parseInt(e.target.name.split('_')[1]);
-                    this.recalculateRowFormulas(rowIndex, tableType);
-                }
-            };
-            
-            input.addEventListener('input', handler);
-            this.debounceTimers[input.id] = handler;
-        }
-    },
-    debouncedAutoSave: function(e) {
-        this.showSavingIndicator(true);
-        clearTimeout(this.autoSaveTimeout);
-
-        const tableType = e.target.name.startsWith('template_') ? 'template' : 'kpi';
-        this.autoSaveTimeout = setTimeout(() => {
-            this.performAutoSave(tableType);
-        }, 1500);
-    },
-
-    performAutoSave: async function(tableType) {
-        if (this.isSaving) return;
-        this.isSaving = true;
-
-        const formData = this.collectFormData(tableType);
-
-        if (Object.keys(formData).length > 0) {
-            this.showSavingIndicator(true);
-            const endpoint = tableType === 'template' ? '/kpi/save_template' : '/kpi/save_kpi';
-
-            try {
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': this.getCsrfToken()
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                const data = await response.json();
-                if (data.status === 'success') {
-                    console.log('Auto-save successful');
-                    if (!this.userTriggeredSave) {
-                        this.showNotification('Auto-saved', 'success', 1000);
-                    }
-                } else {
-                    throw new Error(data.message || 'Server error');
-                }
-            } catch (error) {
-                console.error('Auto-save error:', error);
-                this.showNotification('Save error: ' + error.message, 'error');
-            } finally {
-                this.isSaving = false;
-                this.userTriggeredSave = false;
-                this.showSavingIndicator(false);
-            }
-        } else {
-            this.isSaving = false;
-            this.showSavingIndicator(false);
-        }
-    },
-
-    showSavingIndicator: function(show) {
-        const indicator = document.getElementById('saving-indicator') || this.createSavingIndicator();
-        indicator.style.display = show ? 'block' : 'none';
-    },
-
-    createSavingIndicator: function() {
-        const indicator = document.createElement('div');
-        indicator.id = 'saving-indicator';
-        indicator.style.position = 'fixed';
-        indicator.style.bottom = '20px';
-        indicator.style.right = '20px';
-        indicator.style.padding = '5px 10px';
-        indicator.style.backgroundColor = '#4CAF50';
-        indicator.style.color = 'white';
-        indicator.style.borderRadius = '4px';
-        indicator.style.display = 'none';
-        indicator.textContent = 'Saving...';
-        document.body.appendChild(indicator);
-        return indicator;
     }
 };
 
@@ -1688,3 +1671,4 @@ const KPIApp = {
 document.addEventListener('DOMContentLoaded', () => {
     KPIApp.init();
 });
+

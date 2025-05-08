@@ -550,6 +550,31 @@ def update_card(board_id, list_id, card_id):
         )
     
     return jsonify({"id": card.id, "title": card.title, "description": card.description})
+@kanban_bp.route('/kanban/boards/<int:board_id>/lists/<int:list_id>/cards/<int:card_id>', methods=['DELETE'])
+@login_required
+@admin_required  # Only admins can delete cards
+def delete_card(board_id, list_id, card_id):
+    board = Board.query.get(board_id)
+    if not board:
+        return jsonify({"error": "Board not found"}), 404
+
+    list_obj = List.query.filter_by(id=list_id, board_id=board_id).first()
+    if not list_obj:
+        return jsonify({"error": "List not found or does not belong to the specified board"}), 404
+
+    card = Card.query.filter_by(id=card_id, list_id=list_id).first()
+    if not card:
+        return jsonify({"error": "Card not found or does not belong to the specified list"}), 404
+
+    db.session.delete(card)
+    db.session.commit()
+    notify_user(
+            user_id=card.assigned_to,
+            message=f"Удалена карточка '{card.title}' в доске '{board.name}'",
+            category='info',
+            link=f"/kanban?board_id={board_id}"
+        )
+    return '', 204
 
 # ===== USER ROUTES =====
 

@@ -106,45 +106,47 @@ def notify_user(user_id, message, category='info', link=None):
     db.session.add(notification)
     db.session.commit()
     
-    # Отправляем уведомление через WebSocket (если используется)
-    from app import socketio
-    socketio.emit('new_notification', {
-        'user_id': user_id,
-        'count': Notification.query.filter_by(user_id=user_id, read=False).count()
-    }, namespace='/notifications')
+    # Import socketio from flask_socketio to avoid circular imports
+    from flask_socketio import current_app as app
+    
+    # Emit notification on default namespace using user_id room
+    try:
+        app.socketio.emit('new_notification', {
+            'user_id': user_id,
+            'count': Notification.query.filter_by(user_id=user_id, read=False).count(),
+            'notification': notification.to_dict()
+        }, room=f'user_{user_id}')
+    except Exception as e:
+        print(f"Error sending notification via socketio: {str(e)}")
 
 def create_message_notification(recipient_id, sender_id, lobby_id, message_text):
     """
-    Создает уведомление о новом сообщении
+    Creates a notification for a new message
     """
+    # Don't create notification for the sender
+    if recipient_id == sender_id:
+        return
+    
     sender = User.query.get(sender_id)
     lobby = Lobby.query.get(lobby_id)
     
     if not sender or not lobby:
         return
     
-    # Текст уведомления зависит от типа лобби
+    # Text depends on lobby type
     if lobby.is_group:
         notification_text = f"{sender.username} sent a message in {lobby.name}"
     else:
         notification_text = f"New message from {sender.username}"
     
-    # Добавляем краткий текст сообщения
+    # Add message preview
     if message_text:
         if len(message_text) > 30:
             message_text = message_text[:27] + "..."
         notification_text += f": {message_text}"
     
-    # Ссылка на чат
+    # Link to chat
     link = f"/chat?lobby_id={lobby_id}"
     
-    # Создаем уведомление
-    notification = Notification(
-        user_id=recipient_id,
-        message=notification_text,
-        link=link,
-        category='info'
-    )
-    
-    db.session.add(notification)
-    db.session.commit()
+    # Create notification through notify_user to handle socket emissions
+    notify_user(recipient_id, notification_text, 'info', link)

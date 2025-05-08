@@ -24,7 +24,7 @@ body {
     background: var(--primary-white);
     border-radius: 8px;
     overflow: hidden;
-    min-width: 100%; /* Ensure table takes full width of container */
+    min-width: 100%;
 }
 
 .kpi-table th {
@@ -34,11 +34,11 @@ body {
     padding: 12px 15px;
     text-align: left;
     position: relative;
-    min-width: 120px; /* Minimum column width */
-    white-space: nowrap; /* Prevent text wrapping */
+    min-width: 120px;
+    white-space: nowrap;
 }
 .kpi-table th:first-child {
-    min-width: 40px; /* Smaller width for actions column */
+    min-width: 40px;
     width: 40px;
 }
 
@@ -46,11 +46,11 @@ body {
     border-bottom: 1px solid var(--light-gray);
     padding: 12px 15px;
     transition: all 0.2s;
-    min-width: 120px; /* Minimum column width for data cells */
+    min-width: 120px;
 }
 
 .kpi-table td:first-child {
-    min-width: 40px; /* Smaller width for actions column */
+    min-width: 40px;
     width: 40px;
 }
 
@@ -80,7 +80,7 @@ body {
     transition: all 0.2s;
     font-family: 'Inter', sans-serif;
     font-size: 14px;
-    min-width: 100px; /* Minimum input width */
+    min-width: 100px;
 }
 
 .kpi-input:focus {
@@ -110,7 +110,6 @@ body {
     opacity: 1;
 }
 
-/* Tooltip styles */
 .tooltip {
     position: relative;
     display: inline-block;
@@ -139,7 +138,6 @@ body {
     opacity: 1;
 }
 
-/* Tab styles */
 .tab-container {
     border-bottom: 1px solid var(--light-gray);
     overflow-x: auto;
@@ -177,7 +175,6 @@ body {
     display: block;
 }
 
-/* Buttons */
 .btn-primary {
     background-color: var(--primary-red);
     color: var(--primary-white);
@@ -209,7 +206,21 @@ body {
     background-color: rgba(199, 19, 32, 0.05);
 }
 
-/* Modal */
+.btn-apply-all {
+    background-color: #16a34a;
+    color: var(--primary-white);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.btn-apply-all:hover {
+    background-color: #15803d;
+    transform: translateY(-1px);
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -248,7 +259,6 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Chart containers */
 .chart-container {
     background: var(--primary-white);
     border-radius: 8px;
@@ -257,7 +267,6 @@ body {
     margin-bottom: 15px;
 }
 
-/* Notification */
 .notification {
     position: fixed;
     bottom: 20px;
@@ -279,7 +288,6 @@ body {
     opacity: 1;
 }
 
-/* Column tags */
 .column-tag {
     display: inline-block;
     background-color: rgba(199, 19, 32, 0.1);
@@ -296,7 +304,6 @@ body {
     background-color: rgba(199, 19, 32, 0.2);
 }
 
-/* Delete buttons */
 .delete-btn {
     color: var(--light-gray);
     transition: all 0.2s;
@@ -308,7 +315,6 @@ body {
     transform: scale(1.1);
 }
 
-/* Responsive adjustments */
 @media (max-width: 768px) {
     .kpi-table th, .kpi-table td {
         padding: 8px 10px;
@@ -320,7 +326,7 @@ body {
         font-size: 14px;
     }
     
-    .btn-primary, .btn-secondary {
+    .btn-primary, .btn-secondary, .btn-apply-all {
         padding: 6px 12px;
         font-size: 13px;
     }
@@ -349,7 +355,7 @@ body {
         font-size: 13px;
     }
     
-    .btn-primary, .btn-secondary {
+    .btn-primary, .btn-secondary, .btn-apply-all {
         padding: 5px 10px;
         font-size: 12px;
     }
