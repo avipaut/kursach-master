@@ -1,5 +1,3 @@
-# app.py
-
 from flask import Flask, redirect, url_for, request, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
@@ -25,6 +23,8 @@ from routes.admin_panel import admin_bp
 from routes.profile import profile_bp  # Импортируем Profile Blueprint
 from routes.card_assignment import card_assignment_bp, init_card_assignment_db  # Import new card assignment module
 
+
+
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
@@ -45,6 +45,7 @@ app.config['SECRET_KEY'] = 'your_secret_key_here'
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=14)  # Устанавливаем длительное время жизни cookie
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
+
 
 # Инициализация LoginManager
 login_manager = LoginManager()
@@ -195,6 +196,7 @@ with app.app_context():
     db.create_all()
     create_initial_roles_and_admin()
     init_card_assignment_db()  # Initialize card assignment module
+
 
 UPLOAD_FOLDER = "uploaded_documents"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

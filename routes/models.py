@@ -322,6 +322,13 @@ class Card(db.Model):
             # Add assigned users
             'assigned_users': [{'id': user.id, 'username': user.username} for user in self.assigned_users]
         }
+        
+        # Add list and board info if available
+        if hasattr(self, 'list') and self.list:
+            base_dict['list_name'] = self.list.name
+            if hasattr(self.list, 'board') and self.list.board:
+                base_dict['board_name'] = self.list.board.name
+        
         return base_dict
     def __repr__(self):
         return f"<Card {self.title} (Priority: {self.priority.name if self.priority else 'None'})>"
@@ -411,8 +418,6 @@ class CalendarEvent(db.Model):
     zoom_meeting_id = db.Column(db.String(100), nullable=True)
     zoom_password = db.Column(db.String(50), nullable=True)
     zoom_host_key = db.Column(db.String(50), nullable=True)
-    is_recorded = db.Column(db.Boolean, default=False)
-    recording_url = db.Column(db.String(500), nullable=True)
     
     # Participants (for zoom meetings or shared tasks)
     participants = db.relationship('User', secondary=event_participants, backref='participating_events')
@@ -434,8 +439,7 @@ class CalendarEvent(db.Model):
             'creator_name': self.creator.username if self.creator else None,
             'zoom_url': self.zoom_url,
             'zoom_meeting_id': self.zoom_meeting_id,
-            'is_recorded': self.is_recorded,
-            'recording_url': self.recording_url if self.is_recorded else None,
+           
             'participants': [user.to_dict() for user in self.participants],
             'is_private': self.is_private
         }

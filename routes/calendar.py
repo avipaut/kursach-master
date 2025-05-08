@@ -1,13 +1,16 @@
 # calendar_routes.py
 
-from flask import Blueprint, request, jsonify, render_template, current_app, session, g
+from flask import Blueprint, flash, request, jsonify, render_template, current_app, session, g
 from flask_login import login_required, current_user
-from routes.models import db, User, CalendarEvent
+from routes.models import db, User, CalendarEvent, Card, List
 from routes.zoom_service import EnhancedZoomService
 import json
 import logging
 from datetime import datetime, timedelta
 from functools import wraps
+from flask import redirect  # подсвечивается жёлтым
+from routes.notifications import notify_user
+
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -120,6 +123,23 @@ def create_meeting():
         result, error = EnhancedZoomService.create_meeting(data, current_user.id, participant_ids)
         if error:
             return jsonify({"error": error}), 500
+        
+        # Send notifications to participants if the meeting was created successfully
+        if result and 'event' in result:
+            event_id = result['event']['id']
+            event = CalendarEvent.query.get(event_id)
+            
+            if event:
+                # Форматируем дату и время для уведомления
+                meeting_date = event.start_time.strftime("%d.%m.%Y")
+                meeting_time = event.start_time.strftime("%H:%M")
+                
+                # Notify participants
+                for participant_id in participant_ids:
+                    if participant_id != current_user.id:  # Don't notify the creator
+                        message = f"{current_user.username} добавил(а) вас в конференцию \"{event.title}\" на {meeting_date} в {meeting_time}"
+                        link = f"/calendar?event={event_id}"
+                        notify_user(participant_id, message, "info", link)
             
         return jsonify(result)
     except Exception as e:
@@ -143,15 +163,31 @@ def add_participants(event_id):
         if event.creator_id != current_user.id and not current_user.is_admin:
             return jsonify({"error": "Недостаточно прав"}), 403
             
+        # Get current participants before adding new ones
+        current_participant_ids = [p.id for p in event.participants]
+            
         # Add participants
         success, error = EnhancedZoomService.add_participants_to_meeting(event_id, data['participant_ids'])
         if not success:
             return jsonify({"error": error}), 500
+        
+        # Форматируем дату и время для уведомления
+        meeting_date = event.start_time.strftime("%d.%m.%Y")
+        meeting_time = event.start_time.strftime("%H:%M")
+        
+        # Send notifications to newly added participants
+        for participant_id in data['participant_ids']:
+            # Only notify new participants
+            if participant_id not in current_participant_ids:
+                message = f"{current_user.username} добавил(а) вас в конференцию \"{event.title}\" на {meeting_date} в {meeting_time}"
+                link = f"/calendar?event={event_id}"
+                notify_user(participant_id, message, "info", link)
             
         return jsonify({"success": True})
     except Exception as e:
         logger.error(f"Error adding participants: {str(e)}")
         return jsonify({"error": f"Failed to add participants: {str(e)}"}), 500
+
 
 # Get host URL for a meeting (creator or admin)
 @calendar_bp.route('/meeting/<event_id>/host-url', methods=['GET'])
@@ -425,12 +461,43 @@ def create_recurring_meeting():
         result, error = EnhancedZoomService.create_recurring_meeting(data, current_user.id, participant_ids)
         if error:
             return jsonify({"error": error}), 500
+        
+        # Send notifications to participants if the meeting was created successfully
+        if result and 'event' in result:
+            event_id = result['event']['id']
+            event = CalendarEvent.query.get(event_id)
             
+            if event:
+                # Форматируем дату и время для уведомления
+                meeting_date = event.start_time.strftime("%d.%m.%Y")
+                meeting_time = event.start_time.strftime("%H:%M")
+                
+                # Определяем тип повторения для текста уведомления
+                recurrence_type_text = ""
+                if event.event_type == "zoom_recurring":
+                    if hasattr(event, 'recurrence_info') and event.recurrence_info:
+                        import json
+                        recurrence_info = json.loads(event.recurrence_info)
+                        if recurrence_info.get('type') == 1:
+                            recurrence_type_text = "ежедневную "
+                        elif recurrence_info.get('type') == 2:
+                            recurrence_type_text = "еженедельную "
+                        elif recurrence_info.get('type') == 3:
+                            recurrence_type_text = "ежемесячную "
+                        else:
+                            recurrence_type_text = "повторяющуюся "
+                
+                # Notify participants
+                for participant_id in participant_ids:
+                    if participant_id != current_user.id:  # Don't notify the creator
+                        message = f"{current_user.username} добавил(а) вас в {recurrence_type_text}конференцию \"{event.title}\". Первая встреча {meeting_date} в {meeting_time}"
+                        link = f"/calendar?event={event_id}"
+                        notify_user(participant_id, message, "info", link)
+        
         return jsonify(result)
     except Exception as e:
         logger.error(f"Error creating recurring meeting: {str(e)}")
         return jsonify({"error": f"Failed to create recurring meeting: {str(e)}"}), 500
-
 # Get calendar settings
 @calendar_bp.route('/settings', methods=['GET'])
 @login_required
@@ -470,3 +537,71 @@ def update_calendar_settings():
     except Exception as e:
         logger.error(f"Error updating calendar settings: {str(e)}")
         return jsonify({"error": f"Failed to update calendar settings: {str(e)}"}), 500
+# Add an endpoint to handle navigation to cards from the calendar
+@calendar_bp.route('/card/<card_id>')
+@login_required
+def view_card(card_id):
+    """Redirect to the kanban board with the specific card highlighted"""
+    try:
+        # Check if card exists
+        card = Card.query.get_or_404(card_id)
+        
+        # Get the board ID from the card's list
+        board_id = card.list.board_id if card.list else None
+        
+        if not board_id:
+            return jsonify({"error": "Board not found for this card"}), 404
+
+        # Redirect to the kanban board with card ID parameter
+        return redirect(f"/kanban/board/{board_id}?card={card_id}")
+    except Exception as e:
+        logger.error(f"Error viewing card: {str(e)}")
+        return jsonify({"error": f"Failed to view card: {str(e)}"}), 500
+
+# You can also add a route to mark a card as completed directly from the calendar
+@calendar_bp.route('/card/<card_id>/complete', methods=['POST'])
+@login_required
+def complete_card(card_id):
+    """Mark a card as completed from the calendar"""
+    try:
+        # Check if card exists
+        card = Card.query.get_or_404(card_id)
+        
+        # Check permissions (assigned user or creator or admin)
+        if card.user_id != current_user.id and card.assigned_to != current_user.id and current_user.id not in [u.id for u in card.assigned_users] and not current_user.is_admin:
+            return jsonify({"error": "Недостаточно прав для изменения карточки"}), 403
+        
+        # Mark as completed
+        card.completed = True
+        db.session.commit()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Error completing card: {str(e)}")
+        db.session.rollback()
+        return jsonify({"error": f"Failed to complete card: {str(e)}"}), 500
+    
+
+@calendar_bp.route('/goto-card/<card_id>')
+@login_required
+def goto_card(card_id):
+    try:
+        # Find the card
+        card = Card.query.get_or_404(card_id)
+        
+        # Find the list and board
+        list_id = card.list_id
+        list_obj = List.query.get(list_id)
+        
+        if not list_obj:
+            # If list not found, redirect to kanban home
+            return redirect('/kanban')
+            
+        board_id = list_obj.board_id
+        
+        # Redirect to the board view with the card highlighted
+        return redirect(f"/kanban/board/{board_id}?highlight_card={card_id}")
+    except Exception as e:
+        logger.error(f"Error navigating to card: {str(e)}")
+        # Redirect to kanban home in case of error
+        return redirect('/kanban')

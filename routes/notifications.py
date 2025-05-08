@@ -107,7 +107,7 @@ def notify_user(user_id, message, category='info', link=None):
     db.session.commit()
     
     # Import socketio from flask_socketio to avoid circular imports
-    from flask_socketio import current_app as app
+    from flask import current_app as app
     
     # Emit notification on default namespace using user_id room
     try:
