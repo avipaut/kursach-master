@@ -1,13 +1,15 @@
 # calendar_routes.py
 
-from flask import Blueprint, request, jsonify, render_template, current_app, session, g
+from flask import Blueprint, flash, request, jsonify, render_template, current_app, session, g
 from flask_login import login_required, current_user
-from routes.models import db, User, CalendarEvent
+from routes.models import db, User, CalendarEvent, Card, List
 from routes.zoom_service import EnhancedZoomService
 import json
 import logging
 from datetime import datetime, timedelta
 from functools import wraps
+from flask import redirect  # подсвечивается жёлтым
+
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -470,3 +472,71 @@ def update_calendar_settings():
     except Exception as e:
         logger.error(f"Error updating calendar settings: {str(e)}")
         return jsonify({"error": f"Failed to update calendar settings: {str(e)}"}), 500
+# Add an endpoint to handle navigation to cards from the calendar
+@calendar_bp.route('/card/<card_id>')
+@login_required
+def view_card(card_id):
+    """Redirect to the kanban board with the specific card highlighted"""
+    try:
+        # Check if card exists
+        card = Card.query.get_or_404(card_id)
+        
+        # Get the board ID from the card's list
+        board_id = card.list.board_id if card.list else None
+        
+        if not board_id:
+            return jsonify({"error": "Board not found for this card"}), 404
+
+        # Redirect to the kanban board with card ID parameter
+        return redirect(f"/kanban/board/{board_id}?card={card_id}")
+    except Exception as e:
+        logger.error(f"Error viewing card: {str(e)}")
+        return jsonify({"error": f"Failed to view card: {str(e)}"}), 500
+
+# You can also add a route to mark a card as completed directly from the calendar
+@calendar_bp.route('/card/<card_id>/complete', methods=['POST'])
+@login_required
+def complete_card(card_id):
+    """Mark a card as completed from the calendar"""
+    try:
+        # Check if card exists
+        card = Card.query.get_or_404(card_id)
+        
+        # Check permissions (assigned user or creator or admin)
+        if card.user_id != current_user.id and card.assigned_to != current_user.id and current_user.id not in [u.id for u in card.assigned_users] and not current_user.is_admin:
+            return jsonify({"error": "Недостаточно прав для изменения карточки"}), 403
+        
+        # Mark as completed
+        card.completed = True
+        db.session.commit()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Error completing card: {str(e)}")
+        db.session.rollback()
+        return jsonify({"error": f"Failed to complete card: {str(e)}"}), 500
+    
+
+@calendar_bp.route('/goto-card/<card_id>')
+@login_required
+def goto_card(card_id):
+    try:
+        # Find the card
+        card = Card.query.get_or_404(card_id)
+        
+        # Find the list and board
+        list_id = card.list_id
+        list_obj = List.query.get(list_id)
+        
+        if not list_obj:
+            # If list not found, redirect to kanban home
+            return redirect('/kanban')
+            
+        board_id = list_obj.board_id
+        
+        # Redirect to the board view with the card highlighted
+        return redirect(f"/kanban/board/{board_id}?highlight_card={card_id}")
+    except Exception as e:
+        logger.error(f"Error navigating to card: {str(e)}")
+        # Redirect to kanban home in case of error
+        return redirect('/kanban')

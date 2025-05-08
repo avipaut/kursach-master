@@ -1271,21 +1271,3 @@ def set_card_color(board_id, list_id, card_id):
 
 
 
-
-# Обновите модель Card в models.py, чтобы включить поле position в to_dict
-# Это обновление можно выполнить в runtime, если не хотите менять модель
-
-# Обновляем метод to_dict для включения позиции
-def update_card_to_dict():
-    if not hasattr(Card, '_original_to_dict'):
-        Card._original_to_dict = Card.to_dict
-        
-        def new_to_dict(self):
-            result = self._original_to_dict()
-            result['position'] = getattr(self, 'position', 0)
-            return result
-        
-        Card.to_dict = new_to_dict
-
-# Вызываем функцию для обновления метода to_dict
-update_card_to_dict()

@@ -6,7 +6,7 @@ import base64
 import json
 import logging
 from datetime import datetime, timedelta
-from routes.models import db, CalendarEvent, User, event_participants
+from routes.models import db, CalendarEvent, User, event_participants, Card
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +223,6 @@ class EnhancedZoomService:
                 zoom_url=web_url,
                 zoom_meeting_id=meeting_id,
                 zoom_password=password,
-                is_recorded=data.get("auto_record", False)
             )
             
             db.session.add(event)
@@ -571,32 +570,102 @@ class EnhancedZoomService:
             db.session.rollback()
             return False, f"Ошибка удаления события: {str(e)}"
             
+    # Add this function to the EnhancedZoomService class in zoom_service.py
+
     @staticmethod
     def get_events(user_id):
         """
         Get all events visible to the user:
         - All public events
         - All private events created by the user
+        - Only card deadlines where the user is assigned as responsible (no duplicates)
         """
         try:
             user = User.query.get(user_id)
             if not user:
                 return None, "Пользователь не найден"
                 
-            # Get all public events
-            public_events = CalendarEvent.query.filter_by(is_private=False).all()
+            # Get all public events (avoid events related to cards)
+            public_events = CalendarEvent.query.filter(
+                CalendarEvent.is_private == False,
+                ~CalendarEvent.title.like("%[DEADLINE]%")  # Exclude any existing card deadline events
+            ).all()
             
-            # Get all private events created by the user
-            private_events = CalendarEvent.query.filter_by(is_private=True, creator_id=user_id).all()
+            # Get all private events created by the user (avoid events related to cards)
+            private_events = CalendarEvent.query.filter(
+                CalendarEvent.is_private == True,
+                CalendarEvent.creator_id == user_id,
+                ~CalendarEvent.title.like("%[DEADLINE]%")  # Exclude any existing card deadline events
+            ).all()
             
-            # Combine and convert to dict
-            all_visible_events = public_events + private_events
-            return [event.to_dict() for event in all_visible_events], None
+            # Get ONLY cards where the user is assigned and has a deadline
+            cards_with_deadline = []
+            
+            # Check cards where user is directly assigned (assigned_to field)
+            direct_assigned_cards = Card.query.filter(
+                Card.assigned_to == user_id,
+                Card.deadline.isnot(None),
+                Card.completed == False
+            ).all()
+            cards_with_deadline.extend(direct_assigned_cards)
+            
+            # Check cards where user is in the assigned_users relationship
+            multi_assigned_cards = Card.query.filter(
+                Card.assigned_users.any(id=user_id),
+                Card.deadline.isnot(None),
+                Card.completed == False
+            ).all()
+            
+            # Add cards from multi-assignment if not already included
+            for card in multi_assigned_cards:
+                if card not in cards_with_deadline:
+                    cards_with_deadline.append(card)
+            
+            # Convert cards to calendar events
+            card_events = []
+            for card in cards_with_deadline:
+                # Create a calendar event object from the card
+                deadline_date = card.deadline
+                
+                # Set event end time to end of the day
+                end_time = datetime.combine(
+                    deadline_date.date(),
+                    datetime.max.time()
+                )
+                
+                # Get the board and list names for context
+                list_name = card.list.name if card.list else "Unknown List"
+                board_name = card.list.board.name if card.list and card.list.board else "Unknown Board"
+                
+                # Create an event dict in the format expected by the frontend
+                card_event = {
+                    'id': f"card_{card.id}",  # Prefix with 'card_' to differentiate from regular events
+                    'title': f"[DEADLINE] {card.title}",
+                    'start': deadline_date.isoformat(),
+                    'end': end_time.isoformat(),
+                    'description': f"Card: {card.title}\nDescription: {card.description}\nBoard: {board_name}\nList: {list_name}",
+                    'type': 'task',
+                    'color': card.custom_color or "#FF5722",  # Use card color or default to orange
+                    'allDay': True,
+                    'creator_id': card.user_id,
+                    'creator_name': card.user.username if card.user else "Unknown",
+                    'is_card': True,  # Flag to identify this as a card deadline
+                    'card_id': card.id,
+                    'board_id': card.list.board_id if card.list and card.list.board else None,
+                    'list_id': card.list_id,
+                    'priority': card.priority.value if card.priority else 'low'
+                }
+                card_events.append(card_event)
+            
+            # Combine regular events and card events
+            all_visible_events = [event.to_dict() for event in (public_events + private_events)]
+            all_visible_events.extend(card_events)
+            
+            return all_visible_events, None
             
         except Exception as e:
             logger.error(f"Error getting events: {str(e)}")
             return None, f"Ошибка получения событий: {str(e)}"
-    
     @staticmethod
     def get_meeting_participants(event_id):
         """Get list of participants for a meeting"""

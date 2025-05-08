@@ -24,6 +24,8 @@ from routes.notifications import notifications_bp, add_notification
 from routes.admin_panel import admin_bp
 from routes.profile import profile_bp  # Импортируем Profile Blueprint
 from routes.card_assignment import card_assignment_bp, init_card_assignment_db  # Import new card assignment module
+# Добавляем импорт для APScheduler
+from flask_apscheduler import APScheduler
 
 # Инициализация Flask
 app = Flask(__name__)
@@ -45,6 +47,13 @@ app.config['SECRET_KEY'] = 'your_secret_key_here'
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=14)  # Устанавливаем длительное время жизни cookie
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
+
+# Настройка для APScheduler
+app.config['SCHEDULER_API_ENABLED'] = True
+
+# Инициализация APScheduler
+scheduler = APScheduler()
+scheduler.init_app(app)
 
 # Инициализация LoginManager
 login_manager = LoginManager()
@@ -190,11 +199,72 @@ def check_login():
         print(f"Redirecting unauthenticated user from {request.path} to login")
         return redirect('/login')
 
+# Определение задачи для проверки предстоящих встреч
+def check_upcoming_events():
+    """
+    Проверяет предстоящие события и отправляет уведомления за час до начала
+    """
+    from datetime import datetime, timedelta
+    from routes.models import CalendarEvent
+    from routes.notifications import notify_user
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    try:
+        # Текущее время
+        now = datetime.utcnow()
+        
+        # Интервал времени для проверки (события, начинающиеся через 55-65 минут)
+        # Используем 10-минутное окно, чтобы учитывать события, даже если задача выполняется каждые 5-10 минут
+        start_time_min = now + timedelta(minutes=55)
+        start_time_max = now + timedelta(minutes=65)
+        
+        # Находим события, начинающиеся в ближайший час
+        upcoming_events = CalendarEvent.query.filter(
+            CalendarEvent.start_time >= start_time_min,
+            CalendarEvent.start_time <= start_time_max,
+            CalendarEvent.event_type.in_(['zoom', 'zoom_recurring'])
+        ).all()
+        
+        logger.info(f"Найдено {len(upcoming_events)} предстоящих событий для отправки напоминаний")
+        
+        # Отправляем уведомления участникам
+        for event in upcoming_events:
+            event_time = event.start_time.strftime("%H:%M")
+            
+            # Уведомляем создателя
+            message = f"Напоминание: Ваша конференция \"{event.title}\" начнется через час (в {event_time})"
+            link = f"/calendar?event={event.id}"
+            notify_user(event.creator_id, message, "warning", link)
+            
+            # Уведомляем участников
+            for participant in event.participants:
+                if participant.id != event.creator_id:  # Пропускаем создателя, так как он уже получил уведомление
+                    message = f"Напоминание: Конференция \"{event.title}\" начнется через час (в {event_time})"
+                    notify_user(participant.id, message, "warning", link)
+            
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка в задаче check_upcoming_events: {str(e)}")
+        return False
+
 # Вызываем функции инициализации в контексте приложения
 with app.app_context():
     db.create_all()
     create_initial_roles_and_admin()
     init_card_assignment_db()  # Initialize card assignment module
+    
+    # Регистрируем задачу проверки предстоящих событий
+    scheduler.add_job(
+        id='check_upcoming_events',
+        func=check_upcoming_events,
+        trigger='interval',
+        minutes=5,
+        replace_existing=True
+    )
+    
+    # Запускаем планировщик
+    scheduler.start()
 
 UPLOAD_FOLDER = "uploaded_documents"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
