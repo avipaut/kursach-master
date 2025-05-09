@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendar & Zoom Meetings</title>
+    <title>Календарь и конференции</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet">
@@ -64,15 +64,6 @@
             font-weight: 600;
         }
         
-        .badge-recording {
-            background-color: #F44336;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        
         .badge-personal {
             background-color: #9C27B0;
             color: white;
@@ -103,6 +94,7 @@
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            padding: 1rem;
         }
         
         .modal-content {
@@ -111,7 +103,36 @@
             padding: 1.5rem;
             width: 100%;
             max-width: 32rem;
+            max-height: 90vh;
+            overflow-y: auto;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Word break for long text */
+        .break-words {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        /* Truncate text with ellipsis */
+        .truncate-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Link styling */
+        .zoom-link {
+            word-break: break-all;
+            color: #2196F3;
+            display: inline-block;
+            max-width: 100%;
+        }
+
+        .zoom-link:hover {
+            text-decoration: underline;
+            color: #1976D2;
         }
         
         /* Select2 custom styling */
@@ -123,6 +144,25 @@
         .select2-container--default.select2-container--focus .select2-selection--multiple {
             border-color: #2196F3;
             outline: none;
+        }
+
+        /* Modal scrollbar customization */
+        .modal-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .modal-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .modal-content::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .modal-content::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
     </style>
 </head>
@@ -138,19 +178,16 @@
             <div class="bg-white p-4 flex justify-between items-center border-b">
                 <div class="flex items-center">
                     <i class="far fa-calendar text-red-500 text-xl mr-2"></i>
-                    <h2 class="text-xl font-bold">Calendar</h2>
+                    <h2 class="text-xl font-bold">Календарь</h2>
                 </div>
                 <div class="flex space-x-2">
                     <button onclick="toggleForm('task')" class="flex items-center bg-white border border-red-500 text-red-500 rounded-md px-4 py-2 hover:bg-red-50">
-                        <i class="fas fa-plus mr-2"></i> New Task
+                        <i class="fas fa-plus mr-2"></i> Новая задача
                     </button>
                     {% if current_user.is_admin %}
                     <button onclick="toggleForm('zoom')" class="flex items-center bg-red-500 text-white rounded-md px-4 py-2 hover:bg-red-600">
-                        <i class="fas fa-plus mr-2"></i> New Zoom Meeting
+                        <i class="fas fa-plus mr-2"></i> Новая конференция
                     </button>
-                    <a href="{{ url_for('calendar.recordings_archive') }}" class="flex items-center bg-blue-500 text-white rounded-md px-4 py-2 hover:bg-blue-600">
-                        <i class="fas fa-video mr-2"></i> Recordings
-                    </a>
                     {% endif %}
                 </div>
             </div>
@@ -166,20 +203,20 @@
                         <button id="next-button" class="bg-red-500 text-white px-3 py-2 rounded-r-md hover:bg-red-600">
                             <i class="fas fa-chevron-right"></i>
                         </button>
-                        <button id="today-button" class="ml-2 bg-pink-100 text-red-500 px-4 py-2 rounded-md hover:bg-pink-200">
-                            today
+                        <button id="today-button" class="ml-2 bg-red-100 text-red-500 px-4 py-2 rounded-md hover:bg-red-200">
+                            Сегодня
                         </button>
                     </div>
-                    <h2 id="current-date-title" class="text-2xl font-bold">February 2025</h2>
+                    <h2 id="current-date-title" class="text-2xl font-bold">Февраль 2025</h2>
                     <div class="flex">
                         <button id="month-view" class="bg-red-500 text-white px-4 py-2 rounded-l-md hover:bg-red-600">
-                            month
+                            Месяц
                         </button>
                         <button id="week-view" class="bg-red-100 text-red-500 px-4 py-2 hover:bg-red-200">
-                            week
+                            Неделя
                         </button>
                         <button id="day-view" class="bg-red-100 text-red-500 px-4 py-2 rounded-r-md hover:bg-red-200">
-                            day
+                            День
                         </button>
                     </div>
                 </div>
@@ -194,45 +231,45 @@
     <div id="task-form-container" class="modal-backdrop hidden">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Create Personal Task</h2>
-                <button onclick="toggleForm('close')" class="text-gray-500 hover:text-gray-700">
+                <h2 class="text-xl font-semibold truncate-text pr-2">Создать личную задачу</h2>
+                <button onclick="toggleForm('close')" class="text-gray-500 hover:text-gray-700 flex-shrink-0">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <form id="task-form" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Title</label>
-                    <input type="text" id="task-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700">Название</label>
+                    <input type="text" id="task-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Start Date</label>
-                        <input type="date" id="task-start-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label class="block text-sm font-medium text-gray-700">Дата начала</label>
+                        <input type="date" id="task-start-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Start Time</label>
-                        <input type="time" id="task-start-time" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label class="block text-sm font-medium text-gray-700">Время начала</label>
+                        <input type="time" id="task-start-time" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Description</label>
-                    <textarea id="task-description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    <label class="block text-sm font-medium text-gray-700">Описание</label>
+                    <textarea id="task-description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"></textarea>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Color</label>
-                    <input type="color" id="task-color" value="#3788d8" class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700">Цвет</label>
+                    <input type="color" id="task-color" value="#C71320" class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                 </div>
 
                 <div class="flex items-center">
-                    <input type="checkbox" id="task-all-day" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                    <label for="task-all-day" class="ml-2 text-sm text-gray-700">All Day</label>
+                    <input type="checkbox" id="task-all-day" class="rounded border-gray-300 text-red-600 focus:ring-red-500">
+                    <label for="task-all-day" class="ml-2 text-sm text-gray-700">Весь день</label>
                 </div>
 
                 <button type="submit" class="w-full bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
-                    Create Task
+                    Создать задачу
                 </button>
             </form>
         </div>
@@ -242,52 +279,47 @@
     <div id="zoom-form-container" class="modal-backdrop hidden">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Create Zoom Meeting</h2>
-                <button onclick="toggleForm('close')" class="text-gray-500 hover:text-gray-700">
+                <h2 class="text-xl font-semibold truncate-text pr-2">Создать конференцию</h2>
+                <button onclick="toggleForm('close')" class="text-gray-500 hover:text-gray-700 flex-shrink-0">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <form id="zoom-form" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Meeting Topic</label>
-                    <input type="text" id="zoom-topic" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700">Тема конференции</label>
+                    <input type="text" id="zoom-topic" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Date</label>
-                        <input type="date" id="zoom-start-date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label class="block text-sm font-medium text-gray-700">Дата</label>
+                        <input type="date" id="zoom-start-date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Time</label>
-                        <input type="time" id="zoom-start-time" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label class="block text-sm font-medium text-gray-700">Время</label>
+                        <input type="time" id="zoom-start-time" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Duration (minutes)</label>
-                    <input type="number" id="zoom-duration" required min="15" step="15" value="60" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700">Продолжительность (минуты)</label>
+                    <input type="number" id="zoom-duration" required min="15" step="15" value="60" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Agenda</label>
-                    <textarea id="zoom-agenda" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    <label class="block text-sm font-medium text-gray-700">Повестка</label>
+                    <textarea id="zoom-agenda" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"></textarea>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Participants</label>
-                    <select id="zoom-participants" multiple class="participants-select mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700">Участники</label>
+                    <select id="zoom-participants" multiple class="participants-select mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                         <!-- Options will be populated via AJAX -->
                     </select>
                 </div>
 
-                <div class="flex items-center">
-                    <input type="checkbox" id="zoom-auto-record" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                    <label for="zoom-auto-record" class="ml-2 text-sm text-gray-700">Auto-Record Meeting</label>
-                </div>
-
                 <button type="submit" class="w-full bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
-                    Create Zoom Meeting
+                    Создать конференцию
                 </button>
             </form>
         </div>
@@ -304,22 +336,22 @@
     <div id="add-participants-modal" class="modal-backdrop hidden">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Add Participants</h2>
-                <button onclick="closeAddParticipantsModal()" class="text-gray-500 hover:text-gray-700">
+                <h2 class="text-xl font-semibold truncate-text pr-2">Добавить участников</h2>
+                <button onclick="closeAddParticipantsModal()" class="text-gray-500 hover:text-gray-700 flex-shrink-0">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <form id="add-participants-form" class="space-y-4">
                 <input type="hidden" id="event-id-for-participants">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Select Participants</label>
-                    <select id="add-participants-select" multiple class="participants-select mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700">Выберите участников</label>
+                    <select id="add-participants-select" multiple class="participants-select mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
                         <!-- Options will be populated via AJAX -->
                     </select>
                 </div>
 
-                <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                    Add Participants
+                <button type="submit" class="w-full bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                    Добавить участников
                 </button>
             </form>
         </div>
@@ -329,24 +361,24 @@
     <div id="complete-card-modal" class="modal-backdrop hidden">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Complete Card</h2>
-                <button onclick="closeCompleteCardModal()" class="text-gray-500 hover:text-gray-700">
+                <h2 class="text-xl font-semibold truncate-text pr-2">Завершить карточку</h2>
+                <button onclick="closeCompleteCardModal()" class="text-gray-500 hover:text-gray-700 flex-shrink-0">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="p-4 bg-green-50 border border-green-200 rounded-md mb-4">
-                <p>Are you sure you want to mark this card as complete?</p>
-                <p class="mt-2 text-sm text-gray-600">This will update the card status in the Kanban board.</p>
+                <p>Вы уверены, что хотите отметить эту карточку как завершенную?</p>
+                <p class="mt-2 text-sm text-gray-600">Это обновит статус карточки на Канбан доске.</p>
             </div>
             <div id="card-to-complete-info" class="mb-4">
                 <!-- Card info will be populated dynamically -->
             </div>
             <div class="flex justify-end space-x-2">
                 <button onclick="closeCompleteCardModal()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
-                    Cancel
+                    Отмена
                 </button>
                 <button onclick="confirmCompleteCard()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-                    Mark as Complete
+                    Отметить как завершенную
                 </button>
             </div>
         </div>
@@ -365,7 +397,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize select2 for participants selectors
             $('.participants-select').select2({
-                placeholder: 'Select participants',
+                placeholder: 'Выберите участников',
                 width: '100%'
             });
             
@@ -390,6 +422,7 @@
                 selectable: true,
                 selectMirror: true,
                 dayMaxEvents: true,
+                locale: 'ru', // Установка русской локализации
                 select: function(info) {
                     handleDateSelect(info);
                 },
@@ -509,18 +542,18 @@
                     
                     // Refresh select2
                     $('#zoom-participants').select2({
-                        placeholder: 'Select participants',
+                        placeholder: 'Выберите участников',
                         width: '100%'
                     });
                     
                     $('#add-participants-select').select2({
-                        placeholder: 'Select participants',
+                        placeholder: 'Выберите участников',
                         width: '100%'
                     });
                 })
                 .catch(error => {
-                    console.error('Error loading users:', error);
-                    showToast('Error loading users', true);
+                    console.error('Ошибка загрузки пользователей:', error);
+                    showToast('Ошибка загрузки пользователей', true);
                 });
         }
         
@@ -561,8 +594,8 @@
             if (view.type === 'timeGridWeek') {
                 const start = calendar.view.activeStart;
                 const end = calendar.view.activeEnd;
-                const startDate = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                const endDate = new Date(end.getTime() - 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const startDate = start.toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' });
+                const endDate = new Date(end.getTime() - 86400000).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', year: 'numeric' });
                 title.textContent = `${startDate} - ${endDate}`;
             } else {
                 title.textContent = calendar.view.title;
@@ -634,20 +667,20 @@
             .then(response => {
                 if (!response.ok) {
                     return response.json().then(errorData => {
-                        throw new Error(errorData.error || 'Unknown error');
+                        throw new Error(errorData.error || 'Неизвестная ошибка');
                     });
                 }
                 return response.json();
             })
             .then(data => {
                 calendar.addEvent(data);
-                showToast('Task created successfully');
+                showToast('Задача успешно создана');
                 resetTaskForm();
                 toggleForm('close');
             })
             .catch(error => {
-                console.error('Error:', error);
-                showToast(`Error creating task: ${error.message}`, true);
+                console.error('Ошибка:', error);
+                showToast(`Ошибка при создании задачи: ${error.message}`, true);
             });
         }
 
@@ -663,7 +696,6 @@
                 start_time: `${startDate}T${startTime}:00Z`,
                 duration: document.getElementById('zoom-duration').value,
                 agenda: document.getElementById('zoom-agenda').value,
-                auto_record: document.getElementById('zoom-auto-record').checked,
                 participants: participants
             };
 
@@ -677,20 +709,20 @@
             .then(response => {
                 if (!response.ok) {
                     return response.json().then(errorData => {
-                        throw new Error(errorData.error || 'Unknown error');
+                        throw new Error(errorData.error || 'Неизвестная ошибка');
                     });
                 }
                 return response.json();
             })
             .then(data => {
                 calendar.addEvent(data.event);
-                showToast('Zoom meeting created successfully');
+                showToast('Конференция успешно создана');
                 resetZoomForm();
                 toggleForm('close');
             })
             .catch(error => {
-                console.error('Error:', error);
-                showToast(`Error creating meeting: ${error.message}`, true);
+                console.error('Ошибка:', error);
+                showToast(`Ошибка при создании конференции: ${error.message}`, true);
             });
         }
 
@@ -706,14 +738,11 @@
             
             const eventType = event.extendedProps.type || 'task';
             const isZoomEvent = eventType === 'zoom';
-            const isRecorded = event.extendedProps.is_recorded;
-            const recordingUrl = event.extendedProps.recording_url;
-            const hasRecordings = isRecorded && recordingUrl;
             
             // Create buttons based on event type and user permissions
             let buttonsHtml = `
                 <button onclick="closeEventDetails()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
-                    Close
+                    Закрыть
                 </button>
             `;
             
@@ -722,18 +751,18 @@
             const currentUserId = {{ current_user.id }};
             if (creatorId === currentUserId || isAdmin) {
                 buttonsHtml = `
-                    <button onclick="deleteEvent()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 mr-2">Delete</button>
-                    <button onclick="closeEventDetails()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Close</button>
+                    <button onclick="deleteEvent()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 mr-2">Удалить</button>
+                    <button onclick="closeEventDetails()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Закрыть</button>
                 `;
             }
             
             // Admin can get host URL and add participants to Zoom events
             if (isAdmin && isZoomEvent) {
                 buttonsHtml = `
-                    <button onclick="getHostUrl()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">Get Host URL</button>
-                    <button onclick="showAddParticipantsModal()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 mr-2">Add Participants</button>
-                    <button onclick="deleteEvent()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 mr-2">Delete</button>
-                    <button onclick="closeEventDetails()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Close</button>
+                    <button onclick="getHostUrl()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">Ссылка организатора</button>
+                    <button onclick="showAddParticipantsModal()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 mr-2">Добавить участников</button>
+                    <button onclick="deleteEvent()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 mr-2">Удалить</button>
+                    <button onclick="closeEventDetails()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Закрыть</button>
                 `;
             }
             
@@ -742,7 +771,7 @@
             if (event.extendedProps.participants && event.extendedProps.participants.length > 0) {
                 participantsHtml = `
                     <div class="mt-4">
-                        <h4 class="font-medium text-gray-700">Participants:</h4>
+                        <h4 class="font-medium text-gray-700">Участники:</h4>
                         <ul class="mt-2 pl-5 list-disc">
                             ${event.extendedProps.participants.map(user => `<li>${user.username}</li>`).join('')}
                         </ul>
@@ -753,25 +782,26 @@
             // Create content with appropriate details based on event type
             const content = `
                 <div>
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold">${event.title}</h2>
-                        <div>
-                            ${isZoomEvent ? '<span class="badge-zoom mr-2">Zoom</span>' : ''}
-                            ${eventType === 'personal' ? '<span class="badge-personal">Personal</span>' : ''}
-                            ${hasRecordings ? '<span class="badge-recording ml-2">Recorded</span>' : ''}
+                    <div class="flex justify-between items-start mb-4">
+                        <h2 class="text-xl font-bold break-words pr-2" style="word-break: break-word; max-width: 90%;">${event.title}</h2>
+                        <div class="flex-shrink-0 ml-2">
+                            ${isZoomEvent ? '<span class="badge-zoom mr-2">Конференция</span>' : ''}
+                            ${eventType === 'personal' ? '<span class="badge-personal">Личное</span>' : ''}
                         </div>
                     </div>
-                    <p class="mb-2"><strong>Start:</strong> ${event.start.toLocaleString()}</p>
-                    ${event.end ? `<p class="mb-2"><strong>End:</strong> ${event.end.toLocaleString()}</p>` : ''}
-                    ${event.extendedProps.description ? `<p class="mb-2"><strong>Description:</strong> ${event.extendedProps.description}</p>` : ''}
+                    <p class="mb-2"><strong>Начало:</strong> ${event.start.toLocaleString('ru-RU')}</p>
+                    ${event.end ? `<p class="mb-2"><strong>Окончание:</strong> ${event.end.toLocaleString('ru-RU')}</p>` : ''}
+                    ${event.extendedProps.description ? `<p class="mb-2"><strong>Описание:</strong> <span class="break-words">${event.extendedProps.description}</span></p>` : ''}
                     ${event.extendedProps.zoom_url ? `
-                        <p class="mb-4"><strong>Zoom URL:</strong> <a href="${event.extendedProps.zoom_url}" target="_blank" class="text-blue-500 hover:text-blue-700">${event.extendedProps.zoom_url}</a></p>
-                    ` : ''}
-                    ${hasRecordings ? `
-                        <p class="mb-4"><strong>Recording:</strong> <a href="${recordingUrl}" target="_blank" class="text-blue-500 hover:text-blue-700">View Recording</a></p>
+                        <div class="mb-4">
+                            <strong>Ссылка на конференцию:</strong>
+                            <div class="mt-1 p-2 bg-gray-50 rounded-md border border-gray-200 break-words">
+                                <a href="${event.extendedProps.zoom_url}" target="_blank" class="zoom-link">${event.extendedProps.zoom_url}</a>
+                            </div>
+                        </div>
                     ` : ''}
                     ${participantsHtml}
-                    <div class="flex justify-end space-x-2 mt-4">
+                    <div class="flex flex-wrap justify-end gap-2 mt-4">
                         ${buttonsHtml}
                     </div>
                 </div>
@@ -791,34 +821,36 @@
             // Create priority badge with appropriate color
             let priorityBadge = '';
             if (priority === 'high') {
-                priorityBadge = '<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full">High Priority</span>';
+                priorityBadge = '<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full">Высокий приоритет</span>';
             } else if (priority === 'medium') {
-                priorityBadge = '<span class="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">Medium Priority</span>';
+                priorityBadge = '<span class="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">Средний приоритет</span>';
             } else {
-                priorityBadge = '<span class="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">Low Priority</span>';
+                priorityBadge = '<span class="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">Низкий приоритет</span>';
             }
             
             // Create content for card details
             const content = `
                 <div>
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold">${event.title}</h2>
-                        <div>
-                            <span class="bg-orange-500 text-white text-xs px-2 py-1 rounded-full mr-2">Card Deadline</span>
+                    <div class="flex justify-between items-start mb-4">
+                        <h2 class="text-xl font-bold break-words pr-2" style="word-break: break-word; max-width: 90%;">${event.title}</h2>
+                        <div class="flex-shrink-0 ml-2 flex flex-wrap gap-1">
+                            <span class="bg-orange-500 text-white text-xs px-2 py-1 rounded-full">Дедлайн</span>
                             ${priorityBadge}
                         </div>
                     </div>
-                    <p class="mb-2"><strong>Deadline:</strong> ${event.start.toLocaleDateString()}</p>
-                    <div class="mt-4 mb-4 p-4 bg-gray-50 rounded-md border border-gray-200">
+                    <p class="mb-2"><strong>Срок:</strong> ${event.start.toLocaleDateString('ru-RU')}</p>
+                    <div class="mt-4 mb-4 p-4 bg-gray-50 rounded-md border border-gray-200 break-words overflow-auto" style="max-height: 200px;">
                         ${event.extendedProps.description.replace(/\n/g, '<br>')}
                     </div>
-                    <div class="flex justify-end space-x-2 mt-4">
-                        <button onclick="showCompleteCardModal(${cardId})" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 mr-2">
-                            Mark as Complete
+                    <div class="flex flex-wrap justify-end gap-2 mt-4">
+                        <button onclick="goToCard(${cardId})" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                            На карточку
                         </button>
-                        
+                        <button onclick="showCompleteCardModal(${cardId})" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                            Завершить
+                        </button>
                         <button onclick="closeEventDetails()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
-                            Close
+                            Закрыть
                         </button>
                     </div>
                 </div>
@@ -838,8 +870,8 @@
             const cardInfoDiv = document.getElementById('card-to-complete-info');
             cardInfoDiv.innerHTML = `
                 <div class="p-3 border rounded-md">
-                    <h3 class="font-medium">${cardEvent.title}</h3>
-                    <p class="text-sm text-gray-600 mt-1">${cardEvent.extendedProps.description.substring(0, 100)}${cardEvent.extendedProps.description.length > 100 ? '...' : ''}</p>
+                    <h3 class="font-medium break-words">${cardEvent.title}</h3>
+                    <p class="text-sm text-gray-600 mt-1 break-words">${cardEvent.extendedProps.description.substring(0, 100)}${cardEvent.extendedProps.description.length > 100 ? '...' : ''}</p>
                 </div>
             `;
             
@@ -868,7 +900,7 @@
             .then(response => {
                 if (!response.ok) {
                     return response.json().then(errorData => {
-                        throw new Error(errorData.error || 'Unknown error');
+                        throw new Error(errorData.error || 'Неизвестная ошибка');
                     });
                 }
                 return response.json();
@@ -879,23 +911,16 @@
                     currentEvent.remove();
                 }
                 
-                showToast('Card marked as complete');
+                showToast('Карточка отмечена как завершенная');
                 closeCompleteCardModal();
                 closeEventDetails();
             })
             .catch(error => {
-                console.error('Error:', error);
-                showToast(`Error completing card: ${error.message}`, true);
+                console.error('Ошибка:', error);
+                showToast(`Ошибка завершения карточки: ${error.message}`, true);
             });
         }
 
-        function goToCard(cardId) {
-    // Close the modals
-    closeEventDetails();
-    
-    // Navigate to the card using the correct endpoint
-    window.location.href = `/calendar/goto-card/${cardId}`;
-}
         function closeEventDetails() {
             document.getElementById('event-modal-container').classList.add('hidden');
             currentEvent = null;
@@ -938,20 +963,20 @@
             .then(response => {
                 if (!response.ok) {
                     return response.json().then(errorData => {
-                        throw new Error(errorData.error || 'Unknown error');
+                        throw new Error(errorData.error || 'Неизвестная ошибка');
                     });
                 }
                 return response.json();
             })
             .then(data => {
-                showToast('Participants added successfully');
+                showToast('Участники успешно добавлены');
                 closeAddParticipantsModal();
                 closeEventDetails();
                 calendar.refetchEvents(); // Refresh to get updated participants
             })
             .catch(error => {
-                console.error('Error:', error);
-                showToast(`Error adding participants: ${error.message}`, true);
+                console.error('Ошибка:', error);
+                showToast(`Ошибка добавления участников: ${error.message}`, true);
             });
         }
         
@@ -962,7 +987,7 @@
                 .then(response => {
                     if (!response.ok) {
                         return response.json().then(errorData => {
-                            throw new Error(errorData.error || 'Unknown error');
+                            throw new Error(errorData.error || 'Неизвестная ошибка');
                         });
                     }
                     return response.json();
@@ -973,45 +998,45 @@
                         const hostUrlDiv = document.createElement('div');
                         hostUrlDiv.className = 'mt-4 p-4 bg-blue-50 border border-blue-200 rounded';
                         hostUrlDiv.innerHTML = `
-                            <p class="font-medium">Host URL (with admin privileges):</p>
-                            <p class="mt-2 break-all text-blue-600">
-                                <a href="${data.host_url}" target="_blank">${data.host_url}</a>
-                            </p>
-                            <p class="mt-2 text-sm text-gray-500">This URL provides host controls. Use it to start the meeting.</p>
+                            <p class="font-medium">Ссылка организатора (с правами администратора):</p>
+                            <div class="mt-2 p-2 bg-white rounded border border-blue-100 break-words">
+                                <a href="${data.host_url}" target="_blank" class="zoom-link">${data.host_url}</a>
+                            </div>
+                            <p class="mt-2 text-sm text-gray-500">Эта ссылка предоставляет функции организатора. Используйте ее для начала конференции.</p>
                         `;
                         
                         document.getElementById('event-modal-content').appendChild(hostUrlDiv);
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    showToast(`Error getting host URL: ${error.message}`, true);
+                    console.error('Ошибка:', error);
+                    showToast(`Ошибка получения ссылки организатора: ${error.message}`, true);
                 });
         }
 
         function deleteEvent() {
             if (!currentEvent) return;
 
-            if (confirm('Are you sure you want to delete this event?')) {
+            if (confirm('Вы уверены, что хотите удалить это событие?')) {
                 fetch(`/calendar/event/${currentEvent.id}`, {
                     method: 'DELETE'
                 })
                 .then(response => {
                     if (!response.ok) {
                         return response.json().then(errorData => {
-                            throw new Error(errorData.error || 'Unknown error');
+                            throw new Error(errorData.error || 'Неизвестная ошибка');
                         });
                     }
                     return response.json();
                 })
                 .then(data => {
                     currentEvent.remove();
-                    showToast('Event deleted');
+                    showToast('Событие удалено');
                     closeEventDetails();
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    showToast(`Error deleting event: ${error.message}`, true);
+                    console.error('Ошибка:', error);
+                    showToast(`Ошибка удаления события: ${error.message}`, true);
                 });
             }
         }
@@ -1032,17 +1057,17 @@
             .then(response => {
                 if (!response.ok) {
                     return response.json().then(errorData => {
-                        throw new Error(errorData.error || 'Unknown error');
+                        throw new Error(errorData.error || 'Неизвестная ошибка');
                     });
                 }
                 return response.json();
             })
             .then(data => {
-                showToast('Event updated');
+                showToast('Событие обновлено');
             })
             .catch(error => {
-                console.error('Error:', error);
-                showToast(`Error updating event: ${error.message}`, true);
+                console.error('Ошибка:', error);
+                showToast(`Ошибка обновления события: ${error.message}`, true);
                 calendar.refetchEvents();
             });
         }
@@ -1067,6 +1092,29 @@
             document.getElementById('zoom-form').reset();
             $('#zoom-participants').val(null).trigger('change');
         }
+        function goToCard(cardId) {
+    // Закрываем модальное окно календаря
+    closeEventDetails();
+    
+    console.log("Переход к карточке:", cardId);
+    
+    // Получаем board_id из event extendedProps
+    let boardId = null;
+    if (currentEvent && currentEvent.extendedProps) {
+        boardId = currentEvent.extendedProps.board_id;
+    }
+    
+    // Сохраняем ID карточки в localStorage для подсветки
+    localStorage.setItem('highlightCardId', cardId);
+    
+    // Корректный переход на страницу канбана с параметрами
+    if (boardId) {
+        window.location.href = `/kanban?board_id=${boardId}&highlight_card=${cardId}`;
+    } else {
+        // Если board_id не найден, используем серверный маршрут для определения доски
+        window.location.href = `/calendar/goto-card/${cardId}`;
+    }
+}
     </script>
 </body>
 </html>

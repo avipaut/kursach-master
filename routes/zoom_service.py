@@ -68,6 +68,7 @@ class EnhancedZoomService:
         except Exception as e:
             logger.error(f"Exception in get_access_token: {str(e)}")
             return None
+
     @staticmethod
     def get_zak_token(access_token):
         """Get ZAK token for host privileges with enhanced error handling"""
@@ -94,7 +95,7 @@ class EnhancedZoomService:
                 error_text = response.text
                 logger.error(f"ZAK token error: Status {response.status_code}, Response: {error_text}")
             
-            # Проверяем конкретные ошибки
+                # Проверяем конкретные ошибки
                 try:
                     error_data = response.json()
                     error_code = error_data.get("code")
@@ -113,7 +114,7 @@ class EnhancedZoomService:
                 
                 return None
                 
-        # Парсим результат
+            # Парсим результат
             try:
                 token_data = response.json()
                 zak_token = token_data.get("token")
@@ -130,6 +131,7 @@ class EnhancedZoomService:
         except Exception as e:
             logger.error(f"Exception in get_zak_token: {str(e)}")
             return None
+
     @staticmethod
     def create_meeting(data, creator_id, participant_ids=None):
         """
@@ -170,7 +172,7 @@ class EnhancedZoomService:
                     "join_before_host": True,  # Allow joining before host arrives
                     "mute_upon_entry": True,
                     "waiting_room": False,  # Disable waiting room for instant join
-                    "auto_recording": "cloud" if data.get("auto_record", False) else "none",  # Auto-record if requested
+                    "auto_recording": "none",  # Никогда не записывать
                     "alternative_hosts_email_notification": False,
                     "use_pmi": False,  # Don't use Personal Meeting ID
                     "approval_type": 0,  # Автоматическое одобрение
@@ -218,7 +220,7 @@ class EnhancedZoomService:
                 end_time=end_time,
                 description=data.get("agenda", ""),
                 event_type="zoom",
-                color="#2196F3",
+                color="#C71320",  # Изменен на C71320
                 creator_id=creator_id,
                 zoom_url=web_url,
                 zoom_meeting_id=meeting_id,
@@ -232,6 +234,11 @@ class EnhancedZoomService:
                 participants = User.query.filter(User.id.in_(participant_ids)).all()
                 for participant in participants:
                     event.participants.append(participant)
+            
+            # Добавляем самого создателя как участника, если его еще нет в списке
+            creator = User.query.get(creator_id)
+            if creator and creator not in event.participants:
+                event.participants.append(creator)
             
             db.session.commit()
             
@@ -249,95 +256,6 @@ class EnhancedZoomService:
             return None, f"Ошибка создания встречи Zoom: {str(e)}"
 
     @staticmethod
-    def get_meeting_recordings(meeting_id):
-        """Get recordings for a specific meeting"""
-        try:
-            access_token = EnhancedZoomService.get_access_token()
-            if not access_token:
-                return None, "Не удалось получить токен доступа"
-                
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-            
-            # Request recordings for this meeting
-            response = requests.get(
-                f"https://api.zoom.us/v2/meetings/{meeting_id}/recordings",
-                headers=headers
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Failed to get recordings: {response.text}")
-                # If meeting not found or no recordings yet
-                if response.status_code == 404:
-                    return [], None
-                return None, f"Ошибка получения записей: {response.text}"
-                
-            recordings_data = response.json()
-            
-            # Update the event with recording information
-            event = CalendarEvent.query.filter_by(zoom_meeting_id=meeting_id).first()
-            if event and recordings_data.get('recording_files'):
-                event.is_recorded = True
-                
-                # Get the share URL for the recording
-                recording_url = recordings_data.get('share_url')
-                if not recording_url and recordings_data.get('recording_files'):
-                    # Use the first recording file's play URL if no share URL
-                    recording_url = recordings_data['recording_files'][0].get('play_url')
-                
-                event.recording_url = recording_url
-                db.session.commit()
-            
-            return recordings_data, None
-            
-        except Exception as e:
-            logger.error(f"Error getting recordings: {str(e)}")
-            return None, f"Ошибка получения записей встречи: {str(e)}"
-    
-    @staticmethod
-    def get_all_recordings(from_date=None, to_date=None):
-        """Get all recordings within a date range"""
-        try:
-            access_token = EnhancedZoomService.get_access_token()
-            if not access_token:
-                return None, "Не удалось получить токен доступа"
-                
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-            
-            # Set default date range to last 30 days if not specified
-            if not from_date:
-                from_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
-            if not to_date:
-                to_date = datetime.utcnow().strftime("%Y-%m-%d")
-                
-            # Request all recordings in date range
-            params = {
-                "from": from_date,
-                "to": to_date
-            }
-            
-            response = requests.get(
-                "https://api.zoom.us/v2/users/me/recordings",
-                headers=headers,
-                params=params
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Failed to get recordings: {response.text}")
-                return None, f"Ошибка получения записей: {response.text}"
-                
-            return response.json(), None
-            
-        except Exception as e:
-            logger.error(f"Error getting recordings: {str(e)}")
-            return None, f"Ошибка получения записей: {str(e)}"
-
-    @staticmethod
     def add_participants_to_meeting(event_id, participant_ids):
         """
         Add participants to an existing meeting
@@ -349,7 +267,7 @@ class EnhancedZoomService:
         try:
             event = CalendarEvent.query.get(event_id)
             if not event or event.event_type != 'zoom':
-                return False, "Встреча не найдена или не является Zoom-конференцией"
+                return False, "Встреча не найдена или не является конференцией"
                 
             # Get users to add
             participants = User.query.filter(User.id.in_(participant_ids)).all()
@@ -380,7 +298,7 @@ class EnhancedZoomService:
                 
             if event.event_type != 'zoom' or not event.zoom_meeting_id:
                 logger.error(f"Event is not a Zoom meeting: {event_id}")
-                return None, "Это событие не является Zoom-конференцией"
+                return None, "Это событие не является конференцией"
             
             # Получаем токены для URL организатора
             logger.info(f"Generating host URL for meeting: {event.zoom_meeting_id}")
@@ -440,6 +358,7 @@ class EnhancedZoomService:
         except Exception as e:
             logger.error(f"Error generating host URL: {str(e)}")
             return None, f"Ошибка создания ссылки организатора: {str(e)}"
+
     @staticmethod
     def create_personal_task(data, user_id):
         """Create a personal task visible only to the creator"""
@@ -460,7 +379,7 @@ class EnhancedZoomService:
                 end_time=end_time,
                 description=data.get("description", ""),
                 event_type="personal",
-                color=data.get("color", "#3788d8"),
+                color=data.get("color", "#C71320"),  # Изменен на C71320
                 all_day=data.get("allDay", False),
                 creator_id=user_id,
                 is_private=True  # Mark as private so only the creator can see it
@@ -570,13 +489,11 @@ class EnhancedZoomService:
             db.session.rollback()
             return False, f"Ошибка удаления события: {str(e)}"
             
-    # Add this function to the EnhancedZoomService class in zoom_service.py
-
     @staticmethod
     def get_events(user_id):
         """
         Get all events visible to the user:
-        - All public events
+        - All events where the user is a participant
         - All private events created by the user
         - Only card deadlines where the user is assigned as responsible (no duplicates)
         """
@@ -585,17 +502,10 @@ class EnhancedZoomService:
             if not user:
                 return None, "Пользователь не найден"
                 
-            # Get all public events (avoid events related to cards)
-            public_events = CalendarEvent.query.filter(
-                CalendarEvent.is_private == False,
-                ~CalendarEvent.title.like("%[DEADLINE]%")  # Exclude any existing card deadline events
-            ).all()
-            
-            # Get all private events created by the user (avoid events related to cards)
-            private_events = CalendarEvent.query.filter(
-                CalendarEvent.is_private == True,
-                CalendarEvent.creator_id == user_id,
-                ~CalendarEvent.title.like("%[DEADLINE]%")  # Exclude any existing card deadline events
+            # Get all events where user is a participant or is the creator
+            calendar_events = CalendarEvent.query.filter(
+                (CalendarEvent.creator_id == user_id) |  # User is the creator
+                (CalendarEvent.participants.any(id=user_id))  # User is a participant
             ).all()
             
             # Get ONLY cards where the user is assigned and has a deadline
@@ -634,21 +544,21 @@ class EnhancedZoomService:
                 )
                 
                 # Get the board and list names for context
-                list_name = card.list.name if card.list else "Unknown List"
-                board_name = card.list.board.name if card.list and card.list.board else "Unknown Board"
+                list_name = card.list.name if card.list else "Неизвестный список"
+                board_name = card.list.board.name if card.list and card.list.board else "Неизвестная доска"
                 
                 # Create an event dict in the format expected by the frontend
                 card_event = {
                     'id': f"card_{card.id}",  # Prefix with 'card_' to differentiate from regular events
-                    'title': f"[DEADLINE] {card.title}",
+                    'title': f"[ДЕДЛАЙН] {card.title}",
                     'start': deadline_date.isoformat(),
                     'end': end_time.isoformat(),
-                    'description': f"Card: {card.title}\nDescription: {card.description}\nBoard: {board_name}\nList: {list_name}",
+                    'description': f"Карточка: {card.title}\nОписание: {card.description}\nДоска: {board_name}\nСписок: {list_name}",
                     'type': 'task',
                     'color': card.custom_color or "#FF5722",  # Use card color or default to orange
                     'allDay': True,
                     'creator_id': card.user_id,
-                    'creator_name': card.user.username if card.user else "Unknown",
+                    'creator_name': card.user.username if card.user else "Неизвестно",
                     'is_card': True,  # Flag to identify this as a card deadline
                     'card_id': card.id,
                     'board_id': card.list.board_id if card.list and card.list.board else None,
@@ -658,7 +568,7 @@ class EnhancedZoomService:
                 card_events.append(card_event)
             
             # Combine regular events and card events
-            all_visible_events = [event.to_dict() for event in (public_events + private_events)]
+            all_visible_events = [event.to_dict() for event in calendar_events]
             all_visible_events.extend(card_events)
             
             return all_visible_events, None
@@ -666,6 +576,7 @@ class EnhancedZoomService:
         except Exception as e:
             logger.error(f"Error getting events: {str(e)}")
             return None, f"Ошибка получения событий: {str(e)}"
+
     @staticmethod
     def get_meeting_participants(event_id):
         """Get list of participants for a meeting"""
@@ -679,10 +590,10 @@ class EnhancedZoomService:
             for participant in event.participants:
                 participants.append({
                     "id": participant.id,
-                    "name": participant.name,
+                    "name": participant.username,
                     "email": participant.email,
                     "avatar": participant.avatar,
-                    "department": participant.department.name if participant.department else None
+                    "department": participant.department.name if hasattr(participant, 'department') and participant.department else None
                 })
                 
             return participants, None
@@ -723,7 +634,7 @@ class EnhancedZoomService:
         try:
             event = CalendarEvent.query.get(event_id)
             if not event or event.event_type != 'zoom':
-                return None, "Встреча не найдена или не является Zoom-конференцией"
+                return None, "Встреча не найдена или не является конференцией"
             
             # Check if the user is the creator
             is_creator = (event.creator_id == user_id)
@@ -747,200 +658,3 @@ class EnhancedZoomService:
         except Exception as e:
             logger.error(f"Error generating join URL: {str(e)}")
             return None, f"Ошибка создания ссылки для подключения: {str(e)}"
-
-    @staticmethod
-    def create_recurring_meeting(data, creator_id, participant_ids=None):
-        """Create a recurring Zoom meeting"""
-        try:
-            # Get API access token
-            access_token = EnhancedZoomService.get_access_token()
-            if not access_token:
-                logger.error("Failed to get Zoom access token")
-                return None, "Не удалось получить токен доступа к Zoom API"
-
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-
-            # Set up recurrence information
-            recurrence_type = data.get("recurrence_type", "weekly")
-            recurrence_config = {
-                "type": 2,  # Weekly by default
-                "repeat_interval": data.get("repeat_interval", 1)
-            }
-            
-            # Configure type based on selection
-            if recurrence_type == "daily":
-                recurrence_config["type"] = 1
-            elif recurrence_type == "weekly":
-                recurrence_config["type"] = 2
-                recurrence_config["weekly_days"] = data.get("weekly_days", "1")  # Monday by default
-            elif recurrence_type == "monthly":
-                recurrence_config["type"] = 3
-                recurrence_config["monthly_day"] = data.get("monthly_day", 1)  # 1st day by default
-
-            # Configure end date if provided
-            if data.get("end_date_time"):
-                recurrence_config["end_date_time"] = data.get("end_date_time")
-            elif data.get("end_times"):
-                recurrence_config["end_times"] = data.get("end_times")
-                
-            # Configure meeting with recurrence
-            meeting_data = {
-                "topic": data["topic"],
-                "type": 8,  # Recurring meeting with fixed time
-                "start_time": data["start_time"],
-                "duration": data["duration"],
-                "timezone": "Europe/Moscow",
-                "recurrence": recurrence_config,
-                "settings": {
-                    "host_video": True,
-                    "participant_video": True,
-                    "join_before_host": True,
-                    "mute_upon_entry": True,
-                    "waiting_room": False,
-                    "auto_recording": "cloud" if data.get("auto_record", False) else "none",
-                    "alternative_hosts_email_notification": False,
-                    "use_pmi": False
-                }
-            }
-
-            # Create meeting via API
-            response = requests.post(
-                "https://api.zoom.us/v2/users/me/meetings",
-                headers=headers,
-                json=meeting_data
-            )
-
-            if response.status_code != 201:
-                logger.error(f"Zoom recurring meeting creation error: {response.text}")
-                return None, f"Ошибка создания повторяющейся встречи в Zoom: {response.text}"
-
-            meeting_response = response.json()
-            
-            # Convert start and end times for first occurrence
-            start_time = datetime.fromisoformat(data["start_time"].replace('Z', '+00:00'))
-            end_time = start_time + timedelta(minutes=int(data["duration"]))
-            
-            # Get meeting details
-            join_url = meeting_response['join_url']
-            meeting_id = meeting_response.get("id")
-            password = meeting_response.get("password")
-            
-            # Modify link for browser
-            web_url = join_url.replace("/j/", "/wc/join/")
-            
-            # Create database record for the recurring meeting series
-            event = CalendarEvent(
-                title=data["topic"],
-                start_time=start_time,
-                end_time=end_time,
-                description=data.get("agenda", ""),
-                event_type="zoom_recurring",
-                color="#9C27B0",  # Different color for recurring meetings
-                creator_id=creator_id,
-                zoom_url=web_url,
-                zoom_meeting_id=meeting_id,
-                zoom_password=password,
-                is_recorded=data.get("auto_record", False),
-                recurrence_info=json.dumps(recurrence_config)
-            )
-            
-            db.session.add(event)
-            
-            # Add participants if provided
-            if participant_ids:
-                participants = User.query.filter(User.id.in_(participant_ids)).all()
-                for participant in participants:
-                    event.participants.append(participant)
-            
-            db.session.commit()
-            
-            # Prepare response
-            result = {
-                "meeting": meeting_response,
-                "event": event.to_dict()
-            }
-            
-            return result, None
-            
-        except Exception as e:
-            logger.error(f"Error creating recurring Zoom meeting: {str(e)}")
-            db.session.rollback()
-            return None, f"Ошибка создания повторяющейся встречи Zoom: {str(e)}"
-
-    @staticmethod
-    def generate_meeting_report(event_id):
-        """Generate a detailed report for a meeting"""
-        try:
-            event = CalendarEvent.query.get(event_id)
-            if not event or not event.zoom_meeting_id:
-                return None, "Событие не найдено или не является Zoom-конференцией"
-                
-            # Get meeting details from Zoom API
-            access_token = EnhancedZoomService.get_access_token()
-            if not access_token:
-                return None, "Не удалось получить токен доступа к Zoom API"
-                
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-            
-            # Get meeting participants from Zoom
-            response = requests.get(
-                f"https://api.zoom.us/v2/past_meetings/{event.zoom_meeting_id}/participants",
-                headers=headers
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Failed to get meeting participants: {response.text}")
-                return None, f"Ошибка получения отчета о встрече: {response.text}"
-                
-            participants_data = response.json().get("participants", [])
-            
-            # Format report data
-            report = {
-                "meeting_id": event.zoom_meeting_id,
-                "meeting_topic": event.title,
-                "start_time": event.start_time.strftime("%Y-%m-%d %H:%M:%S"),
-                "end_time": event.end_time.strftime("%Y-%m-%d %H:%M:%S"),
-                "duration_minutes": int((event.end_time - event.start_time).total_seconds() / 60),
-                "participants": []
-            }
-            
-            # Add participant details
-            for participant in participants_data:
-                participant_info = {
-                    "name": participant.get("name", "Unknown"),
-                    "email": participant.get("user_email", ""),
-                    "join_time": participant.get("join_time", ""),
-                    "leave_time": participant.get("leave_time", ""),
-                    "duration_minutes": participant.get("duration", 0),
-                    "status": "Attended"
-                }
-                report["participants"].append(participant_info)
-                
-            # Add invited participants who didn't attend
-            invited_participants = event.participants
-            invited_emails = [p.email for p in invited_participants]
-            attended_emails = [p.get("email") for p in report["participants"] if p.get("email")]
-            
-            # Find participants who didn't attend
-            for participant in invited_participants:
-                if participant.email not in attended_emails:
-                    report["participants"].append({
-                        "name": participant.name,
-                        "email": participant.email,
-                        "join_time": "",
-                        "leave_time": "",
-                        "duration_minutes": 0,
-                        "status": "No-show"
-                    })
-            
-            return report, None
-            
-        except Exception as e:
-            logger.error(f"Error generating meeting report: {str(e)}")
-            return None, f"Ошибка создания отчета о встрече: {str(e)}"

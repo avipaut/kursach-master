@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import redirect  # подсвечивается жёлтым
+from flask import redirect
 from routes.notifications import notify_user
 
 
@@ -32,10 +32,8 @@ def admin_required(f):
 @login_required
 def calendar_page():
     return render_template('calendar_zoom/calendar.html')
-# Добавьте этот эндпоинт в calendar_routes.py
 
-# Исправленный эндпоинт users для calendar_routes.py
-
+# Get users for participant selection
 @calendar_bp.route('/users', methods=['GET'])
 @login_required
 def get_users():
@@ -67,7 +65,8 @@ def get_users():
         import traceback
         logger.error(traceback.format_exc())
         return jsonify({"error": f"Ошибка получения пользователей: {str(e)}"}), 500
-    # Get all events visible to the current user
+    
+# Get all events visible to the current user
 @calendar_bp.route('/events', methods=['GET'])
 @login_required
 def get_events():
@@ -77,8 +76,8 @@ def get_events():
             return jsonify({"error": error}), 500
         return jsonify(events)
     except Exception as e:
-        logger.error(f"Error getting events: {str(e)}")
-        return jsonify({"error": "Failed to get events"}), 500
+        logger.error(f"Ошибка получения событий: {str(e)}")
+        return jsonify({"error": "Не удалось получить события"}), 500
 
 # Create a personal task
 @calendar_bp.route('/task', methods=['POST'])
@@ -87,11 +86,11 @@ def create_task():
     try:
         data = request.json
         if not data:
-            return jsonify({"error": "No data provided"}), 400
+            return jsonify({"error": "Данные не предоставлены"}), 400
 
         required_fields = ['title', 'start']
         if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
+            return jsonify({"error": "Отсутствуют обязательные поля"}), 400
 
         # Create personal task
         task, error = EnhancedZoomService.create_personal_task(data, current_user.id)
@@ -100,8 +99,8 @@ def create_task():
             
         return jsonify(task)
     except Exception as e:
-        logger.error(f"Error creating task: {str(e)}")
-        return jsonify({"error": f"Failed to create task: {str(e)}"}), 500
+        logger.error(f"Ошибка создания задачи: {str(e)}")
+        return jsonify({"error": f"Не удалось создать задачу: {str(e)}"}), 500
 
 # Create a Zoom meeting
 @calendar_bp.route('/meeting', methods=['POST'])
@@ -110,11 +109,11 @@ def create_meeting():
     try:
         data = request.json
         if not data:
-            return jsonify({"error": "No data provided"}), 400
+            return jsonify({"error": "Данные не предоставлены"}), 400
 
         required_fields = ['topic', 'start_time', 'duration']
         if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
+            return jsonify({"error": "Отсутствуют обязательные поля"}), 400
             
         # Get participant IDs if provided
         participant_ids = data.get('participants', [])
@@ -143,8 +142,8 @@ def create_meeting():
             
         return jsonify(result)
     except Exception as e:
-        logger.error(f"Error creating meeting: {str(e)}")
-        return jsonify({"error": f"Failed to create meeting: {str(e)}"}), 500
+        logger.error(f"Ошибка создания конференции: {str(e)}")
+        return jsonify({"error": f"Не удалось создать конференцию: {str(e)}"}), 500
 
 # Add participants to a meeting
 @calendar_bp.route('/meeting/<event_id>/participants', methods=['POST'])
@@ -153,12 +152,12 @@ def add_participants(event_id):
     try:
         data = request.json
         if not data or 'participant_ids' not in data:
-            return jsonify({"error": "No participant IDs provided"}), 400
+            return jsonify({"error": "Не предоставлены ID участников"}), 400
             
         # Check if user is admin or event creator
         event = CalendarEvent.query.get(event_id)
         if not event:
-            return jsonify({"error": "Event not found"}), 404
+            return jsonify({"error": "Событие не найдено"}), 404
             
         if event.creator_id != current_user.id and not current_user.is_admin:
             return jsonify({"error": "Недостаточно прав"}), 403
@@ -185,8 +184,8 @@ def add_participants(event_id):
             
         return jsonify({"success": True})
     except Exception as e:
-        logger.error(f"Error adding participants: {str(e)}")
-        return jsonify({"error": f"Failed to add participants: {str(e)}"}), 500
+        logger.error(f"Ошибка добавления участников: {str(e)}")
+        return jsonify({"error": f"Не удалось добавить участников: {str(e)}"}), 500
 
 
 # Get host URL for a meeting (creator or admin)
@@ -207,46 +206,8 @@ def get_host_url(event_id):
             
         return jsonify(result)
     except Exception as e:
-        logger.error(f"Error getting host URL: {str(e)}")
-        return jsonify({"error": f"Failed to get host URL: {str(e)}"}), 500
-    
-# Get recordings for a meeting
-@calendar_bp.route('/meeting/<meeting_id>/recordings', methods=['GET'])
-@login_required
-def get_meeting_recordings(meeting_id):
-    try:
-        recordings, error = EnhancedZoomService.get_meeting_recordings(meeting_id)
-        if error:
-            return jsonify({"error": error}), 500
-            
-        return jsonify(recordings)
-    except Exception as e:
-        logger.error(f"Error getting recordings: {str(e)}")
-        return jsonify({"error": f"Failed to get recordings: {str(e)}"}), 500
-
-# Get all recordings (admin only)
-@calendar_bp.route('/recordings', methods=['GET'])
-@login_required
-@admin_required
-def get_all_recordings():
-    try:
-        from_date = request.args.get('from')
-        to_date = request.args.get('to')
-        
-        recordings, error = EnhancedZoomService.get_all_recordings(from_date, to_date)
-        if error:
-            return jsonify({"error": error}), 500
-            
-        return jsonify(recordings)
-    except Exception as e:
-        logger.error(f"Error getting all recordings: {str(e)}")
-        return jsonify({"error": f"Failed to get recordings: {str(e)}"}), 500
-
-# Recordings archive page
-@calendar_bp.route('/recordings-archive')
-@login_required
-def recordings_archive():
-    return render_template('calendar_zoom/recordings.html')
+        logger.error(f"Ошибка получения ссылки организатора: {str(e)}")
+        return jsonify({"error": f"Не удалось получить ссылку организатора: {str(e)}"}), 500
 
 # Update an event
 @calendar_bp.route('/event/<event_id>', methods=['PUT'])
@@ -255,7 +216,7 @@ def update_event(event_id):
     try:
         data = request.json
         if not data:
-            return jsonify({"error": "No data provided"}), 400
+            return jsonify({"error": "Данные не предоставлены"}), 400
             
         # Update the event
         result, error = EnhancedZoomService.update_event(event_id, data, current_user.id)
@@ -264,8 +225,8 @@ def update_event(event_id):
             
         return jsonify(result)
     except Exception as e:
-        logger.error(f"Error updating event: {str(e)}")
-        return jsonify({"error": f"Failed to update event: {str(e)}"}), 500
+        logger.error(f"Ошибка обновления события: {str(e)}")
+        return jsonify({"error": f"Не удалось обновить событие: {str(e)}"}), 500
 
 # Delete an event
 @calendar_bp.route('/event/<event_id>', methods=['DELETE'])
@@ -279,8 +240,8 @@ def delete_event(event_id):
             
         return jsonify({"success": True})
     except Exception as e:
-        logger.error(f"Error deleting event: {str(e)}")
-        return jsonify({"error": f"Failed to delete event: {str(e)}"}), 500
+        logger.error(f"Ошибка удаления события: {str(e)}")
+        return jsonify({"error": f"Не удалось удалить событие: {str(e)}"}), 500
 
 # Get participant information for a meeting
 @calendar_bp.route('/meeting/<event_id>/participants', methods=['GET'])
@@ -290,7 +251,7 @@ def get_meeting_participants(event_id):
         # Check if user has access to the meeting
         event = CalendarEvent.query.get(event_id)
         if not event:
-            return jsonify({"error": "Event not found"}), 404
+            return jsonify({"error": "Событие не найдено"}), 404
             
         # Check if user is participant, creator, or admin
         if current_user.id not in [p.id for p in event.participants] and \
@@ -303,8 +264,8 @@ def get_meeting_participants(event_id):
             
         return jsonify(participants)
     except Exception as e:
-        logger.error(f"Error getting participants: {str(e)}")
-        return jsonify({"error": f"Failed to get participants: {str(e)}"}), 500
+        logger.error(f"Ошибка получения участников: {str(e)}")
+        return jsonify({"error": f"Не удалось получить участников: {str(e)}"}), 500
 
 # Remove participant from a meeting
 @calendar_bp.route('/meeting/<event_id>/participants/<user_id>', methods=['DELETE'])
@@ -314,7 +275,7 @@ def remove_participant(event_id, user_id):
         # Check if user is admin or event creator
         event = CalendarEvent.query.get(event_id)
         if not event:
-            return jsonify({"error": "Event not found"}), 404
+            return jsonify({"error": "Событие не найдено"}), 404
             
         if event.creator_id != current_user.id and not current_user.is_admin:
             return jsonify({"error": "Недостаточно прав"}), 403
@@ -326,8 +287,8 @@ def remove_participant(event_id, user_id):
             
         return jsonify({"success": True})
     except Exception as e:
-        logger.error(f"Error removing participant: {str(e)}")
-        return jsonify({"error": f"Failed to remove participant: {str(e)}"}), 500
+        logger.error(f"Ошибка удаления участника: {str(e)}")
+        return jsonify({"error": f"Не удалось удалить участника: {str(e)}"}), 500
 
 # Get meeting join URL
 @calendar_bp.route('/meeting/<event_id>/join-url', methods=['GET'])
@@ -337,7 +298,7 @@ def get_join_url(event_id):
         # Check if user has access to the meeting
         event = CalendarEvent.query.get(event_id)
         if not event:
-            return jsonify({"error": "Event not found"}), 404
+            return jsonify({"error": "Событие не найдено"}), 404
             
         # Check if user is participant, creator, or admin
         if current_user.id not in [p.id for p in event.participants] and \
@@ -350,11 +311,10 @@ def get_join_url(event_id):
             
         return jsonify({"join_url": join_url})
     except Exception as e:
-        logger.error(f"Error getting join URL: {str(e)}")
-        return jsonify({"error": f"Failed to get join URL: {str(e)}"}), 500
+        logger.error(f"Ошибка получения ссылки для подключения: {str(e)}")
+        return jsonify({"error": f"Не удалось получить ссылку для подключения: {str(e)}"}), 500
 
-# Исправленный эндпоинт available-users для calendar_routes.py
-
+# Get available users for participant selection
 @calendar_bp.route('/available-users', methods=['GET'])
 @login_required
 def get_available_users():
@@ -371,7 +331,6 @@ def get_available_users():
             ).all()
         else:
             # Обычные пользователи видят всех активных пользователей
-            # Поскольку в вашей модели нет department_id, мы просто получаем всех активных пользователей
             users = User.query.filter(
                 (User.username.ilike(f'%{query}%') | User.email.ilike(f'%{query}%')),
                 User.active == True
@@ -395,109 +354,8 @@ def get_available_users():
         # Добавляем Stack Trace для отладки
         import traceback
         logger.error(traceback.format_exc())
-        return jsonify({"error": f"Ошибка получения доступных пользователей: {str(e)}"}), 500# Generate meeting report
-@calendar_bp.route('/meeting/<event_id>/report', methods=['GET'])
-@login_required
-@admin_required
-def generate_meeting_report(event_id):
-    try:
-        report_format = request.args.get('format', 'json')
-        
-        # Generate report data
-        report_data, error = EnhancedZoomService.generate_meeting_report(event_id)
-        if error:
-            return jsonify({"error": error}), 500
-            
-        # Format response based on requested format
-        if report_format == 'csv':
-            import csv
-            from io import StringIO
-            
-            output = StringIO()
-            writer = csv.writer(output)
-            
-            # Write headers
-            writer.writerow(['Participant', 'Email', 'Join Time', 'Leave Time', 'Duration (minutes)'])
-            
-            # Write data
-            for participant in report_data['participants']:
-                writer.writerow([
-                    participant['name'],
-                    participant['email'],
-                    participant['join_time'],
-                    participant['leave_time'],
-                    participant['duration_minutes']
-                ])
-                
-            # Prepare response
-            from flask import Response
-            response = Response(output.getvalue(), mimetype='text/csv')
-            response.headers["Content-Disposition"] = f"attachment; filename=meeting_report_{event_id}.csv"
-            return response
-        else:
-            # Default to JSON format
-            return jsonify(report_data)
-    except Exception as e:
-        logger.error(f"Error generating meeting report: {str(e)}")
-        return jsonify({"error": f"Failed to generate meeting report: {str(e)}"}), 500
+        return jsonify({"error": f"Ошибка получения доступных пользователей: {str(e)}"}), 500
 
-# Manage recurring meetings
-@calendar_bp.route('/recurring-meeting', methods=['POST'])
-@login_required
-def create_recurring_meeting():
-    try:
-        data = request.json
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-
-        required_fields = ['topic', 'start_time', 'duration', 'recurrence_type']
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
-            
-        # Get participant IDs if provided
-        participant_ids = data.get('participants', [])
-        
-        # Create the recurring Zoom meeting
-        result, error = EnhancedZoomService.create_recurring_meeting(data, current_user.id, participant_ids)
-        if error:
-            return jsonify({"error": error}), 500
-        
-        # Send notifications to participants if the meeting was created successfully
-        if result and 'event' in result:
-            event_id = result['event']['id']
-            event = CalendarEvent.query.get(event_id)
-            
-            if event:
-                # Форматируем дату и время для уведомления
-                meeting_date = event.start_time.strftime("%d.%m.%Y")
-                meeting_time = event.start_time.strftime("%H:%M")
-                
-                # Определяем тип повторения для текста уведомления
-                recurrence_type_text = ""
-                if event.event_type == "zoom_recurring":
-                    if hasattr(event, 'recurrence_info') and event.recurrence_info:
-                        import json
-                        recurrence_info = json.loads(event.recurrence_info)
-                        if recurrence_info.get('type') == 1:
-                            recurrence_type_text = "ежедневную "
-                        elif recurrence_info.get('type') == 2:
-                            recurrence_type_text = "еженедельную "
-                        elif recurrence_info.get('type') == 3:
-                            recurrence_type_text = "ежемесячную "
-                        else:
-                            recurrence_type_text = "повторяющуюся "
-                
-                # Notify participants
-                for participant_id in participant_ids:
-                    if participant_id != current_user.id:  # Don't notify the creator
-                        message = f"{current_user.username} добавил(а) вас в {recurrence_type_text}конференцию \"{event.title}\". Первая встреча {meeting_date} в {meeting_time}"
-                        link = f"/calendar?event={event_id}"
-                        notify_user(participant_id, message, "info", link)
-        
-        return jsonify(result)
-    except Exception as e:
-        logger.error(f"Error creating recurring meeting: {str(e)}")
-        return jsonify({"error": f"Failed to create recurring meeting: {str(e)}"}), 500
 # Get calendar settings
 @calendar_bp.route('/settings', methods=['GET'])
 @login_required
@@ -516,8 +374,8 @@ def get_calendar_settings():
         
         return jsonify(settings)
     except Exception as e:
-        logger.error(f"Error getting calendar settings: {str(e)}")
-        return jsonify({"error": f"Failed to get calendar settings: {str(e)}"}), 500
+        logger.error(f"Ошибка получения настроек календаря: {str(e)}")
+        return jsonify({"error": f"Не удалось получить настройки календаря: {str(e)}"}), 500
 
 # Update calendar settings
 @calendar_bp.route('/settings', methods=['PUT'])
@@ -526,7 +384,7 @@ def update_calendar_settings():
     try:
         data = request.json
         if not data:
-            return jsonify({"error": "No data provided"}), 400
+            return jsonify({"error": "Данные не предоставлены"}), 400
             
         # Update user time zone if provided
         if 'time_zone' in data:
@@ -535,8 +393,9 @@ def update_calendar_settings():
             
         return jsonify({"success": True})
     except Exception as e:
-        logger.error(f"Error updating calendar settings: {str(e)}")
-        return jsonify({"error": f"Failed to update calendar settings: {str(e)}"}), 500
+        logger.error(f"Ошибка обновления настроек календаря: {str(e)}")
+        return jsonify({"error": f"Не удалось обновить настройки календаря: {str(e)}"}), 500
+
 # Add an endpoint to handle navigation to cards from the calendar
 @calendar_bp.route('/card/<card_id>')
 @login_required
@@ -550,13 +409,13 @@ def view_card(card_id):
         board_id = card.list.board_id if card.list else None
         
         if not board_id:
-            return jsonify({"error": "Board not found for this card"}), 404
+            return jsonify({"error": "Доска не найдена для этой карточки"}), 404
 
         # Redirect to the kanban board with card ID parameter
-        return redirect(f"/kanban/board/{board_id}?card={card_id}")
+        return redirect(f"/kanban/boards/{board_id}?card={card_id}")
     except Exception as e:
-        logger.error(f"Error viewing card: {str(e)}")
-        return jsonify({"error": f"Failed to view card: {str(e)}"}), 500
+        logger.error(f"Ошибка просмотра карточки: {str(e)}")
+        return jsonify({"error": f"Не удалось просмотреть карточку: {str(e)}"}), 500
 
 # You can also add a route to mark a card as completed directly from the calendar
 @calendar_bp.route('/card/<card_id>/complete', methods=['POST'])
@@ -577,31 +436,50 @@ def complete_card(card_id):
         
         return jsonify({"success": True})
     except Exception as e:
-        logger.error(f"Error completing card: {str(e)}")
+        logger.error(f"Ошибка завершения карточки: {str(e)}")
         db.session.rollback()
-        return jsonify({"error": f"Failed to complete card: {str(e)}"}), 500
+        return jsonify({"error": f"Не удалось завершить карточку: {str(e)}"}), 500
     
+# В файле calendar.py, исправьте маршрут goto_card, чтобы он корректно перенаправлял на канбан
 
 @calendar_bp.route('/goto-card/<card_id>')
 @login_required
 def goto_card(card_id):
     try:
-        # Find the card
-        card = Card.query.get_or_404(card_id)
+        # Добавляем отладочную информацию
+        current_app.logger.info(f"Запрос перехода к карточке {card_id}")
         
-        # Find the list and board
+        # Находим карточку
+        card = Card.query.get(card_id)
+        if not card:
+            current_app.logger.error(f"Карточка с ID {card_id} не найдена")
+            flash('Карточка не найдена', 'error')
+            return redirect('/kanban')
+        
+        current_app.logger.info(f"Карточка найдена: {card.title}")
+        
+        # Проверяем, есть ли список и доска
         list_id = card.list_id
         list_obj = List.query.get(list_id)
         
         if not list_obj:
-            # If list not found, redirect to kanban home
+            current_app.logger.warning(f"Список не найден для карточки {card_id}")
+            flash('Список не найден', 'warning')
             return redirect('/kanban')
             
         board_id = list_obj.board_id
+        current_app.logger.info(f"Доска найдена: {board_id}")
         
-        # Redirect to the board view with the card highlighted
-        return redirect(f"/kanban/board/{board_id}?highlight_card={card_id}")
+        # Формируем URL для перенаправления
+        # Используем путь /kanban вместо /kanban/boards/{board_id}
+        redirect_url = f"/kanban?board_id={board_id}&highlight_card={card_id}"
+        current_app.logger.info(f"Перенаправление на: {redirect_url}")
+        
+        # Перенаправляем на доску с параметром highlight_card для подсветки карточки
+        return redirect(redirect_url)
     except Exception as e:
-        logger.error(f"Error navigating to card: {str(e)}")
-        # Redirect to kanban home in case of error
+        current_app.logger.error(f"Ошибка перехода к карточке: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        flash('Произошла ошибка при переходе к карточке', 'error')
         return redirect('/kanban')

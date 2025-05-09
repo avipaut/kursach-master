@@ -28,7 +28,7 @@ def admin_required(f):
 
 # ===== BOARD ROUTES =====
 # Убедитесь, что маршрут определен именно так
-@kanban_bp.route('/kanban', endpoint='kanban_board')
+@kanban_bp.route('/', endpoint='kanban_board')
 @login_required
 def kanban_board():
     is_admin = False
@@ -65,6 +65,20 @@ def get_boards():
         ).all()
     
     return jsonify([board.to_dict() for board in boards])
+@kanban_bp.route('/boards/<int:board_id>', methods=['GET'])
+@login_required
+def get_board(board_id):
+    is_admin = getattr(current_user, 'is_admin', False)
+
+    # Получаем доску по ID
+    board = Board.query.get_or_404(board_id)
+
+    # Проверка доступа: если не админ — можно только свои или с доступом
+    if not is_admin:
+        if board.user_id != current_user.id and current_user not in board.users:
+            return jsonify({"error": "Access denied"}), 403
+
+    return jsonify(board.to_dict())
 
 # функция создания доски 
 @kanban_bp.route('/boards', methods=['POST'])

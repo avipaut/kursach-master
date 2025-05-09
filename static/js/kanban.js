@@ -19,8 +19,106 @@ const editListModal = document.getElementById('editListModal');
 const createCardModal = document.getElementById('createCardModal');
 const editCardModal = document.getElementById('editCardModal');
 
-// Initialization
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
+    // Проверяем URL-параметры при загрузке страницы
+    const urlParams = new URLSearchParams(window.location.search);
+    const highlightCardId = urlParams.get('highlight_card') || localStorage.getItem('highlightCardId');
+    const boardIdFromUrl = urlParams.get('board_id');
+    
+    if (highlightCardId) {
+        // Удаляем ID из localStorage после использования
+        localStorage.removeItem('highlightCardId');
+        
+        // Функция для подсветки карточки
+        function highlightCard() {
+            const cardElement = document.querySelector(`.card[data-card-id="${highlightCardId}"]`);
+            
+            if (cardElement) {
+                // Добавляем класс для подсветки
+                cardElement.classList.add('highlighted-card');
+                
+                // Скроллим к карточке
+                scrollToCard(cardElement);
+                
+                // Добавляем слушатель события для удаления подсветки при клике или касании
+                cardElement.addEventListener('click', removeHighlight);
+                document.addEventListener('click', checkRemoveHighlight);
+                
+                // Также удаляем подсветку через некоторое время
+                setTimeout(removeHighlight, 10000); // 10 секунд
+                
+                // Запускаем IntersectionObserver, чтобы узнать, когда карточка видна
+                setupVisibilityObserver(cardElement);
+            } else {
+                // Если карточка не найдена, пробуем снова через некоторое время
+                // (Это может произойти, если DOM еще не полностью отрендерен)
+                setTimeout(highlightCard, 500);
+            }
+        }
+        
+        // Плавный скролл к карточке
+        function scrollToCard(element) {
+            // Проверяем видимость элемента
+            const rect = element.getBoundingClientRect();
+            const isVisible = (
+                rect.top >= 0 &&
+                rect.left >= 0 &&
+                rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+            );
+            
+            // Если не виден, скроллим к нему
+            if (!isVisible) {
+                element.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+        }
+        
+        // Удаление подсветки
+        function removeHighlight() {
+            const highlightedCard = document.querySelector('.highlighted-card');
+            if (highlightedCard) {
+                highlightedCard.classList.remove('highlighted-card');
+                document.removeEventListener('click', checkRemoveHighlight);
+            }
+        }
+        
+        // Проверка для удаления подсветки при клике не на карточку
+        function checkRemoveHighlight(event) {
+            const highlightedCard = document.querySelector('.highlighted-card');
+            if (highlightedCard && !highlightedCard.contains(event.target)) {
+                removeHighlight();
+            }
+        }
+        
+        // Настройка наблюдателя за видимостью
+        function setupVisibilityObserver(element) {
+            // Создаем новый IntersectionObserver
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    // Если карточка видна в области просмотра
+                    if (entries[0].isIntersecting) {
+                        // Подождем немного, затем уберем подсветку
+                        setTimeout(removeHighlight, 3000);
+                        observer.disconnect();
+                    }
+                },
+                { threshold: 0.5 } // Карточка считается видимой, когда как минимум 50% видно
+            );
+            
+            // Начинаем наблюдать за элементом
+            observer.observe(element);
+        }
+        
+        // Вызываем функцию подсветки
+        highlightCard();
+    }
+    
+    // Добавляем стили для подсветки
+    addHighlightStyles();
+    
     // Set the base URL for API
     apiBaseUrl = window.location.hostname === 'localhost' ? '' : '/kanban';
     console.log('API base URL set to:', apiBaseUrl);
@@ -66,6 +164,121 @@ document.addEventListener('DOMContentLoaded', () => {
     setupListsContainer();
 });
 
+// Функция для добавления стилей подсветки
+function addHighlightStyles() {
+    const style = document.createElement('style');
+    style.id = 'highlight-card-styles';
+    style.textContent = `
+        @keyframes pulse-animation-high {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+                transform: scale(1.03);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+                transform: scale(1);
+            }
+        }
+        
+        @keyframes pulse-animation-medium {
+            0% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+                transform: scale(1.03);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+                transform: scale(1);
+            }
+        }
+        
+        @keyframes pulse-animation-low {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+                transform: scale(1.03);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+                transform: scale(1);
+            }
+        }
+        
+        /* Высокий приоритет - красный */
+        .card[data-priority="high"].highlighted-card {
+            animation: pulse-animation-high 1.5s infinite;
+            border: 2px solid #ef4444 !important;
+            background-color: rgba(239, 68, 68, 0.1) !important;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .card[data-priority="high"].highlighted-card::after {
+            content: "";
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            animation: pulse-animation-high 1.5s infinite;
+        }
+        
+        /* Средний приоритет - желтый/оранжевый */
+        .card[data-priority="medium"].highlighted-card {
+            animation: pulse-animation-medium 1.5s infinite;
+            border: 2px solid #f59e0b !important;
+            background-color: rgba(245, 158, 11, 0.1) !important;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .card[data-priority="medium"].highlighted-card::after {
+            content: "";
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            background-color: #f59e0b;
+            border-radius: 50%;
+            animation: pulse-animation-medium 1.5s infinite;
+        }
+        
+        /* Низкий приоритет - зеленый */
+        .card[data-priority="low"].highlighted-card {
+            animation: pulse-animation-low 1.5s infinite;
+            border: 2px solid #10b981 !important;
+            background-color: rgba(16, 185, 129, 0.1) !important;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .card[data-priority="low"].highlighted-card::after {
+            content: "";
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            background-color: #10b981;
+            border-radius: 50%;
+            animation: pulse-animation-low 1.5s infinite;
+        }
+    `;
+    document.head.appendChild(style);
+}
 // Fetch current user details
 async function fetchCurrentUser() {
     try {
@@ -111,6 +324,8 @@ function updateUIBasedOnPermissions() {
 }
 
 // Data loading functions
+// В файле kanban.js, модифицируйте функцию loadBoards, добавив следующий код в начало функции:
+
 async function loadBoards() {
     showLoading('boardsLoading');
     try {
@@ -123,11 +338,43 @@ async function loadBoards() {
         
         boards = await response.json();
         console.log('Boards loaded successfully:', boards);
+        
+        if (boards.length === 0) {
+            console.log('No boards returned from API');
+            hideLoading('boardsLoading');
+            return;
+        }
+        
         renderBoards();
         hideLoading('boardsLoading');
 
-        // If there are boards, select the first one
+        // Проверяем URL-параметры при загрузке
+        const urlParams = new URLSearchParams(window.location.search);
+        const boardIdFromUrl = urlParams.get('board_id');
+        const highlightCardId = urlParams.get('highlight_card') || localStorage.getItem('highlightCardId');
+        
+        if (boardIdFromUrl) {
+            console.log(`Trying to select board from URL, ID: ${boardIdFromUrl}`);
+            const boardToSelect = boards.find(board => board.id === parseInt(boardIdFromUrl));
+            if (boardToSelect) {
+                console.log(`Found board in list: ${boardToSelect.name}`);
+                selectBoard(boardToSelect);
+                return;
+            } else {
+                console.log(`Board ID ${boardIdFromUrl} not found in loaded boards`);
+            }
+        }
+        
+        // Если есть ID карточки, но нет ID доски
+        if (highlightCardId && !boardIdFromUrl) {
+            console.log(`Searching for card ${highlightCardId} across all boards`);
+            await searchCardAcrossAllBoards(parseInt(highlightCardId));
+            return;
+        }
+
+        // Если доска не найдена в URL или нет board_id, выбираем первую доску
         if (boards.length > 0) {
+            console.log('Selecting first board by default');
             selectBoard(boards[0]);
         }
     } catch (error) {
@@ -135,39 +382,99 @@ async function loadBoards() {
         showToast('Error', 'Failed to load boards. Please try again.', 'error');
         hideLoading('boardsLoading');
     }
-}
+}// В файле kanban.js заменить функцию searchCardAcrossAllBoards на эту:
 
-async function loadLists(boardId) {
-    if (!boardId) return;
+// Функция для поиска карточки среди всех досок
+async function searchCardAcrossAllBoards(cardId) {
+    console.log(`Поиск карточки ${cardId} по всем доскам`);
     
-    try {
-        console.log('Fetching lists for board:', boardId);
-        const response = await fetch(`${apiBaseUrl}/boards/${boardId}/lists`);
+    // Сохраняем ID карточки в localStorage, чтобы он не потерялся при переключении досок
+    localStorage.setItem('highlightCardId', cardId);
+    
+    let foundCard = false;
+    let containingBoard = null;
+    
+    // Проверяем каждую доску
+    for (const board of boards) {
+        console.log(`Проверяем доску: ${board.name} (ID: ${board.id})`);
         
-        if (!response.ok) {
-            throw new Error(`Failed to fetch lists. Status: ${response.status}`);
+        // Временно выбираем доску без обновления UI
+        activeBoard = board;
+        
+        try {
+            // Загружаем списки для доски
+            const response = await fetch(`${apiBaseUrl}/boards/${board.id}/lists`);
+            if (!response.ok) continue;
+            
+            let boardLists = await response.json();
+            
+            // Загружаем карточки для каждого списка
+            for (const list of boardLists) {
+                const cardsResponse = await fetch(`${apiBaseUrl}/boards/${board.id}/lists/${list.id}/cards`);
+                if (!cardsResponse.ok) continue;
+                
+                const cards = await cardsResponse.json();
+                list.cards = cards;
+                
+                // Проверяем, есть ли искомая карточка в этом списке
+                const card = cards.find(c => c.id === cardId);
+                if (card) {
+                    console.log(`Карточка ${cardId} найдена в списке ${list.name} на доске ${board.name}`);
+                    foundCard = true;
+                    containingBoard = board;
+                    break;
+                }
+            }
+            
+            // Если карточка найдена, прерываем поиск
+            if (foundCard) break;
+            
+        } catch (error) {
+            console.error(`Ошибка при поиске карточки на доске ${board.name}:`, error);
         }
-        
-        lists = await response.json();
-        console.log('Lists loaded successfully:', lists);
-        
-        // Сортируем списки по позиции, если такое поле есть
-        if (lists.length > 0 && 'position' in lists[0]) {
-            lists.sort((a, b) => a.position - b.position);
+    }
+    
+    if (foundCard && containingBoard) {
+        console.log(`Переключаемся на доску ${containingBoard.name}, где находится карточка ${cardId}`);
+        // Теперь правильно выбираем доску с обновлением UI
+        selectBoard(containingBoard);
+        return true;
+    } else {
+        console.log(`Карточка ${cardId} не найдена ни на одной доске`);
+        // Выбираем первую доску
+        if (boards.length > 0) {
+            selectBoard(boards[0]);
         }
-        
-        // Preload cards for all lists
-        for (const list of lists) {
-            await loadCards(boardId, list.id);
-        }
-        
-        renderLists();
-    } catch (error) {
-        console.error('Error loading lists:', error);
-        showToast('Error', 'Failed to load lists. Please try again.', 'error');
+        return false;
     }
 }
-
+// Заменяем часть, которая находится примерно на строке 376
+// После загрузки всех карточек проверяем, нужно ли подсветить карточку
+const highlightCardId = localStorage.getItem('highlightCardId');
+if (highlightCardId) {
+    setTimeout(() => {
+        const cardElement = document.querySelector(`.card[data-card-id="${highlightCardId}"]`);
+        if (cardElement) {
+            console.log(`Найдена карточка для подсветки: ${highlightCardId}`);
+            localStorage.removeItem('highlightCardId');
+            
+            // Подсвечиваем найденную карточку в зависимости от приоритета
+            // Приоритет уже должен быть указан в атрибуте data-priority
+            cardElement.classList.add('highlighted-card');
+            
+            // Скроллим к карточке
+            cardElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+            
+            // Удаляем подсветку через некоторое время
+            setTimeout(() => {
+                cardElement.classList.remove('highlighted-card');
+            }, 10000);
+        }
+    }, 500);
+}
 // Обновляем функцию loadCards чтобы сортировать карточки по position
 async function loadCards(boardId, listId) {
     try {
@@ -942,6 +1249,7 @@ async function handleCreateCard(event) {
         showToast('Error', 'Failed to create card. Please try again.', 'error');
     }
 }
+
 // Helper function to get todos (used by both kanban.js and card_assignment.js)
 function getTodoItems(containerId) {
     const todos = [];
@@ -984,6 +1292,46 @@ async function syncCardsToCalendar() {
         showToast('Error', 'Failed to sync cards with calendar', 'error');
     }
 }
+// В CSS стили добавьте более заметные индикаторы перетаскивания
+function addImprovedDragStyles() {
+    const existingStyle = document.getElementById('kanban-drag-styles');
+    if (existingStyle) {
+        existingStyle.textContent += `
+            .list.dragging-list {
+                opacity: 0.6;
+                background: #f0f0f0;
+                border: 2px dashed #666;
+                box-shadow: 0 0 10px rgba(0,0,0,0.2);
+                z-index: 1000;
+                transform: scale(0.98);
+                transition: transform 0.1s;
+            }
+            
+            .list.list-drop-zone {
+                position: relative;
+                outline: 2px solid #4299e1;
+            }
+            
+            .list.list-drop-zone::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                width: 6px;
+                background-color: #4299e1;
+                z-index: 1;
+            }
+            
+            .list.list-drop-zone[data-drop-position="before"]::before {
+                left: -3px;
+            }
+            
+            .list.list-drop-zone[data-drop-position="after"]::before {
+                right: -3px;
+            }
+        `;
+    }
+}
 
 // Add initialization after DOM content is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -992,9 +1340,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target && e.target.id === 'editCardCompleted') {
             console.log('Completion checkbox changed to:', e.target.checked);
         }
+
     });
-    
-    
+    addImprovedDragStyles();
+
 });
 
 function openEditCardModal(cardId, listId) {
@@ -1269,6 +1618,7 @@ async function handleUpdateCard(event) {
         showToast('Error', 'Failed to update card. Please try again.', 'error');
     }
 }
+
 // Fixed card deletion function to match your API route
 async function handleDeleteCard(cardId, listId) {
     if (!activeBoard) return;
@@ -1753,791 +2103,951 @@ if (card.assigned_to) {
         }
         
         // Function to open a simplified modal for regular users
-        function openUserTodoModal(cardId, cardTitle) {
-            // Create or get modal element
-            let todoModal = document.getElementById('userTodoModal');
-            
-            if (!todoModal) {
-                // Create modal if it doesn't exist
-                todoModal = document.createElement('div');
-                todoModal.id = 'userTodoModal';
-                todoModal.className = 'modal fade';
-                todoModal.setAttribute('tabindex', '-1');
-                todoModal.setAttribute('aria-hidden', 'true');
-                
-                // Set up modal HTML structure with higher z-index to ensure it's on top
-                todoModal.innerHTML = `
-                    <div class="modal-dialog" style="z-index: 1060;">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Tasks for: <span id="todoModalCardTitle"></span></h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="todo-list-container"></div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                document.body.appendChild(todoModal);
-                
-                // Add additional styles to ensure the modal is interactive
-                const modalStyles = document.createElement('style');
-                modalStyles.textContent = `
-                    .modal-backdrop {
-                        z-index: 1050 !important;
-                    }
-                    #userTodoModal {
-                        z-index: 1055 !important;
-                    }
-                    .todo-item input[type="checkbox"] {
-                        pointer-events: auto !important;
-                        opacity: 1 !important;
-                        cursor: pointer !important;
-                    }
-                    .todo-item {
-                        cursor: pointer;
-                    }
-                `;
-                document.head.appendChild(modalStyles);
-            }
-            
-            // Update modal title
-            document.getElementById('todoModalCardTitle').textContent = cardTitle;
-            
-            // Initialize the modal
-            const bsModal = new bootstrap.Modal(todoModal);
-            
-            // Show the modal
-            bsModal.show();
-            
-            // Fetch todos when modal is shown
-            todoModal.addEventListener('shown.bs.modal', function() {
-                fetchAndDisplayTodos(cardId);
-            }, { once: true });
-        }
+function openUserTodoModal(cardId, cardTitle) {
+    // Create or get modal element
+    let todoModal = document.getElementById('userTodoModal');
+    
+    if (!todoModal) {
+        // Create modal if it doesn't exist
+        todoModal = document.createElement('div');
+        todoModal.id = 'userTodoModal';
+        todoModal.className = 'modal fade';
+        todoModal.setAttribute('tabindex', '-1');
+        todoModal.setAttribute('aria-hidden', 'true');
         
-        // Function to fetch and display todos
-        function fetchAndDisplayTodos(cardId) {
-            const todoContainer = document.querySelector('#userTodoModal .todo-list-container');
-            todoContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-            
-            // Fetch todos from the server
-            fetch(`${apiBaseUrl}/cards/${cardId}/todos`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Server responded with status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success) {
-                        // Display todos
-                        displayUserTodos(data.todos, todoContainer, cardId);
-                    } else {
-                        todoContainer.innerHTML = `<div class="alert alert-danger">Error: ${data.message || 'Could not load tasks'}</div>`;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching todos:', error);
-                    todoContainer.innerHTML = '<div class="alert alert-danger">Failed to load tasks. Please try again.</div>';
-                });
-        }
-        
-        // Updated displayUserTodos function to use your existing handleUpdateTodoStatus
-        function displayUserTodos(todos, container, cardId) {
-            container.innerHTML = '';
-            
-            if (!todos || todos.length === 0) {
-                container.innerHTML = '<div class="no-todos p-3 text-muted">No tasks for this card</div>';
-                return;
-            }
-            
-            const todoList = document.createElement('div');
-            todoList.className = 'todo-list';
-            
-            todos.forEach(todo => {
-                const todoItem = document.createElement('div');
-                todoItem.className = 'todo-item d-flex align-items-center p-2 border-bottom';
-                todoItem.dataset.todoId = todo.id;
-                
-                // Create checkbox for completion status
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'form-check-input me-3';
-                checkbox.checked = todo.completed;
-                checkbox.disabled = false; // Explicitly enable the checkbox
-                
-                // Add event listener to the checkbox using your existing function
-                checkbox.addEventListener('click', function(e) {
-                    // Stop event propagation to prevent modal issues
-                    e.stopPropagation();
-                });
-                
-                checkbox.addEventListener('change', function(e) {
-                    e.stopPropagation();
-                    // Use your existing function
-                    handleUpdateTodoStatus(todo.id, this.checked);
-                    
-                    // Update UI immediately (optimistic update)
-                    const todoContent = this.closest('.todo-item').querySelector('.todo-content');
-                    if (this.checked) {
-                        todoContent.classList.add('text-decoration-line-through', 'text-muted');
-                    } else {
-                        todoContent.classList.remove('text-decoration-line-through', 'text-muted');
-                    }
-                });
-                
-                // Create todo content
-                const todoContent = document.createElement('span');
-                todoContent.className = todo.completed ? 'todo-content text-decoration-line-through text-muted' : 'todo-content';
-                todoContent.textContent = todo.content;
-                
-                // Add elements to todo item
-                todoItem.appendChild(checkbox);
-                todoItem.appendChild(todoContent);
-                
-                // Prevent todoItem click from interfering with checkbox
-                todoItem.addEventListener('click', function(e) {
-                    // If clicking directly on the todoItem (not the checkbox)
-                    if (e.target === this || e.target === todoContent) {
-                        const checkboxEl = this.querySelector('input[type="checkbox"]');
-                        checkboxEl.checked = !checkboxEl.checked;
-                        
-                        // Trigger the change event manually
-                        const changeEvent = new Event('change');
-                        checkboxEl.dispatchEvent(changeEvent);
-                    }
-                });
-                
-                // Add todo item to list
-                todoList.appendChild(todoItem);
-            });
-            
-            container.appendChild(todoList);
-        }
-        
-        // Add CSS for admin indicators
-        function addAdminStyles() {
-            const style = document.createElement('style');
-            style.textContent = `
-                .admin-only {
-                    position: relative;
-                }
-                
-                .admin-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    margin-left: 6px;
-                    color: #6c757d;
-                    font-size: 0.8em;
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        // Modal functions
-        function openModal(modal) {
-            // Close all open modals
-            closeAllModals();
-            
-            // Open selected modal
-            modal.classList.add('active');
-            
-            // Add handler to close modal when clicking outside
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    closeAllModals();
-                }
-            });
-        }
-        
-        function closeAllModals() {
-            document.querySelectorAll('.modal').forEach(modal => {
-                modal.classList.remove('active');
-            });
-        }
-        
-        // Helper functions
-        function selectBoard(board) {
-            activeBoard = board;
-            
-            // Update active board in UI
-            document.querySelectorAll('.board-item').forEach(item => {
-                item.classList.toggle('active', parseInt(item.dataset.boardId) === board.id);
-            });
-            
-            // Update title and board actions
-            document.getElementById('activeBoardTitle').textContent = board.name;
-            document.getElementById('boardActions').style.display = 'flex';
-            
-            // Hide select board message and show lists container
-            document.getElementById('selectBoardMessage').style.display = 'none';
-            document.getElementById('listsContainer').style.display = 'flex';
-            
-            // Load lists for selected board
-            loadLists(board.id);
-        }
-        
-        function showToast(title, message, type = 'success') {
-            const toastContainer = document.getElementById('toastContainer');
-            
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            
-            toast.innerHTML = `
-                <div class="toast-icon">
-                    <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
-                </div>
-                <div class="toast-content">
-                    <div class="toast-title">${title}</div>
-                    <div class="toast-message">${message}</div>
-                </div>
-            `;
-            
-            toastContainer.appendChild(toast);
-            
-            // Remove toast after 3 seconds
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-        
-        function showLoading(elementId) {
-            const element = document.getElementById(elementId);
-            if (element) {
-                element.style.display = 'flex';
-            }
-        }
-        
-        function hideLoading(elementId) {
-            const element = document.getElementById(elementId);
-            if (element) {
-                element.style.display = 'none';
-            }
-        }
-        
-        function formatDate(date, showTime = false) {
-            if (!date) return '';
-            
-            const d = new Date(date);
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            
-            if (showTime) {
-                const hours = String(d.getHours()).padStart(2, '0');
-                const minutes = String(d.getMinutes()).padStart(2, '0');
-                return `${day}.${month}.${year} ${hours}:${minutes}`;
-            }
-            
-            return `${day}.${month}.${year}`;
-        }
-        
-        function getInitials(name) {
-            if (!name) return '?';
-            
-            const parts = name.split(' ');
-            if (parts.length === 1) {
-                return parts[0].charAt(0).toUpperCase();
-            }
-            
-            return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-        }
-        
-        function addTodoItem(containerId) {
-            const container = document.getElementById(containerId);
-            
-            const todoItem = document.createElement('div');
-            todoItem.className = 'todo-item';
-            
-            todoItem.innerHTML = `
-                <input type="text" class="todo-input" placeholder="Add a task...">
-                <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
-            `;
-            
-            // Add remove handler
-            todoItem.querySelector('.btn-remove-todo').addEventListener('click', () => {
-                todoItem.remove();
-            });
-            
-            container.appendChild(todoItem);
-        }
-        
-        // Toggle sidebar collapsed state
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('collapsed');
-        }
-        
-        // Initialize edit list form handler
-        document.getElementById('editListForm').addEventListener('submit', handleEditList);
-        
-        // Функция для создания модального окна выбора цвета списка
-        function createListColorModal() {
-            // Проверяем, существует ли уже модальное окно
-            let colorModal = document.getElementById('listColorModal');
-            if (colorModal) return;
-            
-            // Предопределенные цвета для списков
-            const LIST_COLORS = [
-                { name: 'Синий', value: '#1976D2', text: 'white' },
-                { name: 'Фиолетовый', value: '#9C27B0', text: 'white' },
-                { name: 'Красный', value: '#D32F2F', text: 'white' },
-                { name: 'Оранжевый', value: '#FF9800', text: 'black' },
-                { name: 'Зеленый', value: '#2E7D32', text: 'white' },
-                { name: 'Бирюзовый', value: '#00897B', text: 'white' },
-                { name: 'Серый', value: '#757575', text: 'white' },
-                { name: 'Розовый', value: '#E91E63', text: 'white' },
-                { name: 'Коричневый', value: '#795548', text: 'white' },
-                { name: 'Желтый', value: '#FFC107', text: 'black' },
-                { name: 'По умолчанию', value: '#f0f2f5', text: 'black' }
-            ];
-            
-            // Создаем модальное окно
-            colorModal = document.createElement('div');
-            colorModal.id = 'listColorModal';
-            colorModal.className = 'modal';
-            
-            // Создаем содержимое модального окна
-            colorModal.innerHTML = `
-                <div class="modal-content" style="max-width: 400px;">
+        // Set up modal HTML structure with higher z-index to ensure it's on top
+        todoModal.innerHTML = `
+            <div class="modal-dialog" style="z-index: 1060;">
+                <div class="modal-content">
                     <div class="modal-header">
-                        <h2>Выберите цвет списка</h2>
-                        <button class="close-modal"><i class="fas fa-times"></i></button>
+                        <h5 class="modal-title">Tasks for: <span id="todoModalCardTitle"></span></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="color-picker-container" style="padding: 16px;">
-                        <div class="color-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-                            ${LIST_COLORS.map(color => `
-                                <div class="color-option" data-color="${color.value}" data-text="${color.text}" 
-                                     style="background-color: ${color.value}; color: ${color.text}; 
-                                           height: 40px; border-radius: 4px; cursor: pointer; 
-                                           display: flex; align-items: center; justify-content: center; 
-                                           box-shadow: 0 1px 3px rgba(0,0,0,0.12);">
-                                    ${color.name}
-                                </div>
-                            `).join('')}
-                        </div>
+                    <div class="modal-body">
+                        <div class="todo-list-container"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
-            `;
+            </div>
+        `;
+        
+        document.body.appendChild(todoModal);
+        
+        // Add additional styles to ensure the modal is interactive
+        const modalStyles = document.createElement('style');
+        modalStyles.textContent = `
+            .modal-backdrop {
+                z-index: 1050 !important;
+            }
+            #userTodoModal {
+                z-index: 1055 !important;
+            }
+            .todo-item input[type="checkbox"] {
+                pointer-events: auto !important;
+                opacity: 1 !important;
+                cursor: pointer !important;
+            }
+            .todo-item {
+                cursor: pointer;
+            }
+        `;
+        document.head.appendChild(modalStyles);
+    }
+    
+    // Update modal title
+    document.getElementById('todoModalCardTitle').textContent = cardTitle;
+    
+    // Initialize the modal
+    const bsModal = new bootstrap.Modal(todoModal);
+    
+    // Show the modal
+    bsModal.show();
+    
+    // Fetch todos when modal is shown
+    todoModal.addEventListener('shown.bs.modal', function() {
+        fetchAndDisplayTodos(cardId);
+    }, { once: true });
+}
+
+// Function to fetch and display todos
+function fetchAndDisplayTodos(cardId) {
+    const todoContainer = document.querySelector('#userTodoModal .todo-list-container');
+    todoContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+    
+    // Fetch todos from the server
+    fetch(`${apiBaseUrl}/cards/${cardId}/todos`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Display todos
+                displayUserTodos(data.todos, todoContainer, cardId);
+            } else {
+                todoContainer.innerHTML = `<div class="alert alert-danger">Error: ${data.message || 'Could not load tasks'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching todos:', error);
+            todoContainer.innerHTML = '<div class="alert alert-danger">Failed to load tasks. Please try again.</div>';
+        });
+}
+
+// Updated displayUserTodos function to use your existing handleUpdateTodoStatus
+function displayUserTodos(todos, container, cardId) {
+    container.innerHTML = '';
+    
+    if (!todos || todos.length === 0) {
+        container.innerHTML = '<div class="no-todos p-3 text-muted">No tasks for this card</div>';
+        return;
+    }
+    
+    const todoList = document.createElement('div');
+    todoList.className = 'todo-list';
+    
+    todos.forEach(todo => {
+        const todoItem = document.createElement('div');
+        todoItem.className = 'todo-item d-flex align-items-center p-2 border-bottom';
+        todoItem.dataset.todoId = todo.id;
+        
+        // Create checkbox for completion status
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'form-check-input me-3';
+        checkbox.checked = todo.completed;
+        checkbox.disabled = false; // Explicitly enable the checkbox
+        
+        // Add event listener to the checkbox using your existing function
+        checkbox.addEventListener('click', function(e) {
+            // Stop event propagation to prevent modal issues
+            e.stopPropagation();
+        });
+        
+        checkbox.addEventListener('change', function(e) {
+            e.stopPropagation();
+            // Use your existing function
+            handleUpdateTodoStatus(todo.id, this.checked);
             
-            // Добавляем модальное окно в DOM
-            document.body.appendChild(colorModal);
+            // Update UI immediately (optimistic update)
+            const todoContent = this.closest('.todo-item').querySelector('.todo-content');
+            if (this.checked) {
+                todoContent.classList.add('text-decoration-line-through', 'text-muted');
+            } else {
+                todoContent.classList.remove('text-decoration-line-through', 'text-muted');
+            }
+        });
+        
+        // Create todo content
+        const todoContent = document.createElement('span');
+        todoContent.className = todo.completed ? 'todo-content text-decoration-line-through text-muted' : 'todo-content';
+        todoContent.textContent = todo.content;
+        
+        // Add elements to todo item
+        todoItem.appendChild(checkbox);
+        todoItem.appendChild(todoContent);
+        
+        // Prevent todoItem click from interfering with checkbox
+        todoItem.addEventListener('click', function(e) {
+            // If clicking directly on the todoItem (not the checkbox)
+            if (e.target === this || e.target === todoContent) {
+                const checkboxEl = this.querySelector('input[type="checkbox"]');
+                checkboxEl.checked = !checkboxEl.checked;
+                
+                // Trigger the change event manually
+                const changeEvent = new Event('change');
+                checkboxEl.dispatchEvent(changeEvent);
+            }
+        });
+        
+        // Add todo item to list
+        todoList.appendChild(todoItem);
+    });
+    
+    container.appendChild(todoList);
+}
+
+// Add CSS for admin indicators
+function addAdminStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .admin-only {
+            position: relative;
+        }
+        
+        .admin-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 6px;
+            color: #6c757d;
+            font-size: 0.8em;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Modal functions
+function openModal(modal) {
+    // Close all open modals
+    closeAllModals();
+    
+    // Open selected modal
+    modal.classList.add('active');
+    
+    // Add handler to close modal when clicking outside
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeAllModals();
+        }
+    });
+}
+
+function closeAllModals() {
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.classList.remove('active');
+    });
+}
+
+// Helper functions
+function selectBoard(board) {
+    activeBoard = board;
+    
+    // Update active board in UI
+    document.querySelectorAll('.board-item').forEach(item => {
+        item.classList.toggle('active', parseInt(item.dataset.boardId) === board.id);
+    });
+    
+    // Update title and board actions
+    document.getElementById('activeBoardTitle').textContent = board.name;
+    document.getElementById('boardActions').style.display = 'flex';
+    
+    // Hide select board message and show lists container
+    document.getElementById('selectBoardMessage').style.display = 'none';
+    document.getElementById('listsContainer').style.display = 'flex';
+    
+    // Load lists for selected board
+    loadLists(board.id);
+}
+// Add this loadLists function after the loadBoards function
+async function loadLists(boardId) {
+    if (!boardId) {
+        console.error('Board ID is required to load lists');
+        return;
+    }
+    
+    showLoading('listsLoading');
+    try {
+        console.log(`Fetching lists for board ${boardId}`);
+        const response = await fetch(`${apiBaseUrl}/boards/${boardId}/lists`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch lists. Status: ${response.status}`);
+        }
+        
+        lists = await response.json();
+        console.log('Lists loaded successfully:', lists);
+        
+        // Load cards for each list
+        const cardPromises = lists.map(list => loadCards(boardId, list.id));
+        await Promise.all(cardPromises);
+        
+        renderLists();
+        hideLoading('listsLoading');
+        
+        // Check if there's a highlighted card to find
+        const highlightCardId = localStorage.getItem('highlightCardId');
+        if (highlightCardId) {
+            setTimeout(() => {
+                const cardElement = document.querySelector(`.card[data-card-id="${highlightCardId}"]`);
+                if (cardElement) {
+                    console.log(`Found card to highlight: ${highlightCardId}`);
+                    localStorage.removeItem('highlightCardId');
+                    
+                    // Highlight found card
+                    cardElement.classList.add('highlighted-card');
+                    
+                    // Scroll to card
+                    cardElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                    
+                    // Remove highlight after some time
+                    setTimeout(() => {
+                        cardElement.classList.remove('highlighted-card');
+                    }, 10000);
+                }
+            }, 500);
+        }
+    } catch (error) {
+        console.error(`Error loading lists for board ${boardId}:`, error);
+        showToast('Error', 'Failed to load lists. Please try again.', 'error');
+        hideLoading('listsLoading');
+    }
+}
+
+function showToast(title, message, type = 'success') {
+    const toastContainer = document.getElementById('toastContainer');
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+        </div>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    // Remove toast after 3 seconds
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+function showLoading(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.display = 'flex';
+    }
+}
+
+function hideLoading(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.display = 'none';
+    }
+}
+
+function formatDate(date, showTime = false) {
+    if (!date) return '';
+    
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    
+    if (showTime) {
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+    }
+    
+    return `${day}.${month}.${year}`;
+}
+
+function getInitials(name) {
+    if (!name) return '?';
+    
+    const parts = name.split(' ');
+    if (parts.length === 1) {
+        return parts[0].charAt(0).toUpperCase();
+    }
+    
+    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+}
+
+function addTodoItem(containerId) {
+    const container = document.getElementById(containerId);
+    
+    const todoItem = document.createElement('div');
+    todoItem.className = 'todo-item';
+    
+    todoItem.innerHTML = `
+        <input type="text" class="todo-input" placeholder="Add a task...">
+        <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+    `;
+    
+    // Add remove handler
+    todoItem.querySelector('.btn-remove-todo').addEventListener('click', () => {
+        todoItem.remove();
+    });
+    
+    container.appendChild(todoItem);
+}
+
+// Toggle sidebar collapsed state
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+}
+
+// Initialize edit list form handler
+document.getElementById('editListForm').addEventListener('submit', handleEditList);
+
+// Функция для создания модального окна выбора цвета списка
+function createListColorModal() {
+    // Проверяем, существует ли уже модальное окно
+    let colorModal = document.getElementById('listColorModal');
+    if (colorModal) return;
+    
+    // Предопределенные цвета для списков
+    const LIST_COLORS = [
+        { name: 'Синий', value: '#1976D2', text: 'white' },
+        { name: 'Фиолетовый', value: '#9C27B0', text: 'white' },
+        { name: 'Красный', value: '#D32F2F', text: 'white' },
+        { name: 'Оранжевый', value: '#FF9800', text: 'black' },
+        { name: 'Зеленый', value: '#2E7D32', text: 'white' },
+        { name: 'Бирюзовый', value: '#00897B', text: 'white' },
+        { name: 'Серый', value: '#757575', text: 'white' },
+        { name: 'Розовый', value: '#E91E63', text: 'white' },
+        { name: 'Коричневый', value: '#795548', text: 'white' },
+        { name: 'Желтый', value: '#FFC107', text: 'black' },
+        { name: 'По умолчанию', value: '#f0f2f5', text: 'black' }
+    ];
+    
+    // Создаем модальное окно
+    colorModal = document.createElement('div');
+    colorModal.id = 'listColorModal';
+    colorModal.className = 'modal';
+    
+    // Создаем содержимое модального окна
+    colorModal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Выберите цвет списка</h2>
+                <button class="close-modal"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="color-picker-container" style="padding: 16px;">
+                <div class="color-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    ${LIST_COLORS.map(color => `
+                        <div class="color-option" data-color="${color.value}" data-text="${color.text}" 
+                             style="background-color: ${color.value}; color: ${color.text}; 
+                                   height: 40px; border-radius: 4px; cursor: pointer; 
+                                   display: flex; align-items: center; justify-content: center; 
+                                   box-shadow: 0 1px 3px rgba(0,0,0,0.12);">
+                            ${color.name}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Добавляем модальное окно в DOM
+    document.body.appendChild(colorModal);
+    
+    // Добавляем обработчики событий
+    colorModal.querySelector('.close-modal').addEventListener('click', () => {
+        colorModal.classList.remove('active');
+    });
+    
+    colorModal.querySelectorAll('.color-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const listId = colorModal.dataset.listId;
+            const color = option.dataset.color;
+            const textColor = option.dataset.text;
             
-            // Добавляем обработчики событий
-            colorModal.querySelector('.close-modal').addEventListener('click', () => {
+            if (listId && color) {
+                setListColor(listId, color, textColor);
                 colorModal.classList.remove('active');
-            });
-            
-            colorModal.querySelectorAll('.color-option').forEach(option => {
-                option.addEventListener('click', () => {
-                    const listId = colorModal.dataset.listId;
-                    const color = option.dataset.color;
-                    const textColor = option.dataset.text;
-                    
-                    if (listId && color) {
-                        setListColor(listId, color, textColor);
-                        colorModal.classList.remove('active');
-                    }
-                });
-            });
-            
-            // Закрытие при клике вне модального окна
-            colorModal.addEventListener('click', (e) => {
-                if (e.target === colorModal) {
-                    colorModal.classList.remove('active');
-                }
-            });
-        }
-        
-        // Функция для открытия модального окна выбора цвета
-        function openListColorPicker(listId) {
-            // Убедимся, что у нас есть модальное окно
-            createListColorModal();
-            
-            // Получаем ссылку на модальное окно
-            const colorModal = document.getElementById('listColorModal');
-            
-            // Устанавливаем ID списка
-            colorModal.dataset.listId = listId;
-            
-            // Открываем модальное окно
-            colorModal.classList.add('active');
-        }
-        
-        // Функция для установки цвета списка
-        function setListColor(listId, color, textColor) {
-            // Обновляем UI
-            const listElement = document.querySelector(`.list[data-list-id="${listId}"]`);
-            if (listElement) {
-                const headerElement = listElement.querySelector('.list-header');
-                if (headerElement) {
-                    headerElement.style.backgroundColor = color;
-                    headerElement.style.color = textColor;
-                    
-                    // Сохраняем цвета в атрибутах для восстановления при перерисовке
-                    listElement.dataset.color = color;
-                    listElement.dataset.textColor = textColor;
-                }
             }
+        });
+    });
+    
+    // Закрытие при клике вне модального окна
+    colorModal.addEventListener('click', (e) => {
+        if (e.target === colorModal) {
+            colorModal.classList.remove('active');
+        }
+    });
+}
+
+// Функция для открытия модального окна выбора цвета
+function openListColorPicker(listId) {
+    // Убедимся, что у нас есть модальное окно
+    createListColorModal();
+    
+    // Получаем ссылку на модальное окно
+    const colorModal = document.getElementById('listColorModal');
+    
+    // Устанавливаем ID списка
+    colorModal.dataset.listId = listId;
+    
+    // Открываем модальное окно
+    colorModal.classList.add('active');
+}
+
+// Функция для установки цвета списка
+function setListColor(listId, color, textColor) {
+    // Обновляем UI
+    const listElement = document.querySelector(`.list[data-list-id="${listId}"]`);
+    if (listElement) {
+        const headerElement = listElement.querySelector('.list-header');
+        if (headerElement) {
+            headerElement.style.backgroundColor = color;
+            headerElement.style.color = textColor;
             
-            // Находим список в массиве
-            const listIndex = lists.findIndex(list => list.id === parseInt(listId));
-            if (listIndex !== -1) {
-                // Добавляем свойства цвета к объекту списка
-                lists[listIndex].color = color;
-                lists[listIndex].textColor = textColor;
-                
-                // Сохраняем на сервере
-                saveListColor(listId, color, textColor);
-            }
+            // Сохраняем цвета в атрибутах для восстановления при перерисовке
+            listElement.dataset.color = color;
+            listElement.dataset.textColor = textColor;
+        }
+    }
+    
+    // Находим список в массиве
+    const listIndex = lists.findIndex(list => list.id === parseInt(listId));
+    if (listIndex !== -1) {
+        // Добавляем свойства цвета к объекту списка
+        lists[listIndex].color = color;
+        lists[listIndex].textColor = textColor;
+        
+        // Сохраняем на сервере
+        saveListColor(listId, color, textColor);
+    }
+}
+
+// Функция для сохранения цвета списка на сервере
+function saveListColor(listId, color, textColor) {
+    if (!activeBoard) return;
+    
+    fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/color`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color, text_color: textColor }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Failed to save list color. Status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('List color saved:', data);
+    })
+    .catch(error => {
+        console.error('Error saving list color:', error);
+        showToast('Error', 'Failed to save list color', 'error');
+    });
+}
+
+// Add drag & drop styles
+function addDragAndDropStyles() {
+    const style = document.createElement('style');
+    style.id = 'kanban-drag-styles';
+    style.textContent = `
+        .list.dragging-list {
+            opacity: 0.5;
+            background: #f0f0f0;
+            border: 2px dashed #999;
+            z-index: 1000;
         }
         
-        // Функция для сохранения цвета списка на сервере
-        function saveListColor(listId, color, textColor) {
-            if (!activeBoard) return;
-            
-            fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/color`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ color, text_color: textColor }),
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Failed to save list color. Status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('List color saved:', data);
-            })
-            .catch(error => {
-                console.error('Error saving list color:', error);
-                showToast('Error', 'Failed to save list color', 'error');
-            });
+        .list.list-drop-zone::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background-color: #4299e1;
+            z-index: 1;
         }
         
-        // Add drag & drop styles
-        function addDragAndDropStyles() {
-            const style = document.createElement('style');
-            style.id = 'kanban-drag-styles';
-            style.textContent = `
-                .list.dragging-list {
-                    opacity: 0.5;
-                    background: #f0f0f0;
-                    border: 2px dashed #999;
-                    z-index: 1000;
-                }
-                
-                .list.list-drop-zone::before {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    bottom: 0;
-                    width: 6px;
-                    background-color: #4299e1;
-                    z-index: 1;
-                }
-                
-                .list.list-drop-zone[data-drop-position="before"]::before {
-                    left: -3px;
-                }
-                
-                .list.list-drop-zone[data-drop-position="after"]::before {
-                    right: -3px;
-                }
-                
-                .card.dragging {
-                    opacity: 0.7;
-                    transform: scale(0.98);
-                    z-index: 1000;
-                }
-                
-                .list-cards.drag-over {
-                    background-color: rgba(66, 153, 225, 0.1);
-                }
-            `;
-            document.head.appendChild(style);
+        .list.list-drop-zone[data-drop-position="before"]::before {
+            left: -3px;
         }
         
-        // Functions for draggable cards
-        function setupDraggable(element) {
-            element.addEventListener('dragstart', (e) => {
-                // Убедимся, что перетаскивается карточка, а не список
-                e.stopPropagation(); // Предотвращаем всплытие события к родительскому списку
-                
-                e.dataTransfer.setData('card-id', e.target.dataset.cardId);
-                e.dataTransfer.setData('source-list', e.target.dataset.listId);
-                e.dataTransfer.effectAllowed = 'move';
-                
-                // Добавляем класс для визуального отображения перетаскивания
-                setTimeout(() => {
-                    e.target.classList.add('dragging');
-                }, 0);
-            });
-            
-            element.addEventListener('dragend', (e) => {
-                e.target.classList.remove('dragging');
-                document.querySelectorAll('.drag-over').forEach(el => {
-                    el.classList.remove('drag-over');
-                });
-            });
+        .list.list-drop-zone[data-drop-position="after"]::before {
+            right: -3px;
         }
         
-        // Functions for drop zones
-        function setupDropZone(element) {
-            element.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                
-                // Проверяем, является ли перетаскиваемый элемент карточкой
-                if (isDraggingList) return;
-                
-                const cardBeingDragged = document.querySelector('.dragging');
-                if (!cardBeingDragged) return;
-                
-                // Определяем, над какой карточкой находится курсор
-                const cardsInThisList = Array.from(element.querySelectorAll('.card:not(.dragging)'));
-                const cardAfterCursor = getCardAfterCursor(cardsInThisList, e.clientY);
-                
-                // Визуальная индикация для зоны сброса
-                element.classList.add('drag-over');
-                
-                // Если карточка найдена, вставляем перетаскиваемую карточку перед ней
-                if (cardAfterCursor) {
-                    element.insertBefore(cardBeingDragged, cardAfterCursor);
-                } else {
-                    // Если курсор ниже всех карточек или список пуст, добавляем в конец
-                    element.appendChild(cardBeingDragged);
-                }
-            });
-            
-            element.addEventListener('dragleave', () => {
-                element.classList.remove('drag-over');
-            });
-            
-            element.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                element.classList.remove('drag-over');
-                
-                // Проверяем, является ли перетаскиваемый элемент карточкой
-                const cardId = e.dataTransfer.getData('card-id');
-                if (!cardId) return; // Если нет id карточки, то пропускаем
-                
-                const sourceListId = parseInt(e.dataTransfer.getData('source-list'));
-                const targetListId = parseInt(element.dataset.listId);
-                
-                // Если перемещение между разными списками
-                if (sourceListId !== targetListId) {
-                    await handleCardMove(parseInt(cardId), sourceListId, targetListId);
-                }
-                // Если перемещение внутри одного списка
-                else {
-                    // Собираем новый порядок карточек
-                    const cards = Array.from(element.querySelectorAll('.card'));
-                    const cardIds = cards.map(card => parseInt(card.dataset.cardId));
-                    
-                    // Сохраняем новый порядок
-                    saveCardsOrder(targetListId, cardIds);
-                }
-            });
+        .card.dragging {
+            opacity: 0.7;
+            transform: scale(0.98);
+            z-index: 1000;
         }
         
-        // Get card that should come after the dragged card
-        function getCardAfterCursor(cards, cursorY) {
-            return cards.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = cursorY - box.top - box.height / 2;
-                
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        .list-cards.drag-over {
+            background-color: rgba(66, 153, 225, 0.1);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Functions for draggable cards
+function setupDraggable(element) {
+    element.addEventListener('dragstart', (e) => {
+        // Убедимся, что перетаскивается карточка, а не список
+        e.stopPropagation(); // Предотвращаем всплытие события к родительскому списку
+        
+        e.dataTransfer.setData('card-id', e.target.dataset.cardId);
+        e.dataTransfer.setData('source-list', e.target.dataset.listId);
+        e.dataTransfer.effectAllowed = 'move';
+        
+        // Добавляем класс для визуального отображения перетаскивания
+        setTimeout(() => {
+            e.target.classList.add('dragging');
+        }, 0);
+    });
+    
+    element.addEventListener('dragend', (e) => {
+        e.target.classList.remove('dragging');
+        document.querySelectorAll('.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+    });
+}
+
+// Functions for drop zones
+function setupDropZone(element) {
+    element.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        
+        // Проверяем, является ли перетаскиваемый элемент карточкой
+        if (isDraggingList) return;
+        
+        const cardBeingDragged = document.querySelector('.dragging');
+        if (!cardBeingDragged) return;
+        
+        // Определяем, над какой карточкой находится курсор
+        const cardsInThisList = Array.from(element.querySelectorAll('.card:not(.dragging)'));
+        const cardAfterCursor = getCardAfterCursor(cardsInThisList, e.clientY);
+        
+        // Визуальная индикация для зоны сброса
+        element.classList.add('drag-over');
+        
+        // Если карточка найдена, вставляем перетаскиваемую карточку перед ней
+        if (cardAfterCursor) {
+            element.insertBefore(cardBeingDragged, cardAfterCursor);
+        } else {
+            // Если курсор ниже всех карточек или список пуст, добавляем в конец
+            element.appendChild(cardBeingDragged);
+        }
+    });
+    
+    element.addEventListener('dragleave', () => {
+        element.classList.remove('drag-over');
+    });
+    
+    element.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        element.classList.remove('drag-over');
+        
+        // Проверяем, является ли перетаскиваемый элемент карточкой
+        const cardId = e.dataTransfer.getData('card-id');
+        if (!cardId) return; // Если нет id карточки, то пропускаем
+        
+        const sourceListId = parseInt(e.dataTransfer.getData('source-list'));
+        const targetListId = parseInt(element.dataset.listId);
+        
+        // Если перемещение между разными списками
+        if (sourceListId !== targetListId) {
+            await handleCardMove(parseInt(cardId), sourceListId, targetListId);
+        }
+        // Если перемещение внутри одного списка
+        else {
+            // Собираем новый порядок карточек
+            const cards = Array.from(element.querySelectorAll('.card'));
+            const cardIds = cards.map(card => parseInt(card.dataset.cardId));
+            
+            // Сохраняем новый порядок
+            saveCardsOrder(targetListId, cardIds);
+        }
+    });
+}
+
+// Get card that should come after the dragged card
+function getCardAfterCursor(cards, cursorY) {
+    return cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = cursorY - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// Save new order of cards
+async function saveCardsOrder(listId, cardIds) {
+    if (!activeBoard) return;
+    
+    try {
+        console.log(`Saving new cards order for list ${listId}:`, cardIds);
+        
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ card_ids: cardIds }),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to save cards order. Status: ${response.status}`);
         }
         
-        // Save new order of cards
-        async function saveCardsOrder(listId, cardIds) {
-            if (!activeBoard) return;
-            
-            try {
-                console.log(`Saving new cards order for list ${listId}:`, cardIds);
-                
-                const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/reorder`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ card_ids: cardIds }),
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`Failed to save cards order. Status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log('Cards order saved:', data);
-                
-                // Обновляем порядок карточек в массиве списков
-                updateCardsOrderInMemory(listId, cardIds);
-                
-                showToast('Success', 'Cards order saved successfully', 'success');
-            } catch (error) {
-                console.error('Error saving cards order:', error);
-                showToast('Error', 'Failed to save cards order', 'error');
-            }
+        const data = await response.json();
+        console.log('Cards order saved:', data);
+        
+        // Обновляем порядок карточек в массиве списков
+        updateCardsOrderInMemory(listId, cardIds);
+        
+        showToast('Success', 'Cards order saved successfully', 'success');
+    } catch (error) {
+        console.error('Error saving cards order:', error);
+        showToast('Error', 'Failed to save cards order', 'error');
+    }
+}
+
+// Update order of cards in memory
+function updateCardsOrderInMemory(listId, cardIds) {
+    const listIndex = lists.findIndex(list => list.id === listId);
+    if (listIndex === -1 || !lists[listIndex].cards) return;
+    
+    const newOrderCards = [];
+    cardIds.forEach(cardId => {
+        const card = lists[listIndex].cards.find(c => c.id === cardId);
+        if (card) {
+            newOrderCards.push(card);
+        }
+    });
+    
+    lists[listIndex].cards = newOrderCards;
+}
+
+// Functions for draggable lists
+function setupDraggableList(listElement) {
+    listElement.setAttribute('draggable', 'true');
+    
+    listElement.addEventListener('dragstart', (e) => {
+        console.log('List dragstart event triggered', e.target);
+        
+        // Проверяем, что тянут за заголовок списка
+        const isHeader = e.target.classList.contains('list-header') || 
+                       e.target.closest('.list-header');
+                       
+        // Если тянут не за заголовок или пользователь не админ, отменяем
+        if (!isHeader || !isAdmin) {
+            e.preventDefault();
+            return false;
         }
         
-        // Update order of cards in memory
-        function updateCardsOrderInMemory(listId, cardIds) {
-            const listIndex = lists.findIndex(list => list.id === listId);
-            if (listIndex === -1 || !lists[listIndex].cards) return;
-            
-            const newOrderCards = [];
-            cardIds.forEach(cardId => {
-                const card = lists[listIndex].cards.find(c => c.id === cardId);
-                if (card) {
-                    newOrderCards.push(card);
-                }
-            });
-            
-            lists[listIndex].cards = newOrderCards;
+        isDraggingList = true;
+        draggedList = listElement;
+        
+        const rect = listElement.getBoundingClientRect();
+        listElement.style.setProperty('--list-width', `${rect.width}px`);
+        
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', listElement.dataset.listId);
+        
+        // Добавляем классы с небольшой задержкой для лучшей визуализации
+        setTimeout(() => {
+            listElement.classList.add('dragging-list');
+        }, 0);
+        
+        console.log('List drag started for list ID:', listElement.dataset.listId);
+    });
+    
+    listElement.addEventListener('dragend', (e) => {
+        console.log('List dragend event triggered');
+        isDraggingList = false;
+        draggedList = null;
+        listElement.classList.remove('dragging-list');
+        
+        // Удаляем все маркеры зон перетаскивания
+        document.querySelectorAll('.list-drop-zone').forEach(el => {
+            el.classList.remove('list-drop-zone');
+            el.removeAttribute('data-drop-position');
+        });
+    });
+}
+// Модифицированная функция setupListsContainer
+function setupListsContainer() {
+    const container = document.getElementById('listsContainer');
+    if (!container) return;
+    
+    container.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        
+        // Если не тащим список или пользователь не админ, игнорируем
+        if (!isDraggingList || !isAdmin) return;
+        
+        const draggingElement = document.querySelector('.dragging-list');
+        if (!draggingElement) return;
+        
+        // Получаем элемент, после которого нужно вставить
+        const afterElement = getDragAfterElement(container, e.clientX);
+        
+        // Очищаем предыдущие зоны перетаскивания
+        document.querySelectorAll('.list-drop-zone').forEach(el => {
+            el.classList.remove('list-drop-zone');
+            el.removeAttribute('data-drop-position');
+        });
+        
+        if (afterElement) {
+            // Если есть элемент, после которого вставляем
+            afterElement.classList.add('list-drop-zone');
+            afterElement.setAttribute('data-drop-position', 'before');
+        } else if (container.lastElementChild && 
+                  container.lastElementChild !== draggingElement) {
+            // Если нет элемента (конец контейнера), выделяем последний элемент
+            container.lastElementChild.classList.add('list-drop-zone');
+            container.lastElementChild.setAttribute('data-drop-position', 'after');
+        }
+    });
+    
+    container.addEventListener('drop', (e) => {
+        e.preventDefault();
+        
+        // Если не тащим список или пользователь не админ, игнорируем
+        if (!isDraggingList || !isAdmin || !draggedList) return;
+        
+        console.log('List dropped, rearranging lists');
+        
+        const draggingElement = document.querySelector('.dragging-list');
+        if (!draggingElement) return;
+        
+        // Получаем элемент, после которого нужно вставить
+        const afterElement = getDragAfterElement(container, e.clientX);
+        
+        // Вставляем перетаскиваемый элемент
+        if (afterElement) {
+            container.insertBefore(draggingElement, afterElement);
+        } else {
+            container.appendChild(draggingElement);
         }
         
-        // Functions for draggable lists
-        function setupDraggableList(listElement) {
-            listElement.setAttribute('draggable', 'true');
-            
-            listElement.addEventListener('dragstart', (e) => {
-                const header = e.target.closest('.list-header');
-                if (!header || !isAdmin) {
-                    e.preventDefault();
-                    return false;
-                }
-                
-                isDraggingList = true;
-                draggedList = listElement;
-                
-                const rect = listElement.getBoundingClientRect();
-                listElement.style.setProperty('--list-width', `${rect.width}px`);
-                
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', listElement.dataset.listId);
-                
-                setTimeout(() => {
-                    listElement.classList.add('dragging-list');
-                }, 0);
-            });
-            
-            listElement.addEventListener('dragend', () => {
-                isDraggingList = false;
-                draggedList = null;
-                listElement.classList.remove('dragging-list');
-            });
+        // Очищаем маркеры
+        document.querySelectorAll('.list-drop-zone').forEach(el => {
+            el.classList.remove('list-drop-zone');
+            el.removeAttribute('data-drop-position');
+        });
+        
+        // Обновляем порядок списков и сохраняем его
+        updateListsOrder();
+        saveListsOrder();
+    });
+}
+
+
+// Улучшенная функция getDragAfterElement
+function getDragAfterElement(container, x) {
+    const draggingElement = document.querySelector('.dragging-list');
+    if (!draggingElement) return null;
+    
+    const draggableElements = [...container.querySelectorAll('.list:not(.dragging-list)')];
+    if (draggableElements.length === 0) return null;
+    
+    // Находим элемент, после которого нужно вставить перетаскиваемый
+    let closestElement = null;
+    let closestOffset = Number.NEGATIVE_INFINITY;
+    
+    draggableElements.forEach(element => {
+        const box = element.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        
+        if (offset < 0 && offset > closestOffset) {
+            closestOffset = offset;
+            closestElement = element;
+        }
+    });
+    
+    return closestElement;
+}
+// Модифицированная функция updateListsOrder
+function updateListsOrder() {
+    const listElements = document.querySelectorAll('.list');
+    const newOrder = Array.from(listElements)
+        .filter(el => el.dataset.listId) // Убедимся, что у элемента есть ID
+        .map(el => parseInt(el.dataset.listId));
+    
+    console.log('New list order:', newOrder);
+    
+    // Проверяем, не пустой ли массив
+    if (newOrder.length === 0) {
+        console.warn('No lists found to update order');
+        return;
+    }
+    
+    // Создаем новый массив с списками в новом порядке
+    const newLists = [];
+    for (const listId of newOrder) {
+        const list = lists.find(l => l.id === listId);
+        if (list) {
+            newLists.push(list);
+        } else {
+            console.warn(`List with ID ${listId} not found in lists array`);
+        }
+    }
+    
+    // Проверяем, не пустой ли получившийся массив
+    if (newLists.length === 0) {
+        console.warn('No lists in new order. Keeping original order.');
+        return;
+    }
+    
+    // Обновляем глобальный массив списков
+    lists = newLists;
+    console.log('Lists order updated in memory');
+}
+// Function to save lists order on the server
+async function saveListsOrder() {
+    if (!activeBoard) return;
+    
+    // Get the current order of lists from the DOM
+    const listElements = document.querySelectorAll('.list');
+    const listIds = Array.from(listElements).map(el => parseInt(el.dataset.listId));
+    
+    console.log('Saving lists order to server:', listIds);
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ list_ids: listIds }),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to save lists order. Status: ${response.status}`);
         }
         
-        // Function to set up the lists container for drag & drop
-        function setupListsContainer() {
-            const container = document.getElementById('listsContainer');
-            if (!container) return;
-            
-            container.addEventListener('dragover', (e) => {
-                if (!isDraggingList || !isAdmin) return;
-                e.preventDefault();
-                
-                const draggingElement = document.querySelector('.dragging-list');
-                if (!draggingElement) return;
-                
-                const afterElement = getDragAfterElement(container, e.clientX);
-                
-                if (afterElement == null) {
-                    container.appendChild(draggingElement);
-                } else {
-                    container.insertBefore(draggingElement, afterElement);
-                }
-            });
-            
-            container.addEventListener('drop', (e) => {
-                if (!isDraggingList || !isAdmin) return;
-                e.preventDefault();
-                
-                // Update lists array order to match DOM
-                updateListsOrder();
-                
-                // Save the new order to the server
-                saveListsOrder();
-            });
-        }
+        const data = await response.json();
+        console.log('Lists order saved successfully:', data);
         
-        function getDragAfterElement(container, x) {
-            const draggableElements = [...container.querySelectorAll('.list:not(.dragging-list)')];
-            
-            return draggableElements.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = x - box.left - box.width / 2;
-                
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
-        }
-        
-        // Function to update lists order in memory
-        function updateListsOrder() {
-            const listElements = document.querySelectorAll('.list');
-            const newOrder = Array.from(listElements).map(el => parseInt(el.dataset.listId));
-            
-            console.log('New list order:', newOrder);
-            
-            // Create new array with lists in the new order
-            const newLists = [];
-            newOrder.forEach(listId => {
-                const list = lists.find(l => l.id === listId);
-                if (list) {
-                    newLists.push(list);
-                }
-            });
-            
-            // Update the global lists array
-            lists = newLists;
-        }
-        
-        // Function to save lists order on the server
-        async function saveListsOrder() {
-            if (!activeBoard) return;
-            
-            // Get the current order of lists from the DOM
-            const listElements = document.querySelectorAll('.list');
-            const listIds = Array.from(listElements).map(el => parseInt(el.dataset.listId));
-            
-            console.log('Saving lists order to server:', listIds);
-            
-            try {
-                const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/reorder`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ list_ids: listIds }),
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`Failed to save lists order. Status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log('Lists order saved successfully:', data);
-                
-                // Notify user of success
-                showToast('Success', 'List order saved successfully', 'success');
-            } catch (error) {
-                console.error('Error saving lists order:', error);
-                showToast('Error', 'Failed to save list order. Please try again.', 'error');
-            }
-        }
-        
-        
+        // Notify user of success
+        showToast('Success', 'List order saved successfully', 'success');
+    } catch (error) {
+        console.error('Error saving lists order:', error);
+        showToast('Error', 'Failed to save list order. Please try again.', 'error');
+    }
+}
+
+// Добавьте несколько debugging функций
+function debugDragDrop() {
+    console.log('Current drag state:', {
+        isDraggingList,
+        draggedList: draggedList ? draggedList.dataset.listId : null
+    });
+    console.log('Lists in memory:', lists.map(l => ({ id: l.id, name: l.name })));
+}
+
+// Инициализируем переменные в начале скрипта, если они еще не инициализированы
+if (typeof isDraggingList === 'undefined') {
+    let isDraggingList = false;
+}
+
+if (typeof draggedList === 'undefined') {
+    let draggedList = null;
+}
+// Экспортировать основные функции в глобальное пространство имен
+window.loadLists = loadLists;
+window.loadCards = loadCards;
+window.renderLists = renderLists;
+window.createCardElement = createCardElement;
+window.selectBoard = selectBoard;
+window.showToast = showToast;
+window.addTodoItem = addTodoItem;
+window.getTodoItems = getTodoItems;
+window.openModal = openModal;
+window.closeAllModals = closeAllModals;
