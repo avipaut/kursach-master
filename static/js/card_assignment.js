@@ -1,141 +1,163 @@
-// improved_card_assignment.js
-// This file handles multi-user assignment and creator information display
+// kanban_board_management.js
+// This combined script includes:
+// 1. Card assignment functionality with creator info display
+// 2. Multi-user assignment features
+// 3. Board sharing capabilities
 
 // Global variables
 let boardAssignableUsers = [];
-let cardAssignments = new Map(); // Map to store card-to-users assignments
+let cardAssignments = new Map();
+let currentUserInfo = null;
+let boardUsers = [];
 
-// Wait until the page is fully loaded
-document.addEventListener('DOMContentLoaded', () => {
-    console.log("Card assignment module loading...");
+// DOM elements for board sharing
+let addUserModal;
+let boardUsersListModal;
+
+// Initialize everything when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("Kanban Board Management module loading...");
     
-    // Add our CSS styles
+    // Add all necessary styles
     addCardAssignmentStyles();
+    addBoardSharingStyles();
     
-    // Initialize after a short delay to ensure kanban.js has completed initialization
+    // Get current user info
+    fetchCurrentUserInfo();
+    
+    // Initialize with delay to ensure other scripts are loaded
     setTimeout(() => {
         initializeCardAssignment();
+        setupMultiUserAssignment();
+        setupSearchableUserSelects();
+        
+        // Set up board sharing
+        createBoardSharingModals();
+        addBoardSharingButton();
+        
+        // Set up observers and patches
+        setupBoardsObserver();
+        setupCardsObserver();
+        patchKanbanFunctions();
+        setupApiMonitoring();
+        
+        // Run initial fixes
+        fixCardAssignmentIssues();
     }, 500);
-    
-    // Also hook into DOM changes to handle dynamically created elements
-    observeDOMChanges();
 });
 
-// Main initialization
-function initializeCardAssignment() {
-    console.log("Initializing card assignment features...");
+// ========================
+// USER MANAGEMENT FUNCTIONS
+// ========================
+
+async function fetchCurrentUserInfo() {
+    try {
+        const apiBaseUrl = getApiBaseUrl();
+        const response = await fetch(`${apiBaseUrl}/kanban/api/current_user`);
+        if (response.ok) {
+            currentUserInfo = await response.json();
+            console.log('Current user info loaded:', currentUserInfo);
+        }
+    } catch (error) {
+        console.error('Error fetching current user info:', error);
+    }
+}
+
+async function loadBoardAssignableUsers(boardId) {
+    console.log("Loading assignable users for board:", boardId);
     
-    // Make sure existing cards and boards show creator info
+    try {
+        const apiBaseUrl = getApiBaseUrl();
+        const response = await fetch(`${apiBaseUrl}/boards/${boardId}/users`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch board users. Status: ${response.status}`);
+        }
+        
+        boardAssignableUsers = await response.json();
+        console.log('Board assignable users loaded:', boardAssignableUsers);
+        
+        // Set up multi-select in modals
+        setupMultiSelectInModals();
+        
+        return boardAssignableUsers;
+    } catch (error) {
+        console.error('Error loading board users:', error);
+        return [];
+    }
+}
+
+// ========================
+// CARD ASSIGNMENT FUNCTIONS
+// ========================
+
+function initializeCardAssignment() {
+    console.log("Initializing enhanced card assignment features...");
+    
+    // Enhance existing elements
     enhanceExistingCards();
     enhanceExistingBoards();
     
-    // Override kanban.js functions to add our enhancements
-    patchKanbanFunctions();
-    
-    // Set up board selection listener to load board users
-    setupBoardSelectionListener();
-    
-    // Enhance modals for multi-user assignment
-    setupMultiUserAssignment();
+    // Set up form handlers after a short delay
+    setTimeout(overrideFormSubmitHandlers, 1500);
 }
 
-// Observer for DOM changes to enhance new elements
-function observeDOMChanges() {
-    // Create observer for board list (sidebar)
-    const boardsList = document.getElementById('boardsList');
-    if (boardsList) {
-        const boardsObserver = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.addedNodes.length) {
-                    enhanceExistingBoards();
-                }
-            }
-        });
-        
-        boardsObserver.observe(boardsList, { 
-            childList: true, 
-            subtree: true 
-        });
-    }
-    
-    // Create observer for lists container (main kanban board)
-    const listsContainer = document.getElementById('listsContainer');
-    if (listsContainer) {
-        const listsObserver = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.addedNodes.length) {
-                    enhanceExistingCards();
-                }
-            }
-        });
-        
-        listsObserver.observe(listsContainer, { 
-            childList: true, 
-            subtree: true 
-        });
-    }
-}
-
-// Enhance all currently displayed cards
 function enhanceExistingCards() {
     console.log("Enhancing existing cards with creator info...");
     
     document.querySelectorAll('.card').forEach(cardElement => {
-        if (cardElement.querySelector('.creator-info')) {
-            return; // Skip if already enhanced
-        }
+        if (cardElement.querySelector('.creator-info')) return;
         
         const cardId = parseInt(cardElement.dataset.cardId);
         const listId = parseInt(cardElement.dataset.listId);
         
         if (!cardId || !listId || !window.lists) return;
         
-        // Find card data
         const list = window.lists.find(l => l.id === listId);
         if (!list || !list.cards) return;
         
         const card = list.cards.find(c => c.id === cardId);
-        if (!card || !card.created_at || !card.user_id) return;
+        if (!card) return;
         
-        // Find creator info
+        // Creator info
         const creator = window.users ? window.users.find(user => user.id === card.user_id) : null;
-        const creatorName = creator ? creator.username : 'Unknown';
+        const creatorName = creator ? creator.username || creator.name || `User ${creator.id}` : 'Unknown';
         
-        // Format date (use original function if available)
+        // Format date
         let creationDate = 'unknown date';
-        try {
-            if (typeof formatDate === 'function') {
-                creationDate = formatDate(new Date(card.created_at));
-            } else {
-                creationDate = new Date(card.created_at).toLocaleDateString();
+        if (card.created_at) {
+            try {
+                creationDate = typeof formatDate === 'function' ? 
+                    formatDate(new Date(card.created_at)) : 
+                    new Date(card.created_at).toLocaleDateString();
+            } catch (e) {
+                console.error('Error formatting date:', e);
             }
-        } catch (e) {
-            console.error('Error formatting date:', e);
         }
         
-        // Create creator info element
+        // Create info element
         const creatorInfo = document.createElement('div');
         creatorInfo.className = 'creator-info';
         creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
         
-        // Insert after card header or at the beginning
+        // Insert in DOM
         const cardHeader = cardElement.querySelector('.card-header');
         if (cardHeader && cardHeader.nextSibling) {
             cardElement.insertBefore(creatorInfo, cardHeader.nextSibling);
         } else {
             cardElement.insertBefore(creatorInfo, cardElement.firstChild);
         }
+        
+        // Update completion permissions
+        updateCardCompletionPermission(cardElement, card);
     });
 }
 
-// Enhance all currently displayed boards
 function enhanceExistingBoards() {
     console.log("Enhancing existing boards with creator info...");
     
     document.querySelectorAll('.board-item').forEach(boardItem => {
-        if (boardItem.querySelector('.board-creator-info')) {
-            return; // Skip if already enhanced
-        }
+        if (boardItem.querySelector('.board-creator-info')) return;
         
         const boardId = parseInt(boardItem.dataset.boardId);
         if (!boardId || !window.boards) return;
@@ -148,7 +170,7 @@ function enhanceExistingBoards() {
         const creator = window.users ? window.users.find(user => user.id === board.user_id) : null;
         const creatorName = creator ? creator.username : 'Unknown';
         
-        // Format date (use original function if available)
+        // Format date
         let creationDate = 'unknown date';
         try {
             if (typeof formatDate === 'function') {
@@ -175,296 +197,202 @@ function enhanceExistingBoards() {
     });
 }
 
-// Override kanban.js functions
-function patchKanbanFunctions() {
-    // Patch createCardElement to show creator info for new cards
-    if (typeof window.createCardElement === 'function') {
-        console.log("Patching createCardElement function");
-        
-        window.originalCreateCardElement = window.createCardElement;
-        window.createCardElement = function(card, listId) {
-            try {
-                // Call original function
-                const cardElement = window.originalCreateCardElement(card, listId);
-                
-                // Add creator info if not already present
-                if (!cardElement.querySelector('.creator-info') && card.created_at && card.user_id) {
-                    const creator = window.users ? window.users.find(user => user.id === card.user_id) : null;
-                    const creatorName = creator ? creator.username : 'Unknown';
-                    
-                    let creationDate = 'unknown date';
-                    try {
-                        if (typeof formatDate === 'function') {
-                            creationDate = formatDate(new Date(card.created_at));
-                        } else {
-                            creationDate = new Date(card.created_at).toLocaleDateString();
-                        }
-                    } catch (e) {
-                        console.error('Error formatting date:', e);
-                    }
-                    
-                    const creatorInfo = document.createElement('div');
-                    creatorInfo.className = 'creator-info';
-                    creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
-                    
-                    // Insert after card header or at the beginning
-                    const cardHeader = cardElement.querySelector('.card-header');
-                    if (cardHeader && cardHeader.nextSibling) {
-                        cardElement.insertBefore(creatorInfo, cardHeader.nextSibling);
-                    } else {
-                        cardElement.insertBefore(creatorInfo, cardElement.firstChild);
-                    }
-                }
-                
-                return cardElement;
-            } catch (error) {
-                console.error('Error in patched createCardElement:', error);
-                return window.originalCreateCardElement(card, listId);
-            }
-        };
-    }
+function updateCardCompletionPermission(cardElement, card) {
+    const toggleBtn = cardElement.querySelector('.btn-toggle-completion');
+    if (!toggleBtn) return;
     
-    // Patch renderBoards to add creator info
-    if (typeof window.renderBoards === 'function') {
-        console.log("Patching renderBoards function");
-        
-        window.originalRenderBoards = window.renderBoards;
-        window.renderBoards = function() {
-            try {
-                // Call original function
-                window.originalRenderBoards();
-                
-                // Now enhance all board items
-                enhanceExistingBoards();
-            } catch (error) {
-                console.error('Error in patched renderBoards:', error);
-                if (window.originalRenderBoards) {
-                    window.originalRenderBoards();
-                }
-            }
-        };
-    }
+    let canToggleCompletion = currentUserInfo?.is_admin === true;
     
-    // Patch selectBoard to load assignable users
-    if (typeof window.selectBoard === 'function') {
-        console.log("Patching selectBoard function");
-        
-        window.originalSelectBoard = window.selectBoard;
-        window.selectBoard = function(board) {
-            try {
-                // Call original function
-                window.originalSelectBoard(board);
-                
-                // Load users assignable to this board
-                if (board && board.id) {
-                    loadBoardAssignableUsers(board.id);
-                }
-            } catch (error) {
-                console.error('Error in patched selectBoard:', error);
-                if (window.originalSelectBoard) {
-                    window.originalSelectBoard(board);
-                }
-            }
-        };
-    }
-}
-
-// Set up board selection listener
-function setupBoardSelectionListener() {
-    // This function is used if we couldn't patch selectBoard directly
-    console.log("Setting up board selection listener");
-    
-    document.querySelectorAll('.board-item').forEach(boardItem => {
-        boardItem.addEventListener('click', function(event) {
-            if (event.target.closest('.board-actions')) {
-                return; // Skip if clicked on action buttons
-            }
-            
-            const boardId = parseInt(this.dataset.boardId);
-            if (!boardId) return;
-            
-            // Get board data
-            const board = window.boards ? window.boards.find(b => b.id === boardId) : null;
-            if (!board) return;
-            
-            // Load assignable users
-            setTimeout(() => {
-                loadBoardAssignableUsers(boardId);
-            }, 500);
-        });
-    });
-}
-
-// Load board assignable users
-async function loadBoardAssignableUsers(boardId) {
-    console.log("Loading assignable users for board:", boardId);
-    
-    try {
-        const apiBaseUrl = window.location.hostname === 'localhost' ? '' : '/kanban';
-        const response = await fetch(`${apiBaseUrl}/boards/${boardId}/users`);
-        
-        if (!response.ok) {
-            throw new Error(`Failed to fetch board users. Status: ${response.status}`);
+    if (card.assigned_to && currentUserInfo) {
+        if (card.assigned_to === currentUserInfo.id) {
+            canToggleCompletion = true;
+        } else if (Array.isArray(card.assigned_users)) {
+            canToggleCompletion = card.assigned_users.some(user => user.id === currentUserInfo.id);
         }
+    }
+    
+    if (!canToggleCompletion) {
+        toggleBtn.classList.add('disabled');
+        toggleBtn.title = "Only assigned users can mark this card as completed";
+        toggleBtn.style.opacity = "0.5";
+        toggleBtn.style.cursor = "not-allowed";
         
-        boardAssignableUsers = await response.json();
-        console.log('Board assignable users loaded:', boardAssignableUsers);
-        
-        // Set up multi-select in modals
-        setupMultiSelectInModals();
-        
-        return boardAssignableUsers;
-    } catch (error) {
-        console.error('Error loading board users:', error);
-        return [];
+        const originalClickHandler = toggleBtn.onclick;
+        toggleBtn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            showToast('Info', 'Only assigned users can mark this card as completed', 'info');
+            return false;
+        };
     }
 }
 
-// Set up multi-user assignment in modals
+// ========================
+// MULTI-USER ASSIGNMENT
+// ========================
+
 function setupMultiUserAssignment() {
-    console.log("Setting up multi-user assignment");
-    
-    // Setup for create card modal
     setupCreateCardModal();
-    
-    // Setup for edit card modal
     setupEditCardModal();
 }
 
-// Set up create card modal for multi-user assignment
 function setupCreateCardModal() {
     const createCardModal = document.getElementById('createCardModal');
-    if (!createCardModal) {
-        console.warn("Create card modal not found");
-        return;
-    }
+    if (!createCardModal) return;
     
-    // Find or create the assignee field
     let assigneeField = document.getElementById('cardAssignee');
     const modalBody = createCardModal.querySelector('.modal-body');
     
-    // If field not found, create it
     if (!assigneeField && modalBody) {
-        console.log("Creating multi-select assignee field in create card modal");
+        let insertAfter = modalBody.querySelector('.form-group:nth-child(3)') || modalBody.lastElementChild;
         
-        // Find position to insert (after priority)
-        let insertAfter = modalBody.querySelector('.form-group:nth-child(3)');
-        if (!insertAfter) {
-            insertAfter = modalBody.lastElementChild;
-        }
-        
-        // Create form group
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
         formGroup.innerHTML = `
             <label for="cardAssignees">Assignees</label>
-            <select id="cardAssignees" multiple class="form-control">
-                <option value="" disabled>Select assignees</option>
-            </select>
+            <div class="select-with-search">
+                <input type="text" class="search-input" placeholder="Search users...">
+                <select id="cardAssignees" multiple class="form-control">
+                    <option value="" disabled>Select assignees</option>
+                </select>
+            </div>
             <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
         `;
         
-        // Insert into modal
         if (insertAfter.nextSibling) {
             modalBody.insertBefore(formGroup, insertAfter.nextSibling);
         } else {
             modalBody.appendChild(formGroup);
         }
         
-        // Override form submission
         const form = createCardModal.querySelector('form');
         if (form) {
             form.addEventListener('submit', handleCreateCardWithMultipleAssignees);
         }
+        
+        setupSelectSearch(formGroup.querySelector('.search-input'), 'cardAssignees');
     }
 }
 
-// Set up edit card modal for multi-user assignment
 function setupEditCardModal() {
     const editCardModal = document.getElementById('editCardModal');
-    if (!editCardModal) {
-        console.warn("Edit card modal not found");
-        return;
-    }
+    if (!editCardModal) return;
     
-    // Find or create the assignee field
     let assigneeField = document.getElementById('editCardAssignee');
     const modalBody = editCardModal.querySelector('.modal-body');
     
-    // If field not found, create it
     if (!assigneeField && modalBody) {
-        console.log("Creating multi-select assignee field in edit card modal");
+        let insertAfter = modalBody.querySelector('.form-group:nth-child(4)') || modalBody.lastElementChild;
         
-        // Find position to insert (after priority)
-        let insertAfter = modalBody.querySelector('.form-group:nth-child(4)');
-        if (!insertAfter) {
-            insertAfter = modalBody.lastElementChild;
-        }
-        
-        // Create form group
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
         formGroup.innerHTML = `
             <label for="editCardAssignees">Assignees</label>
-            <select id="editCardAssignees" multiple class="form-control">
-                <option value="" disabled>Select assignees</option>
-            </select>
+            <div class="select-with-search">
+                <input type="text" class="search-input" placeholder="Search users...">
+                <select id="editCardAssignees" multiple class="form-control">
+                    <option value="" disabled>Select assignees</option>
+                </select>
+            </div>
             <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
         `;
         
-        // Insert into modal
         if (insertAfter.nextSibling) {
             modalBody.insertBefore(formGroup, insertAfter.nextSibling);
         } else {
             modalBody.appendChild(formGroup);
         }
         
-        // Override form submission
         const form = editCardModal.querySelector('form');
         if (form) {
             form.addEventListener('submit', handleUpdateCardWithMultipleAssignees);
         }
+        
+        setupSelectSearch(formGroup.querySelector('.search-input'), 'editCardAssignees');
     }
 }
 
-// Set up multi-select dropdowns
+function setupSearchableUserSelects() {
+    document.querySelectorAll('.form-group select[id*="user"], .form-group select[id*="User"]').forEach(select => {
+        const selectId = select.id;
+        const formGroup = select.closest('.form-group');
+        
+        if (formGroup.querySelector('.select-with-search')) return;
+        
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'search-input';
+        searchInput.placeholder = 'Search users...';
+        
+        const container = document.createElement('div');
+        container.className = 'select-with-search';
+        
+        select.parentNode.insertBefore(container, select);
+        container.appendChild(searchInput);
+        container.appendChild(select);
+        
+        setupSelectSearch(searchInput, selectId);
+    });
+}
+
+function setupSelectSearch(searchInput, selectId) {
+    if (!searchInput || !selectId) return;
+    
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    searchInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const options = Array.from(select.querySelectorAll('option:not(:first-child)'));
+        
+        options.forEach(option => {
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(searchTerm) ? '' : 'none';
+        });
+    });
+    
+    select.addEventListener('blur', function() {
+        setTimeout(() => {
+            searchInput.value = '';
+            Array.from(select.querySelectorAll('option')).forEach(option => {
+                option.style.display = '';
+            });
+        }, 200);
+    });
+}
+
 function setupMultiSelectInModals() {
-    // Clear and populate create modal dropdown
+    // For create modal
     const createSelect = document.getElementById('cardAssignees');
     if (createSelect) {
-        // Clear existing options except first
-        while (createSelect.options.length > 1) {
-            createSelect.remove(1);
-        }
+        while (createSelect.options.length > 1) createSelect.remove(1);
         
-        // Add board users
         boardAssignableUsers.forEach(user => {
             const option = document.createElement('option');
             option.value = user.id;
-            option.textContent = user.username;
+            option.textContent = user.username || user.name || `User ${user.id}`;
             createSelect.appendChild(option);
         });
     }
     
-    // Clear and populate edit modal dropdown
+    // For edit modal
     const editSelect = document.getElementById('editCardAssignees');
     if (editSelect) {
-        // Clear existing options except first
-        while (editSelect.options.length > 1) {
-            editSelect.remove(1);
-        }
+        while (editSelect.options.length > 1) editSelect.remove(1);
         
-        // Add board users
         boardAssignableUsers.forEach(user => {
             const option = document.createElement('option');
             option.value = user.id;
-            option.textContent = user.username;
+            option.textContent = user.username || user.name || `User ${user.id}`;
             editSelect.appendChild(option);
         });
     }
 }
 
-// Handle create card with multiple assignees
+// ========================
+// FORM HANDLERS
+// ========================
+
 async function handleCreateCardWithMultipleAssignees(event) {
     event.preventDefault();
     
@@ -475,47 +403,27 @@ async function handleCreateCardWithMultipleAssignees(event) {
     
     const form = event.target;
     const listId = parseInt(form.dataset.listId);
-    if (!listId) {
-        console.error("No list ID found");
-        return;
-    }
+    if (!listId) return;
     
-    // Get basic card information - check for existence before getting values
+    // Get form data
     const titleElement = document.getElementById('cardTitle');
     const descriptionElement = document.getElementById('cardDescription');
     const priorityElement = document.getElementById('cardPriority');
     const deadlineElement = document.getElementById('cardDeadline');
     
-    // Only get values if elements exist
     const title = titleElement ? titleElement.value.trim() : '';
     const description = descriptionElement ? descriptionElement.value.trim() : '';
     const priority = priorityElement ? priorityElement.value : 'medium';
     const deadline = deadlineElement ? deadlineElement.value : '';
     
-    // Get selected assignees - first check if multi-select exists
+    // Get selected users
     const assigneesSelect = document.getElementById('cardAssignees');
     const selectedAssignees = [];
     
     if (assigneesSelect) {
         Array.from(assigneesSelect.selectedOptions).forEach(option => {
-            if (option.value) {
-                selectedAssignees.push(parseInt(option.value));
-            }
+            if (option.value) selectedAssignees.push(parseInt(option.value));
         });
-    }
-    
-    // For backward compatibility - check for single assignee
-    const singleAssigneeElement = document.getElementById('cardAssignee');
-    let singleAssigneeId = null;
-    
-    if (singleAssigneeElement && singleAssigneeElement.value) {
-        singleAssigneeId = parseInt(singleAssigneeElement.value);
-        
-        // If no multiple assignees are selected but we have a single assignee,
-        // add it to the multi-select array for consistency
-        if (selectedAssignees.length === 0 && singleAssigneeId) {
-            selectedAssignees.push(singleAssigneeId);
-        }
     }
     
     if (!title) {
@@ -524,11 +432,9 @@ async function handleCreateCardWithMultipleAssignees(event) {
     }
     
     try {
-        console.log('Creating card with assigned users:', selectedAssignees);
+        const apiBaseUrl = getApiBaseUrl();
         
-        const apiBaseUrl = window.location.hostname === 'localhost' ? '' : '/kanban';
-        
-        // Create basic card
+        // Create card
         const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -536,22 +442,20 @@ async function handleCreateCardWithMultipleAssignees(event) {
                 title,
                 description,
                 priority,
-                completed: false
+                completed: false,
+                position: 0
             }),
         });
         
-        if (!response.ok) {
-            throw new Error(`Failed to create card. Status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Failed to create card. Status: ${response.status}`);
         
         const newCard = await response.json();
-        console.log('Card created successfully:', newCard);
         const cardId = newCard.id;
         
-        // Array for additional operations
+        // Additional operations
         const operations = [];
         
-        // Add tasks (if function exists)
+        // Add todos
         if (typeof window.getTodoItems === 'function') {
             const todoItems = window.getTodoItems('todoItems');
             for (const content of todoItems) {
@@ -578,49 +482,62 @@ async function handleCreateCardWithMultipleAssignees(event) {
             );
         }
         
-        // Assign multiple users to card if there are any selected
+        // Assign users
         if (selectedAssignees.length > 0) {
             operations.push(
                 fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign-multiple`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ user_ids: selectedAssignees }),
+                }).catch(error => {
+                    console.warn('Multi-assign failed, using single assign:', error);
+                    const firstAssignee = selectedAssignees[0];
+                    return fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: firstAssignee }),
+                    });
                 })
             );
             
-            // Store assignments for client-side use
             cardAssignments.set(cardId, selectedAssignees);
         }
         
         // Execute all operations
         await Promise.allSettled(operations);
         
-        // Reload cards and render
-        if (typeof window.loadCards === 'function') {
-            await window.loadCards(activeBoard.id, listId);
+        // Update client data
+        const listIndex = window.lists.findIndex(list => list.id === listId);
+        if (listIndex !== -1) {
+            newCard.user_id = currentUserInfo?.id;
+            newCard.created_at = new Date().toISOString();
+            
+            if (selectedAssignees.length > 0) {
+                newCard.assigned_to = selectedAssignees[0];
+                newCard.assigned_users = selectedAssignees.map(userId => {
+                    const user = boardAssignableUsers.find(u => u.id === userId);
+                    return user || { id: userId, username: 'Unknown' };
+                });
+            }
+            
+            if (window.lists[listIndex].cards) {
+                window.lists[listIndex].cards.unshift(newCard);
+            }
         }
         
-        if (typeof window.renderLists === 'function') {
-            window.renderLists();
-        }
+        // Update UI
+        if (typeof window.loadCards === 'function') await window.loadCards(activeBoard.id, listId);
+        if (typeof window.renderLists === 'function') window.renderLists();
+        if (typeof window.closeAllModals === 'function') window.closeAllModals();
         
-        // Close modal
-        if (typeof window.closeAllModals === 'function') {
-            window.closeAllModals();
-        }
-        
-        // Show success message
-        if (typeof window.showToast === 'function') {
-            window.showToast('Success', 'Card created successfully', 'success');
-        } else {
-            alert('Card created successfully');
-        }
+        // Show message
+        showToast('Success', 'Card created successfully', 'success');
     } catch (error) {
         console.error('Error creating card:', error);
         alert('Failed to create card: ' + error.message);
     }
 }
-// Handle update card with multiple assignees
+
 async function handleUpdateCardWithMultipleAssignees(event) {
     event.preventDefault();
     
@@ -633,10 +550,7 @@ async function handleUpdateCardWithMultipleAssignees(event) {
     const cardId = parseInt(form.dataset.cardId);
     const listId = parseInt(form.dataset.listId);
     
-    if (!cardId || !listId) {
-        console.error("Missing card ID or list ID");
-        return;
-    }
+    if (!cardId || !listId) return;
     
     const title = document.getElementById('editCardTitle').value.trim();
     const description = document.getElementById('editCardDescription').value.trim();
@@ -644,15 +558,13 @@ async function handleUpdateCardWithMultipleAssignees(event) {
     const deadline = document.getElementById('editCardDeadline')?.value;
     const completed = document.getElementById('editCardCompleted')?.checked || false;
     
-    // Get selected assignees
+    // Get selected users
     const assigneesSelect = document.getElementById('editCardAssignees');
     const selectedAssignees = [];
     
     if (assigneesSelect) {
         Array.from(assigneesSelect.selectedOptions).forEach(option => {
-            if (option.value) {
-                selectedAssignees.push(parseInt(option.value));
-            }
+            if (option.value) selectedAssignees.push(parseInt(option.value));
         });
     }
     
@@ -662,22 +574,15 @@ async function handleUpdateCardWithMultipleAssignees(event) {
     }
     
     try {
-        console.log('Updating card with assigned users:', selectedAssignees);
-        
-        const apiBaseUrl = window.location.hostname === 'localhost' ? '' : '/kanban';
-        
-        // Array for operations
+        const apiBaseUrl = getApiBaseUrl();
         const operations = [];
         
-        // Update basic card information
+        // Update basic info
         operations.push(
             fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title,
-                    description
-                }),
+                body: JSON.stringify({ title, description }),
             })
         );
         
@@ -705,23 +610,38 @@ async function handleUpdateCardWithMultipleAssignees(event) {
                 fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        deadline: new Date(deadline).toISOString() 
-                    }),
+                    body: JSON.stringify({ deadline: new Date(deadline).toISOString() }),
                 })
             );
         }
         
-        // Assign multiple users to card
-        operations.push(
-            fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign-multiple`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_ids: selectedAssignees }),
-            })
-        );
+        // Assign users
+        if (selectedAssignees.length > 0) {
+            operations.push(
+                fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign-multiple`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_ids: selectedAssignees }),
+                }).catch(error => {
+                    console.warn('Multi-assign failed, using single assign:', error);
+                    const firstAssignee = selectedAssignees[0];
+                    return fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: firstAssignee }),
+                    });
+                })
+            );
+        } else {
+            operations.push(
+                fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: null }),
+                })
+            );
+        }
         
-        // Store assignments for client-side use
         cardAssignments.set(cardId, selectedAssignees);
         
         // Update todos
@@ -737,7 +657,6 @@ async function handleUpdateCardWithMultipleAssignees(event) {
             if (!content) continue;
             
             if (todoId) {
-                // Update existing task
                 operations.push(
                     fetch(`${apiBaseUrl}/todos/${todoId}`, {
                         method: 'PUT',
@@ -749,7 +668,6 @@ async function handleUpdateCardWithMultipleAssignees(event) {
                     })
                 );
             } else {
-                // Create new task
                 operations.push(
                     fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/todos`, {
                         method: 'POST',
@@ -763,324 +681,1584 @@ async function handleUpdateCardWithMultipleAssignees(event) {
         // Execute all operations
         await Promise.allSettled(operations);
         
-        // Reload cards and render
-        if (typeof window.loadCards === 'function') {
-            await window.loadCards(activeBoard.id, listId);
+        // Update client data
+        const listIndex = window.lists.findIndex(list => list.id === listId);
+        if (listIndex !== -1 && window.lists[listIndex].cards) {
+            const cardIndex = window.lists[listIndex].cards.findIndex(c => c.id === cardId);
+            if (cardIndex !== -1) {
+                const card = window.lists[listIndex].cards[cardIndex];
+                card.title = title;
+                card.description = description;
+                card.priority = priority;
+                card.completed = completed;
+                card.deadline = deadline ? new Date(deadline).toISOString() : card.deadline;
+                
+                if (selectedAssignees.length > 0) {
+                    card.assigned_to = selectedAssignees[0];
+                    card.assigned_users = selectedAssignees.map(userId => {
+                        const user = boardAssignableUsers.find(u => u.id === userId);
+                        return user || { id: userId, username: 'Unknown' };
+                    });
+                } else {
+                    card.assigned_to = null;
+                    card.assigned_users = [];
+                }
+            }
         }
         
-        if (typeof window.renderLists === 'function') {
-            window.renderLists();
-        }
+        // Update UI
+        if (typeof window.loadCards === 'function') await window.loadCards(activeBoard.id, listId);
+        if (typeof window.renderLists === 'function') window.renderLists();
+        if (typeof window.closeAllModals === 'function') window.closeAllModals();
         
-        // Close modal
-        if (typeof window.closeAllModals === 'function') {
-            window.closeAllModals();
-        }
-        
-        // Show success message
-        if (typeof window.showToast === 'function') {
-            window.showToast('Success', 'Card updated successfully', 'success');
-        } else {
-            alert('Card updated successfully');
-        }
+        // Show message
+        showToast('Success', 'Card updated successfully', 'success');
     } catch (error) {
         console.error('Error updating card:', error);
         alert('Failed to update card: ' + error.message);
     }
 }
 
-// Helper function to get todos (fallback if not available in kanban.js)
-function getTodoItems(containerId) {
-    const todos = [];
-    const container = document.getElementById(containerId);
+// ========================
+// BOARD SHARING FUNCTIONS
+// ========================
+
+function createBoardSharingModals() {
+    // Modal for adding users to a board
+    createAddUserModal();
     
-    if (container) {
-        const todoInputs = container.querySelectorAll('.todo-input');
-        todoInputs.forEach(input => {
-            const content = input.value.trim();
-            if (content) {
-                todos.push(content);
-            }
-        });
-    }
-    
-    return todos;
+    // Modal for viewing and managing board users
+    createBoardUsersListModal();
 }
 
-// Add proper CSS styles
+function createAddUserModal() {
+    // Check if modal already exists
+    if (document.getElementById('addUserToBoardModal')) {
+        return;
+    }
+    
+    // Create modal element
+    const modal = document.createElement('div');
+    modal.id = 'addUserToBoardModal';
+    modal.className = 'modal';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add User to Board</h2>
+                <button class="close-modal"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="addUserToBoardForm">
+                <div class="form-group">
+                    <label for="userSelect">Select User</label>
+                    <select id="userSelect" class="form-control" required>
+                        <option value="">-- Select User --</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary btn-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add User</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    // Add modal to the DOM
+    document.body.appendChild(modal);
+    
+    // Store reference to modal
+    addUserModal = modal;
+    
+    // Add event listeners
+    modal.querySelector('.close-modal').addEventListener('click', () => closeAllModals());
+    modal.querySelector('.btn-cancel').addEventListener('click', () => closeAllModals());
+    
+    const addUserForm = document.getElementById('addUserToBoardForm');
+    addUserForm.addEventListener('submit', handleAddUserToBoard);
+}
+
+function createBoardUsersListModal() {
+    // Check if modal already exists
+    if (document.getElementById('boardUsersListModal')) {
+        return;
+    }
+    
+    // Create modal element
+    const modal = document.createElement('div');
+    modal.id = 'boardUsersListModal';
+    modal.className = 'modal';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Board Users</h2>
+                <button class="close-modal"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="board-users-list"></div>
+                <div class="empty-users-message" style="display: none;">
+                    <p>No users have been added to this board yet.</p>
+                </div>
+                <div class="form-actions mt-4">
+                    <button type="button" id="addUserBtn" class="btn btn-primary">
+                        <i class="fas fa-user-plus"></i> Add User
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-cancel">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add modal to the DOM
+    document.body.appendChild(modal);
+    
+    // Store reference to modal
+    boardUsersListModal = modal;
+    
+    // Add event listeners
+    modal.querySelector('.close-modal').addEventListener('click', () => closeAllModals());
+    modal.querySelector('.btn-cancel').addEventListener('click', () => closeAllModals());
+    
+    const addUserBtn = document.getElementById('addUserBtn');
+    addUserBtn.addEventListener('click', () => {
+        // Close current modal and open add user modal
+        closeAllModals();
+        openAddUserModal();
+    });
+}
+
+function addBoardSharingButton() {
+    const boardActionsContainer = document.getElementById('boardActions');
+    if (!boardActionsContainer) return;
+    
+    // Create the share button
+    const shareButton = document.createElement('button');
+    shareButton.id = 'shareBoardBtn';
+    shareButton.className = 'btn btn-light';
+    shareButton.innerHTML = '<i class="fas fa-users"></i> Share Board';
+    
+    // Add click event listener
+    shareButton.addEventListener('click', openBoardUsersListModal);
+    
+    // Add button to the container
+    boardActionsContainer.appendChild(shareButton);
+}
+
+function openAddUserModal() {
+    if (!activeBoard) {
+        showToast('Error', 'Please select a board first', 'error');
+        return;
+    }
+    
+    // Populate the user select dropdown with users who are not already added to the board
+    populateUserSelectForBoard();
+    
+    // Open the modal
+    openModal(addUserModal);
+}
+
+function openBoardUsersListModal() {
+    if (!activeBoard) {
+        showToast('Error', 'Please select a board first', 'error');
+        return;
+    }
+    
+    // Fetch and display the users who have access to the board
+    fetchBoardUsers();
+    
+    // Open the modal
+    openModal(boardUsersListModal);
+}
+
+function populateUserSelectForBoard() {
+    const userSelect = document.getElementById('userSelect');
+    
+    // Clear existing options except the first one
+    while (userSelect.options.length > 1) {
+        userSelect.remove(1);
+    }
+    
+    // Filter out users who are already added to the board
+    const boardUserIds = boardUsers.map(user => user.id);
+    const availableUsers = users.filter(user => !boardUserIds.includes(user.id) && user.id !== activeBoard.user_id);
+    
+    // Add available users to the dropdown
+    availableUsers.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.username || user.name || `User ${user.id}`;
+        userSelect.appendChild(option);
+    });
+    
+    // Check if there are any available users
+    if (availableUsers.length === 0) {
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = "No available users";
+        option.disabled = true;
+        userSelect.appendChild(option);
+        
+        // Disable the submit button
+        document.querySelector('#addUserToBoardForm button[type="submit"]').disabled = true;
+    } else {
+        // Enable the submit button
+        document.querySelector('#addUserToBoardForm button[type="submit"]').disabled = false;
+    }
+}
+
+async function fetchBoardUsers() {
+    if (!activeBoard) return;
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/users`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch board users. Status: ${response.status}`);
+        }
+        
+        boardUsers = await response.json();
+        console.log('Board users loaded:', boardUsers);
+        
+        // Display the board users
+        displayBoardUsers();
+    } catch (error) {
+        console.error('Error fetching board users:', error);
+        showToast('Error', 'Failed to load board users. Please try again.', 'error');
+    }
+}
+
+function displayBoardUsers() {
+    const boardUsersList = document.querySelector('.board-users-list');
+    const emptyMessage = document.querySelector('.empty-users-message');
+    
+    // Clear the list
+    boardUsersList.innerHTML = '';
+    
+    // Check if there are any users
+    if (!boardUsers || boardUsers.length === 0) {
+        boardUsersList.style.display = 'none';
+        emptyMessage.style.display = 'block';
+        return;
+    }
+    
+    // Show the list and hide the empty message
+    boardUsersList.style.display = 'block';
+    emptyMessage.style.display = 'none';
+    
+    // Create a list of users
+    const userListElement = document.createElement('ul');
+    userListElement.className = 'user-list';
+    
+    // Create a list item for each user
+    boardUsers.forEach(user => {
+        const userItem = document.createElement('li');
+        userItem.className = 'user-item';
+        
+        // Determine if this user is the board creator
+        const isCreator = user.id === activeBoard.user_id;
+        
+        userItem.innerHTML = `
+            <div class="user-info">
+                <span class="user-avatar">${getInitials(user.username || '')}</span>
+                <span class="user-name">${user.username}</span>
+                ${isCreator ? '<span class="user-role">(Owner)</span>' : ''}
+            </div>
+            ${!isCreator ? `
+                <button class="btn-remove-user" data-user-id="${user.id}" title="Remove user">
+                    <i class="fas fa-times"></i>
+                </button>
+            ` : ''}
+        `;
+        
+        // Add click event listener to remove button
+        if (!isCreator) {
+            const removeButton = userItem.querySelector('.btn-remove-user');
+            removeButton.addEventListener('click', () => handleRemoveUserFromBoard(user.id));
+        }
+        
+        userListElement.appendChild(userItem);
+    });
+    
+    boardUsersList.appendChild(userListElement);
+}
+
+async function handleAddUserToBoard(event) {
+    event.preventDefault();
+    
+    if (!activeBoard) {
+        showToast('Error', 'Please select a board first', 'error');
+        return;
+    }
+    
+    const userSelect = document.getElementById('userSelect');
+    const userId = userSelect.value;
+    
+    if (!userId) {
+        showToast('Error', 'Please select a user', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId }),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to add user to board. Status: ${response.status}`);
+        }
+        
+        await response.json();
+        
+        // Refresh the board users list
+        await fetchBoardUsers();
+        
+        // Close the add user modal and open the board users list modal
+        closeAllModals();
+        openBoardUsersListModal();
+        
+        showToast('Success', 'User added to board successfully', 'success');
+    } catch (error) {
+        console.error('Error adding user to board:', error);
+        showToast('Error', 'Failed to add user to board. Please try again.', 'error');
+    }
+}
+
+async function handleRemoveUserFromBoard(userId) {
+    if (!activeBoard) {
+        showToast('Error', 'Please select a board first', 'error');
+        return;
+    }
+    
+    // Confirm removal
+    if (!confirm('Are you sure you want to remove this user from the board?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/users/${userId}`, {
+            method: 'DELETE',
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to remove user from board. Status: ${response.status}`);
+        }
+        
+        await response.json();
+        
+        // Refresh the board users list
+        await fetchBoardUsers();
+        
+        showToast('Success', 'User removed from board successfully', 'success');
+    } catch (error) {
+        console.error('Error removing user from board:', error);
+        showToast('Error', 'Failed to remove user from board. Please try again.', 'error');
+    }
+}
+
+// ========================
+// OBSERVERS AND PATCHES
+// ========================
+
+function setupBoardsObserver() {
+    const boardsList = document.getElementById('boardsList');
+    if (!boardsList) {
+        console.warn("Board list not found - will retry later");
+        setTimeout(setupBoardsObserver, 1000);
+        return;
+    }
+    
+    const boardsObserver = new MutationObserver(function(mutations) {
+        let needsFix = false;
+        
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                needsFix = true;
+                break;
+            }
+        }
+        
+        if (needsFix) {
+            setTimeout(fixBoardCreatorInfo, 200);
+        }
+    });
+    
+    boardsObserver.observe(boardsList, {
+        childList: true,
+        subtree: true
+    });
+}
+
+function setupCardsObserver() {
+    const listsContainer = document.getElementById('listsContainer');
+    if (!listsContainer) {
+        console.warn("Lists container not found - will retry later");
+        setTimeout(setupCardsObserver, 1000);
+        return;
+    }
+    
+    const cardsObserver = new MutationObserver(function(mutations) {
+        let needsFix = false;
+        
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                for (const node of mutation.addedNodes) {
+                    if (node.classList && (node.classList.contains('list') || node.classList.contains('card')) ){
+                        needsFix = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (needsFix) {
+            setTimeout(fixCardCreatorInfo, 200);
+        }
+    });
+    
+    cardsObserver.observe(listsContainer, {
+        childList: true,
+        subtree: true
+    });
+}
+
+function patchKanbanFunctions() {
+    // Patch createCardElement
+    if (typeof window.createCardElement === 'function') {
+        window.originalCreateCardElement = window.createCardElement;
+        window.createCardElement = function(card, listId) {
+            try {
+                const cardElement = window.originalCreateCardElement(card, listId);
+                
+                if (!cardElement.querySelector('.creator-info') && card.user_id) {
+                    const creator = window.users ? window.users.find(user => user.id === card.user_id) : null;
+                    const creatorName = creator ? creator.username || creator.name || `User ${creator.id}` : 'Unknown';
+                    
+                    let creationDate = 'unknown date';
+                    if (card.created_at) {
+                        try {
+                            creationDate = typeof formatDate === 'function' ? 
+                                formatDate(new Date(card.created_at)) : 
+                                new Date(card.created_at).toLocaleDateString();
+                        } catch (e) {
+                            console.error('Error formatting date:', e);
+                        }
+                    }
+                    
+                    const creatorInfo = document.createElement('div');
+                    creatorInfo.className = 'creator-info';
+                    creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+                    
+                    const cardHeader = cardElement.querySelector('.card-header');
+                    if (cardHeader && cardHeader.nextSibling) {
+                        cardElement.insertBefore(creatorInfo, cardHeader.nextSibling);
+                    } else {
+                        cardElement.insertBefore(creatorInfo, cardElement.firstChild);
+                    }
+                }
+                
+                updateCardCompletionPermission(cardElement, card);
+                return cardElement;
+            } catch (error) {
+                console.error('Error in patched createCardElement:', error);
+                return window.originalCreateCardElement(card, listId);
+            }
+        };
+    }
+    
+    // Patch renderBoards
+    if (typeof window.renderBoards === 'function') {
+        window.originalRenderBoards = window.renderBoards;
+        window.renderBoards = function() {
+            try {
+                window.originalRenderBoards();
+                enhanceExistingBoards();
+            } catch (error) {
+                console.error('Error in patched renderBoards:', error);
+                if (window.originalRenderBoards) window.originalRenderBoards();
+            }
+        };
+    }
+    
+    // Patch selectBoard
+    if (typeof window.selectBoard === 'function') {
+        window.originalSelectBoard = window.selectBoard;
+        window.selectBoard = function(board) {
+            try {
+                window.originalSelectBoard(board);
+                if (board && board.id) loadBoardAssignableUsers(board.id);
+            } catch (error) {
+                console.error('Error in patched selectBoard:', error);
+                if (window.originalSelectBoard) window.originalSelectBoard(board);
+            }
+        };
+    }
+    
+    // Patch handleCreateCard
+    if (typeof window.handleCreateCard === 'function') {
+        window.originalHandleCreateCard = window.handleCreateCard;
+        window.handleCreateCard = async function(event) {
+            try {
+                await window.originalHandleCreateCard(event);
+                
+                const listId = parseInt(event.target.dataset.listId);
+                if (!listId || !window.activeBoard) return;
+                
+                const list = window.lists.find(l => l.id === listId);
+                if (!list || !list.cards || list.cards.length === 0) return;
+                
+                const newCard = list.cards[list.cards.length - 1];
+                
+                if (newCard && list.cards.length > 1) {
+                    list.cards.pop();
+                    list.cards.unshift(newCard);
+                    
+                    if (list.cards[0].position !== undefined) {
+                        const minPosition = Math.min(...list.cards.map(c => c.position)) - 1;
+                        newCard.position = minPosition;
+                        
+                        const cardIds = list.cards.map(card => card.id);
+                        await saveCardsOrder(listId, cardIds);
+                    }
+                    
+                    if (typeof window.renderLists === 'function') window.renderLists();
+                }
+            } catch (error) {
+                console.error('Error in patched handleCreateCard:', error);
+            }
+        };
+    }
+}
+
+function setupApiMonitoring() {
+    // Create a proxy for the original fetch function
+    const originalFetch = window.fetch;
+    
+    window.fetch = function(url, options) {
+        const fetchPromise = originalFetch.apply(this, arguments);
+        
+        // Only intercept our relevant API calls
+        if (typeof url === 'string' && url.includes('/boards')) {
+            fetchPromise.then(() => {
+                // Wait a bit for the data to be processed
+                setTimeout(() => {
+                    // Re-run our fixes to ensure creator info is shown
+                    fixCardAssignmentIssues();
+                }, 500);
+            }).catch(() => {});
+        }
+        
+        return fetchPromise;
+    };
+}
+
+function overrideFormSubmitHandlers() {
+    // Check if create card form exists
+    const createCardForm = document.getElementById('createCardForm');
+    if (createCardForm) {
+        // Skip if already overridden
+        if (createCardForm._overridden) return;
+        
+        // Store original handler
+        const originalSubmitHandler = createCardForm.onsubmit;
+        
+        // Override with our handler
+        createCardForm.onsubmit = async function(event) {
+            event.preventDefault();
+            
+            // If there's no multi-select, use original handler
+            const assigneesSelect = document.getElementById('cardAssignees');
+            if (!assigneesSelect) {
+                if (originalSubmitHandler) {
+                    return originalSubmitHandler.call(this, event);
+                }
+                return true;
+            }
+            
+            // Get form data
+            const listId = parseInt(this.dataset.listId);
+            if (!listId || !window.activeBoard) {
+                console.error("Missing list ID or active board");
+                return false;
+            }
+            
+            // Check if required elements exist
+            const titleElement = document.getElementById('cardTitle');
+            const descriptionElement = document.getElementById('cardDescription');
+            const priorityElement = document.getElementById('cardPriority');
+            const deadlineElement = document.getElementById('cardDeadline');
+            
+            // Only get values if elements exist
+            const title = titleElement ? titleElement.value.trim() : '';
+            const description = descriptionElement ? descriptionElement.value.trim() : '';
+            const priority = priorityElement ? priorityElement.value : 'medium';
+            const deadline = deadlineElement ? deadlineElement.value : '';
+            
+            // Get selected users
+            const selectedUsers = Array.from(assigneesSelect.selectedOptions)
+                .map(option => parseInt(option.value))
+                .filter(id => !isNaN(id));
+            
+            if (!title) {
+                alert("Title is required");
+                return false;
+            }
+            
+            try {
+                console.log("Creating card with multi-user assignment:", selectedUsers);
+                
+                // Create basic card
+                const apiBaseUrl = getApiBaseUrl();
+                const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title,
+                        description,
+                        priority,
+                        completed: false
+                    }),
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to create card. Status: ${response.status}`);
+                }
+                
+                const newCard = await response.json();
+                const cardId = newCard.id;
+                
+                // Operations array
+                const operations = [];
+                
+                // Add todos
+                const todoItems = document.querySelectorAll('#todoItems .todo-input');
+                for (const input of todoItems) {
+                    const content = input.value.trim();
+                    if (content) {
+                        operations.push(
+                            fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/todos`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ content, completed: false }),
+                            })
+                        );
+                    }
+                }
+                
+                // Set deadline
+                if (deadline) {
+                    operations.push(
+                        fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ deadline: new Date(deadline).toISOString() }),
+                        })
+                    );
+                }
+                
+                // Assign users
+                if (selectedUsers.length > 0) {
+                    operations.push(
+                        fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign-multiple`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_ids: selectedUsers }),
+                        })
+                    );
+                    
+                    // Store assignments for client-side use
+                    if (typeof window.cardAssignments !== 'undefined') {
+                        window.cardAssignments.set(cardId, selectedUsers);
+                    } else {
+                        window.cardAssignments = new Map();
+                        window.cardAssignments.set(cardId, selectedUsers);
+                    }
+                }
+                
+                // Execute operations
+                await Promise.allSettled(operations);
+                
+                // Reload and render
+                if (typeof window.loadCards === 'function') {
+                    await window.loadCards(activeBoard.id, listId);
+                }
+                
+                if (typeof window.renderLists === 'function') {
+                    window.renderLists();
+                }
+                
+                // Close modal
+                if (typeof window.closeAllModals === 'function') {
+                    window.closeAllModals();
+                }
+                
+                // Show success message
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Success', 'Card created successfully', 'success');
+                } else {
+                    alert('Card created successfully');
+                }
+                
+                // Run fixes to ensure creator info is shown
+                setTimeout(fixCardCreatorInfo, 500);
+                
+                return false;
+            } catch (error) {
+                console.error("Error creating card with multiple assignees:", error);
+                
+                // Fallback to original handler
+                if (originalSubmitHandler) {
+                    return originalSubmitHandler.call(this, event);
+                }
+                
+                return false;
+            }
+        };
+        
+        // Mark as overridden to prevent multiple overrides
+        createCardForm._overridden = true;
+    }
+    
+    // Check if edit card form exists
+    const editCardForm = document.getElementById('editCardForm');
+    if (editCardForm) {
+        // Skip if already overridden
+        if (editCardForm._overridden) return;
+        
+        // Store original handler
+        const originalSubmitHandler = editCardForm.onsubmit;
+        
+        // Override with our handler
+        editCardForm.onsubmit = async function(event) {
+            event.preventDefault();
+            
+            // If there's no multi-select, use original handler
+            const assigneesSelect = document.getElementById('editCardAssignees');
+            if (!assigneesSelect) {
+                if (originalSubmitHandler) {
+                    return originalSubmitHandler.call(this, event);
+                }
+                return true;
+            }
+            
+            // Get form data
+            const cardId = parseInt(this.dataset.cardId);
+            const listId = parseInt(this.dataset.listId);
+            if (!cardId || !listId || !window.activeBoard) {
+                console.error("Missing card ID, list ID, or active board");
+                return false;
+            }
+            
+            // Check if required elements exist
+            const titleElement = document.getElementById('editCardTitle');
+            const descriptionElement = document.getElementById('editCardDescription');
+            const priorityElement = document.getElementById('editCardPriority');
+            const deadlineElement = document.getElementById('editCardDeadline');
+            const completedElement = document.getElementById('editCardCompleted');
+            
+            // Only get values if elements exist
+            const title = titleElement ? titleElement.value.trim() : '';
+            const description = descriptionElement ? descriptionElement.value.trim() : '';
+            const priority = priorityElement ? priorityElement.value : 'medium';
+            const deadline = deadlineElement ? deadlineElement.value : '';
+            const completed = completedElement ? completedElement.checked : false;
+            
+            // Get selected users
+            const selectedUsers = Array.from(assigneesSelect.selectedOptions)
+                .map(option => parseInt(option.value))
+                .filter(id => !isNaN(id));
+            
+            if (!title) {
+                alert("Title is required");
+                return false;
+            }
+            
+            try {
+                console.log("Updating card with multi-user assignment:", selectedUsers);
+                
+                // Operations array
+                const apiBaseUrl = getApiBaseUrl();
+                const operations = [];
+                
+                // Update card basics
+                operations.push(
+                    fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title,
+                            description
+                        }),
+                    })
+                );
+                
+                // Update priority
+                operations.push(
+                    fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/priority`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ priority }),
+                    })
+                );
+                
+                // Update completion status
+                operations.push(
+                    fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/toggle-completion`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ completed }),
+                    })
+                );
+                
+                // Update deadline
+                if (deadline) {
+                    operations.push(
+                        fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ deadline: new Date(deadline).toISOString() }),
+                        })
+                    );
+                }
+                
+                // Assign users
+                operations.push(
+                    fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign-multiple`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_ids: selectedUsers }),
+                    })
+                );
+                
+                // Store assignments for client-side use
+                if (typeof window.cardAssignments !== 'undefined') {
+                    window.cardAssignments.set(cardId, selectedUsers);
+                } else {
+                    window.cardAssignments = new Map();
+                    window.cardAssignments.set(cardId, selectedUsers);
+                }
+                
+                // Handle todos
+                const todoItems = document.querySelectorAll('#editTodoItems .todo-item');
+                for (const todoItem of todoItems) {
+                    const todoId = todoItem.dataset.todoId;
+                    const todoInput = todoItem.querySelector('.todo-input');
+                    const todoCheckbox = todoItem.querySelector('.todo-checkbox');
+                    
+                    if (!todoInput) continue;
+                    
+                    const content = todoInput.value.trim();
+                    if (!content) continue;
+                    
+                    if (todoId) {
+                        // Update existing todo
+                        operations.push(
+                            fetch(`${apiBaseUrl}/todos/${todoId}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                    content, 
+                                    completed: todoCheckbox ? todoCheckbox.checked : false 
+                                }),
+                            })
+                        );
+                    } else {
+                        // Create new todo
+                        operations.push(
+                            fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/todos`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ content }),
+                            })
+                        );
+                    }
+                }
+                
+                // Execute operations
+                await Promise.allSettled(operations);
+                
+                // Reload and render
+                if (typeof window.loadCards === 'function') {
+                    await window.loadCards(activeBoard.id, listId);
+                }
+                
+                if (typeof window.renderLists === 'function') {
+                    window.renderLists();
+                }
+                
+                // Close modal
+                if (typeof window.closeAllModals === 'function') {
+                    window.closeAllModals();
+                }
+                
+                // Show success message
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Success', 'Card updated successfully', 'success');
+                } else {
+                    alert('Card updated successfully');
+                }
+                
+                // Run fixes to ensure creator info is shown
+                setTimeout(fixCardCreatorInfo, 500);
+                
+                return false;
+            } catch (error) {
+                console.error("Error updating card with multiple assignees:", error);
+                
+                // Fallback to original handler
+                if (originalSubmitHandler) {
+                    return originalSubmitHandler.call(this, event);
+                }
+                
+                return false;
+            }
+        };
+        
+        // Mark as overridden to prevent multiple overrides
+        editCardForm._overridden = true;
+    }
+}
+
+// ========================
+// FIXER FUNCTIONS
+// ========================
+
+function fixCardAssignmentIssues() {
+    // Fix 1: Make sure all boards show creator info
+    const boardsFixed = fixBoardCreatorInfo();
+    
+    // Fix 2: Make sure all cards show creator info
+    const cardsFixed = fixCardCreatorInfo();
+    
+    // Fix 3: Fix modal forms for multi-user assignment
+    fixModalForms();
+    
+    // Fix 4: Load board users when a board is selected
+    fixBoardUserLoading();
+    
+    // Retry if any fixes failed and window.boards or window.lists exists
+    if ((!boardsFixed && window.boards && window.boards.length > 0) || 
+        (!cardsFixed && window.lists && window.lists.length > 0)) {
+        console.log("Some fixes did not complete - scheduling retry in 1 second");
+        setTimeout(fixCardAssignmentIssues, 1000);
+    }
+}
+
+function fixBoardCreatorInfo() {
+    let fixedCount = 0;
+    let totalBoards = 0;
+    
+    // Check if window.boards is available
+    if (!window.boards || !Array.isArray(window.boards)) {
+        console.warn("Boards data not available yet");
+        return false;
+    }
+    
+    // Print some debug information
+    console.log(`Found ${window.boards.length} boards in data`);
+    
+    const boardItems = document.querySelectorAll('.board-item');
+    totalBoards = boardItems.length;
+    console.log(`Found ${totalBoards} board items in DOM`);
+    
+    boardItems.forEach(boardItem => {
+        // Skip if already fixed
+        if (boardItem.querySelector('.board-creator-info')) {
+            fixedCount++;
+            return;
+        }
+        
+        try {
+            const boardId = parseInt(boardItem.dataset.boardId);
+            if (!boardId) {
+                console.warn("Board item missing board ID", boardItem);
+                return;
+            }
+            
+            const board = window.boards.find(b => b.id === boardId);
+            if (!board) {
+                console.warn(`Board data not found for ID: ${boardId}`);
+                return;
+            }
+            
+            if (!board.created_at || !board.user_id) {
+                console.warn(`Board ${boardId} missing creator info:`, 
+                    board.created_at ? "has created_at" : "NO created_at",
+                    board.user_id ? "has user_id" : "NO user_id");
+                return;
+            }
+            
+            // Get creator name
+            let creatorName = 'Unknown';
+            if (window.users) {
+                const creator = window.users.find(u => u.id === board.user_id);
+                if (creator) {
+                    creatorName = creator.username || creator.name || `User ${creator.id}`;
+                }
+            }
+            
+            // Format date
+            let creationDate;
+            if (typeof formatDate === 'function') {
+                creationDate = formatDate(new Date(board.created_at));
+            } else {
+                creationDate = new Date(board.created_at).toLocaleDateString();
+            }
+            
+            // Create and add creator info element
+            const creatorInfo = document.createElement('div');
+            creatorInfo.className = 'board-creator-info';
+            creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+            
+            // Find the board name and append to it
+            const boardName = boardItem.querySelector('.board-name');
+            if (boardName) {
+                boardName.appendChild(creatorInfo);
+                console.log(`Fixed creator info for board: ${board.name || boardId}`);
+                fixedCount++;
+            } else {
+                console.warn(`Could not find .board-name element for board: ${board.name || boardId}`);
+                // Try appending to the board item itself as fallback
+                boardItem.appendChild(creatorInfo);
+                fixedCount++;
+            }
+        } catch (error) {
+            console.error("Error fixing board creator info:", error);
+        }
+    });
+    
+    console.log(`Fixed ${fixedCount} out of ${totalBoards} boards`);
+    return fixedCount === totalBoards;
+}
+
+function fixCardCreatorInfo() {
+    let fixedCount = 0;
+    let totalCards = 0;
+    
+    if (!window.lists || !Array.isArray(window.lists)) {
+        console.warn("Lists data not available yet");
+        return false;
+    }
+    
+    const cardElements = document.querySelectorAll('.card');
+    totalCards = cardElements.length;
+    console.log(`Found ${totalCards} cards in DOM`);
+    
+    cardElements.forEach(cardElement => {
+        // Skip if already fixed
+        if (cardElement.querySelector('.creator-info')) {
+            fixedCount++;
+            return;
+        }
+        
+        try {
+            const cardId = parseInt(cardElement.dataset.cardId);
+            const listId = parseInt(cardElement.dataset.listId);
+            
+            if (!cardId || !listId) {
+                console.warn("Card missing ID attributes:", 
+                    cardId ? "has cardId" : "NO cardId", 
+                    listId ? "has listId" : "NO listId");
+                return;
+            }
+            
+            // Find card data
+            const list = window.lists.find(l => l.id === listId);
+            if (!list || !list.cards) {
+                console.warn(`List ${listId} not found or has no cards`);
+                return;
+            }
+            
+            const card = list.cards.find(c => c.id === cardId);
+            if (!card) {
+                console.warn(`Card ${cardId} not found in list ${listId}`);
+                return;
+            }
+            
+            if (!card.created_at || !card.user_id) {
+                console.warn(`Card ${cardId} missing creator info:`,
+                    card.created_at ? "has created_at" : "NO created_at",
+                    card.user_id ? "has user_id" : "NO user_id");
+                
+                // Use fallback values if possible
+                if (!card.created_at && !card.user_id) {
+                    return; // Skip if both missing
+                }
+            }
+            
+            // Get creator name
+            let creatorName = 'Unknown';
+            if (window.users && card.user_id) {
+                const creator = window.users.find(u => u.id === card.user_id);
+                if (creator) {
+                    creatorName = creator.username || creator.name || `User ${creator.id}`;
+                }
+            }
+            
+            // Format date
+            let creationDate = 'unknown date';
+            if (card.created_at) {
+                try {
+                    if (typeof formatDate === 'function') {
+                        creationDate = formatDate(new Date(card.created_at));
+                    } else {
+                        creationDate = new Date(card.created_at).toLocaleDateString();
+                    }
+                } catch (e) {
+                    console.error('Error formatting date:', e);
+                }
+            }
+            
+            // Create and add creator info element
+            const creatorInfo = document.createElement('div');
+            creatorInfo.className = 'creator-info';
+            creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+            
+            // Try multiple insertion strategies
+            // 1. After card header
+            const cardHeader = cardElement.querySelector('.card-header');
+            if (cardHeader && cardHeader.nextSibling) {
+                cardElement.insertBefore(creatorInfo, cardHeader.nextSibling);
+                fixedCount++;
+                return;
+            }
+            
+            // 2. Before card info
+            const cardInfo = cardElement.querySelector('.card-info');
+            if (cardInfo) {
+                cardElement.insertBefore(creatorInfo, cardInfo);
+                fixedCount++;
+                return;
+            }
+            
+            // 3. Before card actions
+            const cardActions = cardElement.querySelector('.card-actions');
+            if (cardActions) {
+                cardElement.insertBefore(creatorInfo, cardActions);
+                fixedCount++;
+                return;
+            }
+            
+            // 4. Just append to the card
+            cardElement.appendChild(creatorInfo);
+            fixedCount++;
+            
+            console.log(`Fixed creator info for card: ${card.title || cardId}`);
+        } catch (error) {
+            console.error("Error fixing card creator info:", error);
+        }
+    });
+    
+    console.log(`Fixed ${fixedCount} out of ${totalCards} cards`);
+    return fixedCount === totalCards;
+}
+
+function fixModalForms() {
+    // Fix create card modal
+    const createCardModal = document.getElementById('createCardModal');
+    if (createCardModal && !document.getElementById('cardAssignees')) {
+        try {
+            // Find form group for single assignee
+            const existingAssigneeGroup = document.querySelector('#createCardModal [for="cardAssignee"]')?.closest('.form-group');
+            
+            if (existingAssigneeGroup) {
+                // Replace with multi-select
+                existingAssigneeGroup.innerHTML = `
+                    <label for="cardAssignees">Assignees</label>
+                    <select id="cardAssignees" multiple class="form-control">
+                        <option value="" disabled>Select assignees</option>
+                    </select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                `;
+            } else {
+                // Create new form group
+                const formGroup = document.createElement('div');
+                formGroup.className = 'form-group';
+                formGroup.innerHTML = `
+                    <label for="cardAssignees">Assignees</label>
+                    <select id="cardAssignees" multiple class="form-control">
+                        <option value="" disabled>Select assignees</option>
+                    </select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                `;
+                
+                // Insert after priority field
+                const priorityGroup = createCardModal.querySelector('[for="cardPriority"]')?.closest('.form-group');
+                if (priorityGroup && priorityGroup.nextSibling) {
+                    priorityGroup.parentNode.insertBefore(formGroup, priorityGroup.nextSibling);
+                } else {
+                    const modalBody = createCardModal.querySelector('.modal-body');
+                    if (modalBody) {
+                        modalBody.appendChild(formGroup);
+                    }
+                }
+                console.log("Added multi-select assignees to create modal");
+            }
+            
+            // Populate with board users
+            populateMultiSelect('cardAssignees');
+        } catch (error) {
+            console.error("Error fixing create card modal:", error);
+        }
+    }
+    
+    // Fix edit card modal
+    const editCardModal = document.getElementById('editCardModal');
+    if (editCardModal && !document.getElementById('editCardAssignees')) {
+        try {
+            // Find form group for single assignee
+            const existingAssigneeGroup = document.querySelector('#editCardModal [for="editCardAssignee"]')?.closest('.form-group');
+            
+            if (existingAssigneeGroup) {
+                // Replace with multi-select
+                existingAssigneeGroup.innerHTML = `
+                    <label for="editCardAssignees">Assignees</label>
+                    <select id="editCardAssignees" multiple class="form-control">
+                        <option value="" disabled>Select assignees</option>
+                    </select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                `;
+            } else {
+                // Create new form group
+                const formGroup = document.createElement('div');
+                formGroup.className = 'form-group';
+                formGroup.innerHTML = `
+                    <label for="editCardAssignees">Assignees</label>
+                    <select id="editCardAssignees" multiple class="form-control">
+                        <option value="" disabled>Select assignees</option>
+                    </select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                `;
+                
+                // Insert after priority field
+                const priorityGroup = editCardModal.querySelector('[for="editCardPriority"]')?.closest('.form-group');
+                if (priorityGroup && priorityGroup.nextSibling) {
+                    priorityGroup.parentNode.insertBefore(formGroup, priorityGroup.nextSibling);
+                } else {
+                    const modalBody = editCardModal.querySelector('.modal-body');
+                    if (modalBody) {
+                        modalBody.appendChild(formGroup);
+                    }
+                }
+                console.log("Added multi-select assignees to edit modal");
+            }
+            
+            // Populate with board users
+            populateMultiSelect('editCardAssignees');
+        } catch (error) {
+            console.error("Error fixing edit card modal:", error);
+        }
+    }
+}
+
+function fixBoardUserLoading() {
+    if (!window.activeBoard || !window.activeBoard.id) {
+        return;
+    }
+    
+    // Check if board users are already loaded
+    if (!window.boardAssignableUsers || window.boardAssignableUsers.length === 0) {
+        // Fetch board users
+        const boardId = window.activeBoard.id;
+        const apiBaseUrl = window.location.hostname === 'localhost' ? '' : '/kanban';
+        
+        console.log(`Loading assignable users for board ${boardId}`);
+        
+        fetch(`${apiBaseUrl}/boards/${boardId}/users`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch board users. Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(users => {
+                window.boardAssignableUsers = users;
+                console.log('Board assignable users loaded:', users.length, 'users');
+                
+                // Update multi-selects
+                populateMultiSelect('cardAssignees');
+                populateMultiSelect('editCardAssignees');
+                
+                // Also fix creator info after users are loaded
+                setTimeout(() => {
+                    fixBoardCreatorInfo();
+                    fixCardCreatorInfo();
+                }, 200);
+            })
+            .catch(error => {
+                console.error('Error loading board users:', error);
+                
+                // Retry after a delay
+                setTimeout(fixBoardUserLoading, 2000);
+            });
+    }
+}
+
+// ========================
+// HELPER FUNCTIONS
+// ========================
+
+function getApiBaseUrl() {
+    return window.location.hostname === 'localhost' ? '' : '/kanban';
+}
+
+async function saveCardsOrder(listId, cardIds) {
+    if (!window.activeBoard) return;
+    
+    try {
+        const apiBaseUrl = getApiBaseUrl();
+        const response = await fetch(`${apiBaseUrl}/boards/${window.activeBoard.id}/lists/${listId}/cards/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ card_ids: cardIds }),
+        });
+        
+        if (!response.ok) throw new Error(`Failed to save cards order. Status: ${response.status}`);
+        return await response.json();
+    } catch (error) {
+        console.error('Error saving cards order:', error);
+        throw error;
+    }
+}
+
+function getInitials(name) {
+    if (!name) return '?';
+    const parts = name.split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + (parts[parts.length-1].charAt(0)).toUpperCase());
+}
+
+function openModal(modal) {
+    if (modal) {
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeAllModals() {
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.style.display = 'none';
+    });
+    document.body.style.overflow = '';
+}
+
+// ========================
+// STYLE FUNCTIONS
+// ========================
+
 function addCardAssignmentStyles() {
-    // Check if styles already exist
+    // Check if styles have already been added
     if (document.getElementById('card-assignment-styles')) {
         return;
     }
     
+    // Create style element
     const style = document.createElement('style');
     style.id = 'card-assignment-styles';
+    
+    // Add CSS rules
     style.textContent = `
-        /* Creator info styles */
         .creator-info {
-            font-size: 11px;
-            color: #6c757d;
-            margin: 4px 0;
-            padding: 2px 0;
+            font-size: 12px;
+            color: #495057;
+            margin: 6px 0;
+            padding: 4px;
             font-style: italic;
-            border-top: 1px dotted #dee2e6;
-            border-bottom: 1px dotted #dee2e6;
-            background-color: rgba(0, 0, 0, 0.02);
+            border-top: 1px solid #dee2e6;
+            border-bottom: 1px solid #dee2e6;
+            background-color: rgba(0, 0, 0, 0.03);
+            text-align: center;
         }
         
         .board-creator-info {
-            font-size: 10px;
-            color: #6c757d;
-            margin-top: 4px;
+            font-size: 11px;
+            color: #495057;
+            margin-top: 6px;
             font-style: italic;
             display: block;
+            background-color: rgba(0, 0, 0, 0.03);
+            padding: 2px 4px;
+            border-radius: 3px;
         }
         
-        /* Multiple assignees styles */
-        .assignees-container {
-            margin-bottom: 8px;
+        .select-with-search {
+            position: relative;
             display: flex;
-            flex-wrap: wrap;
-            align-items: center;
+            flex-direction: column;
         }
         
-        .user-badge {
+        .select-with-search .search-input {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            font-size: 14px;
+        }
+        
+        .select-with-search select {
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+        
+        select[multiple] {
+            height: auto !important;
+            min-height: 120px;
+        }
+        
+        select[multiple] option {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        select[multiple] option:checked {
+            background-color: #007bff !important;
+            color: white !important;
+        }
+        
+        .btn-toggle-completion.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    `;
+    
+    // Add style element to the head
+    document.head.appendChild(style);
+}
+
+function addBoardSharingStyles() {
+    // Check if styles have already been added
+    if (document.getElementById('board-sharing-styles')) {
+        return;
+    }
+    
+    // Create style element
+    const style = document.createElement('style');
+    style.id = 'board-sharing-styles';
+    
+    // Add CSS rules
+    style.textContent = `
+        .user-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .user-item {
             display: flex;
             align-items: center;
-            background-color: #f8f9fa;
-            border-radius: 16px;
-            padding: 2px 8px 2px 2px;
-            margin-right: 4px;
-            margin-bottom: 4px;
-            border: 1px solid #e9ecef;
-            font-size: 12px;
-            max-width: 100%;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
         }
         
-        .user-badge.multiple {
-            padding-right: 10px;
+        .user-info {
+            display: flex;
+            align-items: center;
         }
         
         .user-avatar {
-            width: 24px;
-            height: 24px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background-color: #6c757d;
+            background-color: #3788d8;
             color: white;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
             font-weight: bold;
-            margin-right: 6px;
-            flex-shrink: 0;
+            margin-right: 10px;
         }
         
-        .user-avatar-group {
-            display: flex;
-            align-items: center;
-            margin-right: 6px;
+        .user-name {
+            font-weight: 500;
         }
         
-        .user-avatar.small {
-            width: 20px;
-            height: 20px;
-            font-size: 10px;
-            margin-right: -8px;
-            border: 1px solid white;
-            z-index: 1;
+        .user-role {
+            font-size: 0.8em;
+            color: #666;
+            margin-left: 8px;
         }
         
-        .user-avatar.small:nth-child(2) {
-            z-index: 2;
+        .btn-remove-user {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            padding: 5px 8px;
+            border-radius: 4px;
         }
         
-        .user-avatar.small:nth-child(3) {
-            z-index: 3;
+        .btn-remove-user:hover {
+            background-color: #f9e6e6;
         }
         
-        .user-avatar.more {
-            background-color: #6c757d;
-            color: white;
-            z-index: 4;
-        }
-        
-        /* Multi-select styling */
-        select[multiple] {
-            height: auto !important;
-            min-height: 100px;
-            padding: 0.375rem 0.75rem;
-        }
-        
-        select[multiple] option {
-            padding: 6px 10px;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        select[multiple] option:checked {
-            background-color: #007bff;
-            color: white;
+        .empty-users-message {
+            text-align: center;
+            padding: 20px;
+            color: #666;
         }
     `;
     
+    // Add style element to the head
     document.head.appendChild(style);
 }
 
-// Add this function to patch openEditCardModal to support multiple assignees
-function patchOpenEditCardModal() {
-    if (typeof window.openEditCardModal !== 'function') {
-        console.warn('openEditCardModal function not found');
+function showToast(title, message, type = 'info') {
+    // Check if the original showToast exists and is different from this one
+    if (typeof window.showToast === 'function' && window.showToast !== showToast) {
+        window.showToast(title, message, type);
         return;
     }
     
-    console.log("Patching openEditCardModal function");
+    // Fallback implementation
+    let toastContainer = document.getElementById('toastContainer') || 
+                       document.querySelector('.toast-container');
     
-    window.originalOpenEditCardModal = window.openEditCardModal;
-    window.openEditCardModal = function(cardId, listId) {
-        try {
-            // Modified version: Handle the removal of editCardAssignee element
-            // Save original elements first
-            const originalEditCardAssignee = document.getElementById('editCardAssignee');
-            const editCardAssigneesExists = document.getElementById('editCardAssignees') !== null;
-            
-            // Call original function
-            window.originalOpenEditCardModal(cardId, listId);
-            
-            // Find list and card
-            const list = lists.find(list => list.id === listId);
-            if (!list || !list.cards) return;
-            
-            const card = list.cards.find(card => card.id === cardId);
-            if (!card) return;
-            
-            // Check if editCardAssignee still exists (original dropdown)
-            const editCardAssignee = document.getElementById('editCardAssignee');
-            if (editCardAssignee !== null) {
-                editCardAssignee.value = card.assigned_to ? card.assigned_to.toString() : '';
-            }
-            
-            // Get the multi-select element
-            const assigneesSelect = document.getElementById('editCardAssignees');
-            if (!assigneesSelect) return;
-            
-            // Populate with board users if needed
-            if (assigneesSelect.options.length <= 1) {
-                // Clear any existing options except the first one
-                while (assigneesSelect.options.length > 1) {
-                    assigneesSelect.remove(1);
-                }
-                
-                // Add board users
-                boardAssignableUsers.forEach(user => {
-                    const option = document.createElement('option');
-                    option.value = user.id;
-                    option.textContent = user.username;
-                    assigneesSelect.appendChild(option);
-                });
-            }
-            
-            // Clear previous selections
-            Array.from(assigneesSelect.options).forEach(option => {
-                option.selected = false;
-            });
-            
-            // Get assigned users from our map or from card data
-            let assignedUserIds = [];
-            
-            // First try to get from card.assigned_users
-            if (card.assigned_users && Array.isArray(card.assigned_users)) {
-                assignedUserIds = card.assigned_users.map(user => user.id);
-            } 
-            // Then check our map
-            else if (cardAssignments.has(cardId)) {
-                assignedUserIds = cardAssignments.get(cardId);
-            } 
-            // Fallback to single assigned_to
-            else if (card.assigned_to) {
-                assignedUserIds = [card.assigned_to];
-            }
-            
-            // Set selected options
-            Array.from(assigneesSelect.options).forEach(option => {
-                if (assignedUserIds.includes(parseInt(option.value))) {
-                    option.selected = true;
-                }
-            });
-        } catch (error) {
-            console.error('Error in patched openEditCardModal:', error);
-            if (window.originalOpenEditCardModal) {
-                window.originalOpenEditCardModal(cardId, listId);
-            }
-        }
-    };
-}
-// Patch openCreateCardModal to populate the assignees dropdown
-function patchOpenCreateCardModal() {
-    if (typeof window.openCreateCardModal !== 'function') {
-        console.warn('openCreateCardModal function not found');
-        return;
+    if (!toastContainer) {
+        const newContainer = document.createElement('div');
+        newContainer.id = 'toastContainer';
+        newContainer.className = 'toast-container';
+        newContainer.style.cssText = 'position: fixed; top: 16px; right: 16px; z-index: 1100;';
+        document.body.appendChild(newContainer);
+        toastContainer = newContainer;
     }
     
-    console.log("Patching openCreateCardModal function");
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.style.cssText = 'display: flex; align-items: center; padding: 12px 16px; margin-bottom: 8px; background-color: white; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); max-width: 300px; animation: fadeIn 0.3s, fadeOut 0.3s 3s';
     
-    window.originalOpenCreateCardModal = window.openCreateCardModal;
-    window.openCreateCardModal = function(listId) {
-        try {
-            // Save references to original elements before calling the original function
-            const originalCardAssignee = document.getElementById('cardAssignee');
-            const cardAssigneesExists = document.getElementById('cardAssignees') !== null;
-            
-            // Call original function first
-            window.originalOpenCreateCardModal(listId);
-            
-            // Handle single assignee dropdown if it still exists
-            const cardAssignee = document.getElementById('cardAssignee');
-            if (cardAssignee !== null) {
-                // Original dropdown exists, populate it
-                populateUserSelect(cardAssignee);
-            }
-            
-            // Now handle multi-select assignees
-            const assigneesSelect = document.getElementById('cardAssignees');
-            if (!assigneesSelect) return;
-            
-            // Populate with board users if needed
-            if (assigneesSelect.options.length <= 1) {
-                // Clear any existing options except the first one
-                while (assigneesSelect.options.length > 1) {
-                    assigneesSelect.remove(1);
-                }
-                
-                // Add board users
-                boardAssignableUsers.forEach(user => {
-                    const option = document.createElement('option');
-                    option.value = user.id;
-                    option.textContent = user.username;
-                    assigneesSelect.appendChild(option);
-                });
-            }
-            
-            // Clear previous selections
-            Array.from(assigneesSelect.options).forEach(option => {
-                option.selected = false;
-            });
-        } catch (error) {
-            console.error('Error in patched openCreateCardModal:', error);
-            if (window.originalOpenCreateCardModal) {
-                window.originalOpenCreateCardModal(listId);
-            }
-        }
-    };
-}
-// Initialize additional patches
-document.addEventListener('DOMContentLoaded', function() {
-    // After a short delay, patch modal functions
+    switch (type) {
+        case 'success': toast.style.borderLeft = '4px solid #10b981'; break;
+        case 'error': toast.style.borderLeft = '4px solid #ef4444'; break;
+        case 'info': toast.style.borderLeft = '4px solid #3b82f6'; break;
+        case 'warning': toast.style.borderLeft = '4px solid #f59e0b'; break;
+    }
+    
+    toast.innerHTML = `
+        <div style="margin-right: 12px; font-size: 20px;">
+            ${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'info' ? 'ℹ️' : '⚠️'}
+        </div>
+        <div>
+            <div style="font-weight: 600; margin-bottom: 4px;">${title}</div>
+            <div style="font-size: 14px; color: #4b5563;">${message}</div>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
     setTimeout(() => {
-        patchOpenEditCardModal();
-        patchOpenCreateCardModal();
-    }, 1000);
-});
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+    
+    if (!document.getElementById('toast-animations')) {
+        const style = document.createElement('style');
+        style.id = 'toast-animations';
+        style.textContent = `
+            @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+            @keyframes fadeOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(20px); } }
+        `;
+        document.head.appendChild(style);
+    }
+}

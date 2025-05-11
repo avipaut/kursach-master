@@ -1283,5 +1283,326 @@ def set_card_color(board_id, list_id, card_id):
         print(f"Error setting card color: {str(e)}")
         return jsonify({"error": f"Failed to set card color: {str(e)}"}), 500
 
+# Additional routes to add to kanban.py
 
+# These endpoints will move more logic to the backend and fix creator display issues
+
+@kanban_bp.route('/api/board/<int:board_id>/full_data', methods=['GET'])
+@login_required
+def get_full_board_data(board_id):
+    """Get complete board data including lists, cards, and creator information in a single request."""
+    try:
+        # Get the board
+        board = Board.query.get(board_id)
+        if not board:
+            return jsonify({"error": "Board not found"}), 404
+        
+        # Check if user has access to this board
+        is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+        has_admin_only = hasattr(board, 'admin_only') and board.admin_only
+        
+        if has_admin_only and not is_admin:
+            if current_user not in board.users and board.user_id != current_user.id:
+                return jsonify({"error": "Access denied"}), 403
+        
+        # Get creator information
+        creator = User.query.get(board.user_id)
+        creator_data = creator.to_dict() if creator else {"username": "Unknown User"}
+        
+        # Get all lists with cards
+        lists_query = List.query.filter_by(board_id=board_id).order_by(List.position)
+        lists_data = []
+        
+        for list_obj in lists_query:
+            list_info = list_obj.to_dict()
+            
+            # Get cards for this list
+            cards_query = Card.query.filter_by(list_id=list_obj.id).order_by(Card.position)
+            cards_data = []
+            
+            for card in cards_query:
+                card_data = card.to_dict()
+                cards_data.append(card_data)
+            
+            list_info["cards"] = cards_data
+            lists_data.append(list_info)
+        
+        # Get users who have access to this board
+        board_users = [user.to_dict() for user in board.users]
+        
+        # Add creator if not already in the list
+        if creator and not any(user["id"] == creator.id for user in board_users):
+            board_users.append(creator_data)
+        
+        # Build complete response
+        response = {
+            "board": board.to_dict(),
+            "creator": creator_data,
+            "lists": lists_data,
+            "users": board_users
+        }
+        
+        return jsonify(response)
+    
+    except Exception as e:
+        print(f"Error getting full board data: {str(e)}")
+        return jsonify({"error": f"Failed to get board data: {str(e)}"}), 500
+
+@kanban_bp.route('/api/card/<int:card_id>/creator_info', methods=['GET'])
+@login_required
+def get_card_creator_info(card_id):
+    """Get creator information for a specific card."""
+    try:
+        # Find the card
+        card = Card.query.get(card_id)
+        if not card:
+            return jsonify({"error": "Card not found"}), 404
+        
+        # Get creator information
+        creator = User.query.get(card.user_id)
+        if not creator:
+            return jsonify({
+                "success": True,
+                "creator_name": "Unknown User",
+                "created_at": card.created_at.isoformat() if card.created_at else None
+            })
+        
+        return jsonify({
+            "success": True,
+            "creator_name": creator.username,
+            "creator_id": creator.id,
+            "created_at": card.created_at.isoformat() if card.created_at else None
+        })
+    
+    except Exception as e:
+        print(f"Error getting card creator info: {str(e)}")
+        return jsonify({"error": f"Failed to get creator info: {str(e)}"}), 500
+
+@kanban_bp.route('/api/board/<int:board_id>/creator_info', methods=['GET'])
+@login_required
+def get_board_creator_info(board_id):
+    """Get creator information for a specific board."""
+    try:
+        # Find the board
+        board = Board.query.get(board_id)
+        if not board:
+            return jsonify({"error": "Board not found"}), 404
+        
+        # Get creator information
+        creator = User.query.get(board.user_id)
+        if not creator:
+            return jsonify({
+                "success": True,
+                "creator_name": "Unknown User",
+                "created_at": board.created_at.isoformat() if board.created_at else None
+            })
+        
+        return jsonify({
+            "success": True,
+            "creator_name": creator.username,
+            "creator_id": creator.id,
+            "created_at": board.created_at.isoformat() if board.created_at else None
+        })
+    
+    except Exception as e:
+        print(f"Error getting board creator info: {str(e)}")
+        return jsonify({"error": f"Failed to get creator info: {str(e)}"}), 500
+
+@kanban_bp.route('/api/boards/<int:board_id>/lists/with_cards', methods=['GET'])
+@login_required
+def get_lists_with_cards(board_id):
+    """Get all lists for a board with their cards in a single request."""
+    try:
+        # Check if board exists and user has access
+        board = Board.query.get(board_id)
+        if not board:
+            return jsonify({"error": "Board not found"}), 404
+        
+        # Check if user has access to this board
+        is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+        has_admin_only = hasattr(board, 'admin_only') and board.admin_only
+        
+        if has_admin_only and not is_admin:
+            if current_user not in board.users and board.user_id != current_user.id:
+                return jsonify({"error": "Access denied"}), 403
+        
+        # Get all lists for this board, ordered by position
+        lists_query = List.query.filter_by(board_id=board_id).order_by(List.position)
+        lists_data = []
+        
+        for list_obj in lists_query:
+            list_info = list_obj.to_dict()
+            
+            # Get cards for this list, ordered by position
+            cards = Card.query.filter_by(list_id=list_obj.id).order_by(Card.position).all()
+            cards_data = []
+            
+            for card in cards:
+                card_data = card.to_dict()
+                cards_data.append(card_data)
+            
+            list_info["cards"] = cards_data
+            lists_data.append(list_info)
+        
+        return jsonify(lists_data)
+    
+    except Exception as e:
+        print(f"Error getting lists with cards: {str(e)}")
+        return jsonify({"error": f"Failed to get lists with cards: {str(e)}"}), 500
+
+@kanban_bp.route('/api/cards/<int:card_id>/move_to_list/<int:target_list_id>', methods=['PUT'])
+@login_required
+@admin_required
+def move_card_to_list(card_id, target_list_id):
+    """Move a card to a different list and update positions."""
+    try:
+        # Get the card
+        card = Card.query.get(card_id)
+        if not card:
+            return jsonify({"error": "Card not found"}), 404
+        
+        # Get source and target lists
+        source_list_id = card.list_id
+        source_list = List.query.get(source_list_id)
+        target_list = List.query.get(target_list_id)
+        
+        if not source_list or not target_list:
+            return jsonify({"error": "List not found"}), 404
+        
+        # Ensure both lists belong to the same board
+        if source_list.board_id != target_list.board_id:
+            return jsonify({"error": "Lists do not belong to the same board"}), 400
+        
+        # Get the board
+        board = Board.query.get(source_list.board_id)
+        if not board:
+            return jsonify({"error": "Board not found"}), 404
+        
+        # Get the position in target list (default to end position)
+        data = request.json or {}
+        position = data.get('position')
+        
+        # Get current max position in target list if position not specified
+        if position is None:
+            max_position = db.session.query(db.func.max(Card.position)).filter(Card.list_id == target_list_id).scalar()
+            position = 0 if max_position is None else max_position + 1
+        
+        # Move the card
+        card.list_id = target_list_id
+        card.position = position
+        
+        # Update positions of other cards if needed
+        if position is not None:
+            # Move other cards down to make room for the inserted card
+            cards_to_move = Card.query.filter(
+                Card.list_id == target_list_id,
+                Card.id != card_id,
+                Card.position >= position
+            ).all()
+            
+            for other_card in cards_to_move:
+                other_card.position += 1
+        
+        db.session.commit()
+        
+        # Notify assigned user if the card is assigned
+        if card.assigned_to:
+            notify_user(
+                user_id=card.assigned_to,
+                message=f"Card '{card.title}' was moved from '{source_list.name}' to '{target_list.name}'",
+                category='info',
+                link=f"/kanban?board_id={board.id}"
+            )
+        
+        return jsonify({
+            "success": True,
+            "message": "Card moved successfully",
+            "card": card.to_dict()
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error moving card: {str(e)}")
+        return jsonify({"error": f"Failed to move card: {str(e)}"}), 500
+
+@kanban_bp.route('/api/users/current', methods=['GET'])
+@login_required
+def get_current_user_info():
+    """Get detailed information about the current logged-in user."""
+    try:
+        user_data = {
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email if hasattr(current_user, 'email') else None,
+            "is_admin": current_user.is_admin if hasattr(current_user, 'is_admin') else False
+        }
+        
+        # Add additional fields if available
+        if hasattr(current_user, 'full_name'):
+            user_data["full_name"] = current_user.full_name
+        
+        if hasattr(current_user, 'avatar_url'):
+            user_data["avatar_url"] = current_user.avatar_url
+        
+        return jsonify({
+            "success": True,
+            "user": user_data
+        })
+    
+    except Exception as e:
+        print(f"Error getting current user info: {str(e)}")
+        return jsonify({"error": f"Failed to get user info: {str(e)}"}), 500
+
+# Optional but helpful - Migration function to set missing creator info
+def migrate_missing_creator_info():
+    """
+    Set creator info for boards and cards that don't have it.
+    This function can be called once manually to fix existing data.
+    """
+    try:
+        # Get admin user as fallback creator
+        admin_user = User.query.filter_by(is_admin=True).first()
+        
+        if not admin_user:
+            print("No admin user found for fallback creator")
+            return False
+        
+        # Update boards with missing user_id
+        boards_updated = 0
+        for board in Board.query.filter_by(user_id=None).all():
+            board.user_id = admin_user.id
+            boards_updated += 1
+        
+        # Update cards with missing user_id
+        cards_updated = 0
+        for card in Card.query.filter_by(user_id=None).all():
+            card.user_id = admin_user.id
+            cards_updated += 1
+        
+        db.session.commit()
+        print(f"Updated {boards_updated} boards and {cards_updated} cards with creator info")
+        return True
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error migrating creator info: {str(e)}")
+        return False
+
+# Add this function to an endpoint that can be called once to fix data
+@kanban_bp.route('/api/maintenance/migrate_creator_info', methods=['POST'])
+@login_required
+@admin_required  # Only admins can run maintenance functions
+def run_creator_migration():
+    """Run migration to fix missing creator information for existing boards and cards."""
+    success = migrate_missing_creator_info()
+    
+    if success:
+        return jsonify({
+            "success": True,
+            "message": "Creator information migration completed successfully"
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Error during creator information migration. Check logs for details."
+        }), 500
 

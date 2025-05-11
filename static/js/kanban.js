@@ -10,6 +10,7 @@ let currentUserName = '';
 let isDraggingList = false;
 let draggedList = null;
 let currentOpenMenu = null;
+let currentUserId = null;
 
 // DOM elements for modal windows
 const createBoardModal = document.getElementById('createBoardModal');
@@ -127,41 +128,299 @@ document.addEventListener('DOMContentLoaded', function() {
     fetchAllUsers();
     loadBoards();
     fetchCurrentUser();
-    addAdminStyles();
     addDragAndDropStyles();
 
-    // Event handlers for creating boards
-    document.getElementById('createBoardBtn').addEventListener('click', () => openModal(createBoardModal));
-    document.getElementById('createBoardForm').addEventListener('submit', handleCreateBoardWithUsers);
+  // Fix for issue #3: Re-initialize all event listeners
+  document.getElementById('createBoardBtn').addEventListener('click', () => openModal(createBoardModal));
+  document.getElementById('createBoardForm').addEventListener('submit', handleCreateBoardWithUsers);
+  document.getElementById('editBoardBtn').addEventListener('click', openEditBoardModal);
+  document.getElementById('editBoardForm').addEventListener('submit', handleEditBoardWithUsers);
+  document.getElementById('deleteBoardBtn').addEventListener('click', handleDeleteBoard);
+  document.getElementById('addListBtn')?.addEventListener('click', () => openModal(createListModal));
+  document.getElementById('createListForm').addEventListener('submit', handleCreateList);
+  document.getElementById('createCardForm').addEventListener('submit', handleCreateCard);
+  document.getElementById('editCardForm').addEventListener('submit', handleUpdateCard);
+  document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
+  document.getElementById('addTodoBtn').addEventListener('click', () => addTodoItem('todoItems'));
+  document.getElementById('editAddTodoBtn').addEventListener('click', () => addTodoItem('editTodoItems'));
 
-    // Event handlers for editing boards
-    document.getElementById('editBoardBtn').addEventListener('click', () => openEditBoardModal());
-    document.getElementById('editBoardForm').addEventListener('submit', handleEditBoardWithUsers);
-    document.getElementById('deleteBoardBtn').addEventListener('click', () => handleDeleteBoard());
+  // Close modals when clicking close buttons or cancel buttons
+  document.querySelectorAll('.close-modal, .btn-cancel').forEach(element => {
+      element.addEventListener('click', () => closeAllModals());
+  })
 
-    // Event handlers for creating lists
-    document.getElementById('addListBtn')?.addEventListener('click', () => openModal(createListModal));
-    document.getElementById('createListForm').addEventListener('submit', handleCreateList);
-
-    // Event handlers for creating cards
-    document.getElementById('createCardForm').addEventListener('submit', handleCreateCard);
-
-    // Event handlers for editing cards
-    document.getElementById('editCardForm').addEventListener('submit', handleUpdateCard);
-
-    // Event handlers for closing modal windows
-    document.querySelectorAll('.close-modal, .btn-cancel').forEach(element => {
-        element.addEventListener('click', () => closeAllModals());
+    
+});
+// Функции для перетаскивания карточек
+function setupDraggable(cardElement) {
+    cardElement.draggable = true;
+    
+    cardElement.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        cardElement.classList.add('dragging');
+        
+        // Устанавливаем данные для переноса
+        e.dataTransfer.setData('card-id', cardElement.dataset.cardId);
+        e.dataTransfer.setData('source-list', cardElement.dataset.listId);
+        e.dataTransfer.effectAllowed = 'move';
+        
+        // Устанавливаем изображение для перетаскивания
+        setTimeout(() => {
+            cardElement.classList.add('dragging');
+        }, 0);
     });
 
-    // Handler for adding tasks in the card creation form
-    document.getElementById('addTodoBtn').addEventListener('click', () => addTodoItem('todoItems'));
-    document.getElementById('editAddTodoBtn').addEventListener('click', () => addTodoItem('editTodoItems'));
+    cardElement.addEventListener('dragend', () => {
+        cardElement.classList.remove('dragging');
+        document.querySelectorAll('.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+    });
+}
 
-    // Toggle sidebar collapse
-    document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
+// Функции для зон сброса
+function setupDropZone(listCardsElement) {
+    listCardsElement.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (isDraggingList) return;
+        
+        const cardBeingDragged = document.querySelector('.card.dragging');
+        if (!cardBeingDragged) return;
+        
+        listCardsElement.classList.add('drag-over');
+        
+        // Определяем позицию для вставки
+        const afterElement = getCardAfterCursor(listCardsElement, e.clientY);
+        
+        if (afterElement) {
+            listCardsElement.insertBefore(cardBeingDragged, afterElement);
+        } else {
+            listCardsElement.appendChild(cardBeingDragged);
+        }
+    });
+
+    listCardsElement.addEventListener('dragleave', () => {
+        listCardsElement.classList.remove('drag-over');
+    });
+
+    listCardsElement.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        listCardsElement.classList.remove('drag-over');
+        
+        const cardId = e.dataTransfer.getData('card-id');
+        const sourceListId = parseInt(e.dataTransfer.getData('source-list'));
+        const targetListId = parseInt(listCardsElement.dataset.listId);
+        
+        if (!cardId || isNaN(sourceListId) || isNaN(targetListId)) return;
+        
+        // Если карточка перемещается между списками
+        if (sourceListId !== targetListId) {
+            await handleCardMove(parseInt(cardId), sourceListId, targetListId);
+        } 
+        // Если перемещение внутри одного списка
+        else {
+            const cardIds = Array.from(listCardsElement.querySelectorAll('.card'))
+                .map(card => parseInt(card.dataset.cardId));
+            await saveCardsOrder(targetListId, cardIds);
+        }
+    });
+}
+
+// Функция для определения позиции карточки после курсора
+function getCardAfterCursor(listCardsElement, cursorY) {
+    const cards = Array.from(listCardsElement.querySelectorAll('.card:not(.dragging)'));
     
+    return cards.reduce((closest, card) => {
+        const box = card.getBoundingClientRect();
+        const offset = cursorY - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: card };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// Функции для перетаскивания списков
+function setupDraggableList(listElement) {
+    if (!listElement) return;
+    
+    // Делаем заголовок списка перетаскиваемым
+    const header = listElement.querySelector('.list-header');
+    if (!header) return;
+    
+    header.draggable = true;
+    
+    header.addEventListener('dragstart', (e) => {
+        isDraggingList = true;
+        draggedList = listElement;
+        
+        // Устанавливаем данные для перетаскивания
+        e.dataTransfer.setData('text/plain', listElement.dataset.listId);
+        e.dataTransfer.effectAllowed = 'move';
+        
+        // Добавляем класс для визуального эффекта
+        setTimeout(() => {
+            listElement.classList.add('dragging-list');
+        }, 0);
+    });
+    
+    header.addEventListener('dragend', () => {
+        isDraggingList = false;
+        draggedList = null;
+        listElement.classList.remove('dragging-list');
+    });
+}
+
+// Настройка контейнера списков для перетаскивания
+function setupListsContainer() {
+    const container = document.getElementById('listsContainer');
+    if (!container) return;
+    
+    container.addEventListener('dragover', (e) => {
+        if (!isDraggingList) return;
+        e.preventDefault();
+        
+        const afterElement = getDragAfterElement(container, e.clientX);
+        
+        if (afterElement) {
+            container.insertBefore(draggedList, afterElement);
+        } else {
+            // This fixes the issue - now it can be dropped at the end
+            container.appendChild(draggedList);
+        }
+    });
+    
+    container.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!isDraggingList || !draggedList) return;
+        
+        updateListsOrder();
+        saveListsOrder();
+    });
+}
+// In kanban.js, modify the function:
+
+function getDragAfterElement(container, x) {
+    const draggableElements = [...container.querySelectorAll('.list:not(.dragging-list)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+// Обновление порядка списков в памяти
+function updateListsOrder() {
+    const listElements = document.querySelectorAll('.list');
+    const newOrder = Array.from(listElements)
+        .filter(el => el.dataset.listId)
+        .map(el => parseInt(el.dataset.listId));
+    
+    // Создаем новый массив с списками в новом порядке
+    const newLists = [];
+    for (const listId of newOrder) {
+        const list = lists.find(l => l.id === listId);
+        if (list) newLists.push(list);
+    }
+    
+    // Обновляем глобальный массив списков
+    if (newLists.length > 0) {
+        lists = newLists;
+    }
+}
+
+// Сохранение порядка списков на сервере
+async function saveListsOrder() {
+    if (!activeBoard) return;
+    
+    const listElements = document.querySelectorAll('.list');
+    const listIds = Array.from(listElements).map(el => parseInt(el.dataset.listId));
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ list_ids: listIds }),
+        });
+        
+        if (!response.ok) throw new Error(`Failed to save lists order. Status: ${response.status}`);
+        
+        showToast('Success', 'List order saved successfully', 'success');
+    } catch (error) {
+        console.error('Error saving lists order:', error);
+        showToast('Error', 'Failed to save list order', 'error');
+    }
+}
+
+// Сохранение порядка карточек на сервере
+async function saveCardsOrder(listId, cardIds) {
+    if (!activeBoard) return;
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ card_ids: cardIds }),
+        });
+        
+        if (!response.ok) throw new Error(`Failed to save cards order. Status: ${response.status}`);
+        
+        // Обновляем порядок карточек в памяти
+        updateCardsOrderInMemory(listId, cardIds);
+    } catch (error) {
+        console.error('Error saving cards order:', error);
+    }
+}
+
+// Обновление порядка карточек в памяти
+function updateCardsOrderInMemory(listId, cardIds) {
+    const listIndex = lists.findIndex(list => list.id === listId);
+    if (listIndex === -1 || !lists[listIndex].cards) return;
+    
+    const newOrderCards = [];
+    cardIds.forEach(cardId => {
+        const card = lists[listIndex].cards.find(c => c.id === cardId);
+        if (card) newOrderCards.push(card);
+    });
+    
+    lists[listIndex].cards = newOrderCards;
+}
+
+// Инициализация drag-and-drop при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
     setupListsContainer();
+    
+    // Добавляем стили для drag-and-drop
+    const style = document.createElement('style');
+    style.textContent = `
+        .card.dragging {
+            opacity: 0.5;
+            transform: rotate(3deg);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .list-cards.drag-over {
+            background-color: rgba(66, 153, 225, 0.1);
+            border: 2px dashed #4299e1;
+            border-radius: 8px;
+            min-height: 50px;
+        }
+        
+        .list.dragging-list {
+            opacity: 0.6;
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+        }
+    `;
+    document.head.appendChild(style);
 });
 
 // Функция для добавления стилей подсветки
@@ -279,26 +538,34 @@ function addHighlightStyles() {
     `;
     document.head.appendChild(style);
 }
-// Fetch current user details
 async function fetchCurrentUser() {
     try {
-        const response = await fetch(`${apiBaseUrl}/kanban/api/current_user`);
+        const response = await fetch(`${apiBaseUrl}/api/users/current`);
+        
         if (!response.ok) {
             throw new Error(`Failed to fetch user info. Status: ${response.status}`);
         }
         
-        const userData = await response.json();
+        const data = await response.json();
+        const userData = data.user;
+        
         currentUserName = userData.username;
+        currentUserId = userData.id;
         isAdmin = userData.is_admin;
         
         console.log('Current user:', currentUserName, 'Admin status:', isAdmin);
         
         // Update UI based on permissions
         updateUIBasedOnPermissions();
+        
+        return userData;
     } catch (error) {
         console.error('Error fetching current user:', error);
+        showToast('Error', 'Failed to get user information', 'error');
+        return null;
     }
 }
+
 
 // Update UI elements based on user permissions
 function updateUIBasedOnPermissions() {
@@ -323,9 +590,6 @@ function updateUIBasedOnPermissions() {
     }
 }
 
-// Data loading functions
-// В файле kanban.js, модифицируйте функцию loadBoards, добавив следующий код в начало функции:
-
 async function loadBoards() {
     showLoading('boardsLoading');
     try {
@@ -345,10 +609,25 @@ async function loadBoards() {
             return;
         }
         
+        // If boards don't have creator_name, fetch that information
+        for (const board of boards) {
+            if (!board.creator_name) {
+                try {
+                    const creatorResponse = await fetch(`${apiBaseUrl}/api/board/${board.id}/creator_info`);
+                    if (creatorResponse.ok) {
+                        const creatorData = await creatorResponse.json();
+                        board.creator_name = creatorData.creator_name;
+                    }
+                } catch (e) {
+                    console.warn(`Could not fetch creator for board ${board.id}:`, e);
+                }
+            }
+        }
+        
         renderBoards();
         hideLoading('boardsLoading');
 
-        // Проверяем URL-параметры при загрузке
+        // Check URL parameters after loading
         const urlParams = new URLSearchParams(window.location.search);
         const boardIdFromUrl = urlParams.get('board_id');
         const highlightCardId = urlParams.get('highlight_card') || localStorage.getItem('highlightCardId');
@@ -365,14 +644,14 @@ async function loadBoards() {
             }
         }
         
-        // Если есть ID карточки, но нет ID доски
+        // If there's a card ID but no board ID
         if (highlightCardId && !boardIdFromUrl) {
             console.log(`Searching for card ${highlightCardId} across all boards`);
             await searchCardAcrossAllBoards(parseInt(highlightCardId));
             return;
         }
 
-        // Если доска не найдена в URL или нет board_id, выбираем первую доску
+        // If no board was found in URL or no board_id, select the first board
         if (boards.length > 0) {
             console.log('Selecting first board by default');
             selectBoard(boards[0]);
@@ -382,7 +661,60 @@ async function loadBoards() {
         showToast('Error', 'Failed to load boards. Please try again.', 'error');
         hideLoading('boardsLoading');
     }
-}// В файле kanban.js заменить функцию searchCardAcrossAllBoards на эту:
+}
+async function fetchBoardCreator(boardId) {
+    try {
+        const response = await fetch(`${apiBaseUrl}/api/board/${boardId}/creator_info`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch board creator. Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Update board object with creator information
+        const boardIndex = boards.findIndex(board => board.id === boardId);
+        if (boardIndex !== -1) {
+            boards[boardIndex].creator_name = data.creator_name;
+            boards[boardIndex].creator_id = data.creator_id;
+            boards[boardIndex].created_at = data.created_at;
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('Error fetching board creator:', error);
+        return null;
+    }
+}
+async function fetchCardCreator(cardId) {
+    try {
+        const response = await fetch(`${apiBaseUrl}/api/card/${cardId}/creator_info`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch card creator. Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Find and update card object with creator information
+        for (const list of lists) {
+            if (!list.cards) continue;
+            
+            const cardIndex = list.cards.findIndex(card => card.id === cardId);
+            if (cardIndex !== -1) {
+                list.cards[cardIndex].creator_name = data.creator_name;
+                list.cards[cardIndex].creator_id = data.creator_id;
+                list.cards[cardIndex].created_at = data.created_at;
+                break;
+            }
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('Error fetching card creator:', error);
+        return null;
+    }
+}
 
 // Функция для поиска карточки среди всех досок
 async function searchCardAcrossAllBoards(cardId) {
@@ -475,6 +807,117 @@ if (highlightCardId) {
         }
     }, 500);
 }
+async function loadFullBoardData(boardId) {
+    showLoading('listsLoading');
+    try {
+        console.log(`Fetching full data for board ${boardId}`);
+        const response = await fetch(`${apiBaseUrl}/api/board/${boardId}/full_data`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch board data. Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Update active board object with creator information
+        activeBoard = data.board;
+        activeBoard.creator_name = data.creator.username;
+        
+        // Update users
+        users = data.users;
+        
+        // Update lists with cards
+        lists = data.lists;
+        
+        // Render lists with all data included
+        renderLists();
+        
+        hideLoading('listsLoading');
+        
+        // Check if there's a highlighted card to find
+        const highlightCardId = localStorage.getItem('highlightCardId');
+        if (highlightCardId) {
+            setTimeout(() => {
+                const cardElement = document.querySelector(`.card[data-card-id="${highlightCardId}"]`);
+                if (cardElement) {
+                    console.log(`Found card to highlight: ${highlightCardId}`);
+                    localStorage.removeItem('highlightCardId');
+                    
+                    // Highlight the found card
+                    cardElement.classList.add('highlighted-card');
+                    
+                    // Scroll to card
+                    cardElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                    
+                    // Remove highlight after some time
+                    setTimeout(() => {
+                        cardElement.classList.remove('highlighted-card');
+                    }, 10000);
+                }
+            }, 500);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error(`Error loading board data: ${error}`);
+        showToast('Error', 'Failed to load board data. Please try again.', 'error');
+        hideLoading('listsLoading');
+        return null;
+    }
+}
+async function loadListsWithCards(boardId) {
+    showLoading('listsLoading');
+    try {
+        console.log(`Fetching lists with cards for board ${boardId}`);
+        const response = await fetch(`${apiBaseUrl}/api/boards/${boardId}/lists/with_cards`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch lists with cards. Status: ${response.status}`);
+        }
+        
+        lists = await response.json();
+        console.log('Lists with cards loaded successfully:', lists);
+        
+        renderLists();
+        hideLoading('listsLoading');
+        
+        // Check for highlighted card
+        const highlightCardId = localStorage.getItem('highlightCardId');
+        if (highlightCardId) {
+            setTimeout(() => {
+                const cardElement = document.querySelector(`.card[data-card-id="${highlightCardId}"]`);
+                if (cardElement) {
+                    console.log(`Found card to highlight: ${highlightCardId}`);
+                    localStorage.removeItem('highlightCardId');
+                    
+                    // Highlight found card
+                    cardElement.classList.add('highlighted-card');
+                    
+                    // Scroll to card
+                    cardElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                    
+                    // Remove highlight after some time
+                    setTimeout(() => {
+                        cardElement.classList.remove('highlighted-card');
+                    }, 10000);
+                }
+            }, 500);
+        }
+        
+        return lists;
+    } catch (error) {
+        console.error(`Error loading lists with cards: ${error}`);
+        showToast('Error', 'Failed to load lists with cards. Please try again.', 'error');
+        hideLoading('listsLoading');
+        return [];
+    }
+}
 // Обновляем функцию loadCards чтобы сортировать карточки по position
 async function loadCards(boardId, listId) {
     try {
@@ -506,38 +949,55 @@ async function loadCards(boardId, listId) {
     }
 }
 
-// This function now has a default parameter or finds the elements
-function populateUserSelect(selectElement = null) {
-    // If no element is provided, try to find all user select dropdowns
-    if (!selectElement) {
-        // Get all user select dropdowns
-        const userSelects = document.querySelectorAll('.user-select');
-        
-        // If no select elements found, just return without error
-        if (userSelects.length === 0) {
-            console.log('No user select elements found in the DOM');
-            return;
-        }
-        
-        // Populate each user select dropdown found
-        userSelects.forEach(select => {
-            populateUserSelect(select);
-        });
-        return;
-    }
+function populateUserSelect(selectElement) {
+    if (!selectElement) return;
     
-    // Clear user list, keeping only first option "Not assigned"
+    // Clear existing options except the first onepo
     while (selectElement.options.length > 1) {
         selectElement.remove(1);
     }
     
-    // Add users to dropdown
-    users.forEach(user => {
-        const option = document.createElement('option');
-        option.value = user.id;
-        option.textContent = user.username || user.name || `User ${user.id}`;
-        selectElement.appendChild(option);
-    });
+    // Add available users based on the current board
+    if (window.boardAssignableUsers && window.boardAssignableUsers.length > 0) {
+        // If we have board-specific users, use those
+        window.boardAssignableUsers.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id;
+            option.textContent = user.username || user.name || `User ${user.id}`;
+            selectElement.appendChild(option);
+        });
+    } else if (users && users.length > 0) {
+        // Fall back to all users if board-specific users aren't available
+        users.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id;
+            option.textContent = user.username || user.name || `User ${user.id}`;
+            selectElement.appendChild(option);
+        });
+    }
+}
+function populateMultiSelect(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // Clear existing options except the first one
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+    
+    // Use the appropriate set of users
+    const userList = window.boardAssignableUsers && window.boardAssignableUsers.length > 0 
+        ? window.boardAssignableUsers 
+        : users;
+    
+    if (userList && userList.length > 0) {
+        userList.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id;
+            option.textContent = user.username || user.name || `User ${user.id}`;
+            select.appendChild(option);
+        });
+    }
 }
 
 async function fetchAllUsers() {
@@ -821,28 +1281,21 @@ function openEditBoardModal() {
     openModal(document.getElementById('editBoardModal'));
 }
 
-// Override rendering to show admin-only indicators
 function renderBoards() {
     const boardsList = document.getElementById('boardsList');
-    
-    // Remove all board elements except loading spinner
-    const loadingSpinner = document.getElementById('boardsLoading');
     const boardItems = boardsList.querySelectorAll('.board-item');
     boardItems.forEach(item => item.remove());
-    
-    // Check if there are boards
-    if (boards.length === 0) {
+
+    if (!boards || boards.length === 0) {
         const emptyMessage = document.createElement('div');
         emptyMessage.className = 'empty-message';
         emptyMessage.textContent = 'You don\'t have any boards yet. Create a new board.';
         boardsList.appendChild(emptyMessage);
         return;
     }
-    
-    // Sort boards by name
+
     const sortedBoards = [...boards].sort((a, b) => a.name.localeCompare(b.name));
-    
-    // Create elements for each board
+
     sortedBoards.forEach(board => {
         const boardItem = document.createElement('div');
         boardItem.className = `board-item ${activeBoard && activeBoard.id === board.id ? 'active' : ''}`;
@@ -851,10 +1304,29 @@ function renderBoards() {
         }
         boardItem.dataset.boardId = board.id;
         
+        // Get creator information - use creator_name from backend if available
+        const creatorName = board.creator_name || 
+                           (board.user_id && users ? 
+                            (users.find(u => u.id === board.user_id)?.username || 'Unknown User') : 
+                            'Unknown User');
+        
+        // Format creation date with fallback
+        let creationDate = 'Unknown date';
+        try {
+            if (board.created_at) {
+                creationDate = formatDate(new Date(board.created_at));
+            }
+        } catch (e) {
+            console.error('Error formatting date:', e);
+        }
+        
         boardItem.innerHTML = `
             <div class="board-name">
                 <span>${board.name}</span>
                 ${board.admin_only ? '<span class="admin-badge"><i class="fas fa-lock"></i></span>' : ''}
+                <div class="board-creator-info">
+                    <small>Created by ${creatorName} on ${creationDate}</small>
+                </div>
             </div>
             <div class="board-actions">
                 ${isAdmin ? `
@@ -864,28 +1336,10 @@ function renderBoards() {
             </div>
         `;
         
-        // Add event handlers
-        boardItem.addEventListener('click', (e) => {
-            if (!e.target.closest('.board-actions')) {
-                selectBoard(board);
-            }
-        });
-        
-        if (isAdmin) {
-            boardItem.querySelector('.btn-edit-board')?.addEventListener('click', () => {
-                selectBoard(board);
-                openEditBoardModal();
-            });
-            
-            boardItem.querySelector('.btn-delete-board')?.addEventListener('click', () => {
-                selectBoard(board);
-                handleDeleteBoard();
-            });
-        }
-        
         boardsList.appendChild(boardItem);
     });
 }
+
 
 async function handleDeleteBoard() {
     if (!activeBoard) return;
@@ -1032,62 +1486,7 @@ async function handleDeleteList(listId) {
     }
 }
 
-function openCreateCardModal(listId) {
-    // Save list ID in the form
-    const createCardForm = document.getElementById('createCardForm');
-    if (createCardForm) {
-        createCardForm.dataset.listId = listId;
-    }
-    
-    // Clear form fields - check for existence before setting values
-    const cardTitle = document.getElementById('cardTitle');
-    if (cardTitle) {
-        cardTitle.value = '';
-    }
-    
-    const cardDescription = document.getElementById('cardDescription');
-    if (cardDescription) {
-        cardDescription.value = '';
-    }
-    
-    const cardPriority = document.getElementById('cardPriority');
-    if (cardPriority) {
-        cardPriority.value = 'medium';
-    }
-    
-    // Handle single assignee dropdown if it exists
-    const cardAssignee = document.getElementById('cardAssignee');
-    if (cardAssignee) {
-        cardAssignee.value = '';
-    }
-    
-    const cardDeadline = document.getElementById('cardDeadline');
-    if (cardDeadline) {
-        cardDeadline.value = '';
-    }
-    
-    // Clear and reset task list
-    const todoItemsContainer = document.getElementById('todoItems');
-    if (todoItemsContainer) {
-        todoItemsContainer.innerHTML = `
-            <div class="todo-item">
-                <input type="text" class="todo-input" placeholder="Add a task...">
-                <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
-            </div>
-        `;
-    }
-    
-    // Add users to dropdown only if the original dropdown exists
-    if (cardAssignee) {
-        populateUserSelect(cardAssignee);
-    }
-    
-    // Add remove button handlers
-    attachRemoveTodoHandlers();
-    
-    // Open modal
-    openModal(createCardModal);
-}
+
 
 // Helper function to get priority color
 function getPriorityColor(priority) {
@@ -1293,45 +1692,6 @@ async function syncCardsToCalendar() {
     }
 }
 // В CSS стили добавьте более заметные индикаторы перетаскивания
-function addImprovedDragStyles() {
-    const existingStyle = document.getElementById('kanban-drag-styles');
-    if (existingStyle) {
-        existingStyle.textContent += `
-            .list.dragging-list {
-                opacity: 0.6;
-                background: #f0f0f0;
-                border: 2px dashed #666;
-                box-shadow: 0 0 10px rgba(0,0,0,0.2);
-                z-index: 1000;
-                transform: scale(0.98);
-                transition: transform 0.1s;
-            }
-            
-            .list.list-drop-zone {
-                position: relative;
-                outline: 2px solid #4299e1;
-            }
-            
-            .list.list-drop-zone::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                bottom: 0;
-                width: 6px;
-                background-color: #4299e1;
-                z-index: 1;
-            }
-            
-            .list.list-drop-zone[data-drop-position="before"]::before {
-                left: -3px;
-            }
-            
-            .list.list-drop-zone[data-drop-position="after"]::before {
-                right: -3px;
-            }
-        `;
-    }
-}
 
 // Add initialization after DOM content is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -1342,101 +1702,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
     });
-    addImprovedDragStyles();
 
 });
 
-function openEditCardModal(cardId, listId) {
-    if (!activeBoard) return;
-    
-    const list = lists.find(list => list.id === listId);
-    if (!list || !list.cards) return;
-    
-    const card = list.cards.find(card => card.id === cardId);
-    if (!card) return;
-    
-    // Save card information in the form
-    const form = document.getElementById('editCardForm');
-    form.dataset.cardId = cardId;
-    form.dataset.listId = listId;
-    
-    // Fill form with card data
-    document.getElementById('editCardTitle').value = card.title || '';
-    document.getElementById('editCardDescription').value = card.description || '';
-    document.getElementById('editCardPriority').value = card.priority || 'medium';
-    
-    // Check if the single assignee dropdown exists before setting its value
-    const assigneeElement = document.getElementById('editCardAssignee');
-    if (assigneeElement) {
-        assigneeElement.value = card.assigned_to ? card.assigned_to.toString() : '';
-    }
-    
-    document.getElementById('editCardCompleted').checked = card.completed || false;
-    
-    // Set deadline date
-    const deadlineInput = document.getElementById('editCardDeadline');
-    if (deadlineInput && card.deadline) {
-        // Format date for input[type="date"]
-        const deadline = new Date(card.deadline);
-        const year = deadline.getFullYear();
-        const month = String(deadline.getMonth() + 1).padStart(2, '0');
-        const day = String(deadline.getDate()).padStart(2, '0');
-        deadlineInput.value = `${year}-${month}-${day}`;
-    } else if (deadlineInput) {
-        deadlineInput.value = '';
-    }
-    
-    // Add users to dropdown if the element exists
-    const assigneeSelect = document.getElementById('editCardAssignee');
-    if (assigneeSelect) {
-        populateUserSelect(assigneeSelect);
-    }
-    
-    // Fill tasks
-    const todoItemsContainer = document.getElementById('editTodoItems');
-    if (todoItemsContainer) {
-        todoItemsContainer.innerHTML = '';
-        
-        if (card.todos && card.todos.length > 0) {
-            card.todos.forEach(todo => {
-                const todoItem = document.createElement('div');
-                todoItem.className = 'todo-item';
-                todoItem.dataset.todoId = todo.id;
-                
-                todoItem.innerHTML = `
-                    <div class="form-check">
-                        <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
-                        <input type="text" class="todo-input" value="${todo.content}" placeholder="Task...">
-                    </div>
-                    <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
-                `;
-                
-                todoItemsContainer.appendChild(todoItem);
-            });
-        }
-        
-        // Add empty line for new task
-        const emptyTodoItem = document.createElement('div');
-        emptyTodoItem.className = 'todo-item';
-        emptyTodoItem.innerHTML = `
-            <input type="text" class="todo-input" placeholder="Add new task...">
-            <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
-        `;
-        todoItemsContainer.appendChild(emptyTodoItem);
-    }
-    
-    // Add handlers for task delete buttons
-    attachRemoveTodoHandlers();
-    
-    // Add event handler for delete card button
-    const deleteCardBtn = document.getElementById('deleteCardBtn');
-    if (deleteCardBtn) {
-        deleteCardBtn.onclick = () => handleDeleteCard(cardId, listId);
-    }
-    
-    // Open modal
-    openModal(editCardModal);
-}
 
 function attachRemoveTodoHandlers() {
     document.querySelectorAll('.btn-remove-todo').forEach(button => {
@@ -1480,6 +1748,7 @@ function attachRemoveTodoHandlers() {
     });
 }
 
+// Fix for issue #6: Improved card update functionality
 async function handleUpdateCard(event) {
     event.preventDefault();
     
@@ -1493,27 +1762,39 @@ async function handleUpdateCard(event) {
     const title = document.getElementById('editCardTitle').value.trim();
     const description = document.getElementById('editCardDescription').value.trim();
     const priority = document.getElementById('editCardPriority').value;
-    const assignedToElement = document.getElementById('editCardAssignee');
-    const assignedTo = assignedToElement ? assignedToElement.value : '';
     const deadline = document.getElementById('editCardDeadline').value;
     const completed = document.getElementById('editCardCompleted').checked;
     
-    if (!title) return;
+    // Handle assignees - check for both single and multiple select
+    let selectedAssignees = [];
+    
+    const multiAssigneesEl = document.getElementById('editCardAssignees');
+    if (multiAssigneesEl) {
+        selectedAssignees = Array.from(multiAssigneesEl.selectedOptions)
+            .map(option => parseInt(option.value))
+            .filter(id => !isNaN(id));
+    } else {
+        const singleAssigneeEl = document.getElementById('editCardAssignee');
+        if (singleAssigneeEl && singleAssigneeEl.value) {
+            selectedAssignees = [parseInt(singleAssigneeEl.value)];
+        }
+    }
+    
+    if (!title) {
+        alert("Title is required");
+        return;
+    }
     
     try {
-        console.log('Updating card with completion status:', completed);
-        
-        // Main card update - only update title and description here
+        // Create a queue of operations
         const operations = [];
         
+        // Base card update - title and description
         operations.push(
             fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title,
-                    description
-                }),
+                body: JSON.stringify({ title, description }),
             })
         );
         
@@ -1526,7 +1807,7 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Explicitly set completion status - fix for auto-completion bug
+        // Set completion status
         operations.push(
             fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/toggle-completion`, {
                 method: 'PUT',
@@ -1535,36 +1816,56 @@ async function handleUpdateCard(event) {
             })
         );
         
-        // Update deadline
+        // Update deadline if provided
         if (deadline) {
-            const deadlineDate = new Date(deadline);
-            
             operations.push(
                 fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/deadline`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        deadline: deadlineDate.toISOString() 
-                    }),
+                    body: JSON.stringify({ deadline: new Date(deadline).toISOString() }),
+                })
+            );
+        }
+        
+        // Assign users - try multi-assign first, then fall back to single assign
+        if (selectedAssignees.length > 0) {
+            operations.push(
+                fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign-multiple`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_ids: selectedAssignees }),
+                }).catch(error => {
+                    console.warn('Multi-assign failed, using single assign:', error);
+                    // Fallback to single assign with the first user
+                    return fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: selectedAssignees[0] }),
+                    });
                 })
             );
             
-            // We don't need to directly create/update calendar events here
-            // The syncCardsToCalendar function will handle it properly
-        }
-        
-        // User assignment - use the correct route with /kanban prefix
-        if (assignedTo) {
+            // Update local card assignments if the Map exists
+            if (typeof cardAssignments !== 'undefined') {
+                cardAssignments.set(cardId, selectedAssignees);
+            }
+        } else {
+            // Clear assignment if no users selected
             operations.push(
                 fetch(`${apiBaseUrl}/kanban/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/assign`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: assignedTo }),
+                    body: JSON.stringify({ user_id: null }),
                 })
             );
+            
+            // Update local card assignments if the Map exists
+            if (typeof cardAssignments !== 'undefined') {
+                cardAssignments.delete(cardId);
+            }
         }
         
-        // Process tasks
+        // Handle todos (tasks)
         const todoItems = document.querySelectorAll('#editTodoItems .todo-item');
         for (const todoItem of todoItems) {
             const todoId = todoItem.dataset.todoId;
@@ -1577,19 +1878,19 @@ async function handleUpdateCard(event) {
             if (!content) continue;
             
             if (todoId) {
-                // Update existing task
+                // Update existing todo
                 operations.push(
                     fetch(`${apiBaseUrl}/todos/${todoId}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            content, 
-                            completed: todoCheckbox ? todoCheckbox.checked : false 
+                        body: JSON.stringify({
+                            content,
+                            completed: todoCheckbox ? todoCheckbox.checked : false
                         }),
                     })
                 );
             } else {
-                // Create new task
+                // Create new todo
                 operations.push(
                     fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/${cardId}/todos`, {
                         method: 'POST',
@@ -1600,24 +1901,29 @@ async function handleUpdateCard(event) {
             }
         }
         
-        // Execute all operations
-        await Promise.allSettled(operations);
+        // Execute all operations in parallel
+        const results = await Promise.allSettled(operations);
         
-        // Sync with calendar after all operations are complete
-        await syncCardsToCalendar();
+        // Check for any failures
+        const failures = results.filter(result => result.status === 'rejected');
+        if (failures.length > 0) {
+            console.error('Some card update operations failed:', failures);
+            showToast('Warning', 'Card partially updated. Some operations failed.', 'warning');
+        } else {
+            showToast('Success', 'Card updated successfully', 'success');
+        }
         
-        // Reload cards
+        // Reload cards for updated list and re-render
         await loadCards(activeBoard.id, listId);
         renderLists();
         
         closeAllModals();
-        
-        showToast('Success', 'Card updated successfully', 'success');
     } catch (error) {
         console.error('Error updating card:', error);
         showToast('Error', 'Failed to update card. Please try again.', 'error');
     }
 }
+
 
 // Fixed card deletion function to match your API route
 async function handleDeleteCard(cardId, listId) {
@@ -1649,7 +1955,6 @@ async function handleDeleteCard(cardId, listId) {
         renderLists();
         closeAllModals();
         
-        showToast('Success', 'Card deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting card:', error);
         showToast('Error', 'Failed to delete card. Please try again.', 'error');
@@ -1707,33 +2012,77 @@ function getAssigneeInfo(card) {
         initials: getInitials(assignedUser.username || assignedUser.name || '')
     };
 }
-
-async function handleCardMove(cardId, sourceListId, targetListId) {
-    if (!activeBoard) return;
-    
+async function moveCardToList(cardId, sourceListId, targetListId, position = null) {
     try {
-        console.log(`Moving card ${cardId} from list ${sourceListId} to list ${targetListId}`);
-        
-        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${sourceListId}/cards/${cardId}/move/${targetListId}`, {
-            method: 'PUT'
+        const url = `${apiBaseUrl}/api/cards/${cardId}/move_to_list/${targetListId}`;
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position })
         });
         
         if (!response.ok) {
             throw new Error(`Failed to move card. Status: ${response.status}`);
         }
         
-        // Reload cards in source and target lists
-        await loadCards(activeBoard.id, sourceListId);
-        await loadCards(activeBoard.id, targetListId);
+        // Reload lists to ensure data is in sync
+        if (activeBoard) {
+            await loadListsWithCards(activeBoard.id);
+        }
         
-        renderLists();
-        
-        showToast('Success', 'Card moved successfully', 'success');
+        return await response.json();
     } catch (error) {
         console.error('Error moving card:', error);
         showToast('Error', 'Failed to move card. Please try again.', 'error');
+        throw error;
     }
 }
+
+async function handleCardMove(cardId, sourceListId, targetListId) {
+    try {
+        console.log(`Moving card ${cardId} from list ${sourceListId} to list ${targetListId}`);
+        
+        // Get the card position in the target list
+        const targetListCards = document.querySelectorAll(`.list-cards[data-list-id="${targetListId}"] .card`);
+        const cardElement = document.querySelector(`.card[data-card-id="${cardId}"]`);
+        
+        // Calculate position for insertion
+        let position = 0;
+        if (targetListCards.length > 0) {
+            // Find where the card is in the DOM to determine position
+            const cardIndex = Array.from(targetListCards).indexOf(cardElement);
+            if (cardIndex !== -1) {
+                position = cardIndex;
+            } else {
+                // If not found, put at the end
+                position = targetListCards.length;
+            }
+        }
+        
+        // Call the new backend endpoint
+        const response = await fetch(`${apiBaseUrl}/api/cards/${cardId}/move_to_list/${targetListId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to move card. Status: ${response.status}`);
+        }
+        
+        // Success - can leave UI as is since the card has already been moved in the DOM
+        showToast('Success', 'Card moved successfully', 'success');
+    } catch (error) {
+        console.error('Error moving card:', error);
+        showToast('Error', 'Failed to move card, refreshing lists...', 'error');
+        
+        // Reload lists to ensure UI matches backend state
+        if (activeBoard) {
+            await loadLists(activeBoard.id);
+        }
+    }
+}
+
 
 // Task management functions
 async function handleUpdateTodoStatus(todoId, completed) {
@@ -1779,14 +2128,13 @@ async function handleDeleteTodo(todoId) {
             renderLists();
         }
         
-        showToast('Success', 'Task deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting todo:', error);
         showToast('Error', 'Failed to delete task. Please try again.', 'error');
     }
 }
 
-// Функция для создания элемента списка
+// Исправленная функция для создания элемента списка
 function createListElement(list) {
     const listElement = document.createElement('div');
     listElement.className = 'list';
@@ -1798,7 +2146,6 @@ function createListElement(list) {
         listElement.dataset.textColor = list.textColor || 'black';
     }
     
-    // Создаем заголовок списка
     const listHeader = document.createElement('div');
     listHeader.className = 'list-header';
     
@@ -1808,7 +2155,6 @@ function createListElement(list) {
         listHeader.style.color = list.textColor || 'black';
     }
     
-    // Создаем содержимое заголовка списка
     listHeader.innerHTML = `
         <div class="list-title-container" style="display: flex; align-items: center; flex: 1;">
             <div class="list-color-indicator" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;
@@ -1824,10 +2170,82 @@ function createListElement(list) {
         ` : ''}
     `;
     
-    // Добавляем обработчики для кнопок в заголовке списка
+    // Add handlers for list actions
     if (isAdmin) {
-        // После добавления заголовка в DOM, добавляем обработчики
-        setTimeout(() => {
+        const colorBtn = listHeader.querySelector('.btn-list-color');
+        if (colorBtn) {
+            colorBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openListColorPicker(list.id);
+            });
+        }
+        
+        const editBtn = listHeader.querySelector('.btn-edit');
+        if (editBtn) {
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openEditListModal(list.id);
+            });
+        }
+        
+        const deleteBtn = listHeader.querySelector('.btn-delete');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleDeleteList(list.id);
+            });
+        }
+    }
+    
+    return { listElement, listHeader };
+}
+function renderLists() {
+    const listsContainer = document.getElementById('listsContainer');
+    
+    // Clear container
+    listsContainer.innerHTML = '';
+    
+    // Add lists
+    lists.forEach(list => {
+        // Create main list element
+        const listElement = document.createElement('div');
+        listElement.className = 'list';
+        listElement.dataset.listId = list.id;
+        
+        // Apply color to list if it exists
+        if (list.color) {
+            listElement.dataset.color = list.color;
+            listElement.dataset.textColor = list.textColor || 'black';
+        }
+        
+        // Create list header
+        const listHeader = document.createElement('div');
+        listHeader.className = 'list-header';
+        
+        // Apply saved color to header
+        if (list.color) {
+            listHeader.style.backgroundColor = list.color;
+            listHeader.style.color = list.textColor || 'black';
+        }
+        
+        // Fill header
+        listHeader.innerHTML = `
+            <div class="list-title-container" style="display: flex; align-items: center; flex: 1;">
+                <div class="list-color-indicator" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;
+                    ${list.color ? `background-color: ${list.color};` : 'display: none;'}"></div>
+                <h3 class="list-title">${list.name} <span>${list.cards ? list.cards.length : 0}</span></h3>
+            </div>
+            ${isAdmin ? `
+                <div class="list-actions">
+                    <button class="btn-list-color" title="Change color"><i class="fas fa-palette"></i></button>
+                    <button class="btn-edit" title="Edit list"><i class="fas fa-edit"></i></button>
+                    <button class="btn-delete" title="Delete list"><i class="fas fa-times"></i></button>
+                </div>
+            ` : ''}
+        `;
+        
+        // Add event handlers for header buttons
+        if (isAdmin) {
             const colorBtn = listHeader.querySelector('.btn-list-color');
             if (colorBtn) {
                 colorBtn.addEventListener('click', (e) => {
@@ -1851,73 +2269,66 @@ function createListElement(list) {
                     handleDeleteList(list.id);
                 });
             }
-        }, 0);
-    }
-    
-    return { listElement, listHeader };
-}
-
-// Рендеринг списков
-function renderLists() {
-    const listsContainer = document.getElementById('listsContainer');
-    
-    // Очищаем контейнер
-    listsContainer.innerHTML = '';
-    
-    // Добавляем списки
-    lists.forEach(list => {
-        // Используем новую функцию для создания элемента списка
-        const { listElement, listHeader } = createListElement(list);
+        }
         
-        // Создаем контейнер для карточек
+        // Create cards container
         const listCards = document.createElement('div');
         listCards.className = 'list-cards';
         listCards.dataset.listId = list.id;
         
-        // Включаем перетаскивание, если пользователь - администратор
+        // Enable drag-and-drop if admin
         if (isAdmin) {
             setupDropZone(listCards);
         }
         
-        // Добавляем карточки в список
+        // Add cards to list
         if (list.cards && list.cards.length > 0) {
-            // Сортируем карточки по позиции, если такое поле есть
+            // Sort cards by position if available
             if (list.cards[0].position !== undefined) {
                 list.cards.sort((a, b) => a.position - b.position);
             }
             
             list.cards.forEach(card => {
-                const cardElement = createCardElement(card, list.id);
-                listCards.appendChild(cardElement);
+                try {
+                    const cardElement = createCardElement(card, list.id);
+                    if (cardElement) {
+                        listCards.appendChild(cardElement);
+                    } else {
+                        console.warn(`Card element could not be created for card ID ${card.id}`);
+                    }
+                } catch (err) {
+                    console.error(`Error creating card element for card ${card.id}:`, err);
+                }
             });
         }
         
-        // Создаем кнопку добавления карточки (только для администраторов)
+        // Add header to list first
+        listElement.appendChild(listHeader);
+        
+        // Then add cards container
+        listElement.appendChild(listCards);
+        
+        // Create add card button (admin only)
         if (isAdmin) {
             const addCardBtn = document.createElement('button');
             addCardBtn.className = 'btn-add-card';
             addCardBtn.innerHTML = '<i class="fas fa-plus"></i> Add Card';
             addCardBtn.addEventListener('click', () => openCreateCardModal(list.id));
             
-            // Добавляем всё в элемент списка
-            listElement.appendChild(listHeader);
-            listElement.appendChild(listCards);
+            // Add button to list
             listElement.appendChild(addCardBtn);
-        } else {
-            // Для обычных пользователей только заголовок и карточки
-            listElement.appendChild(listHeader);
-            listElement.appendChild(listCards);
         }
         
-        // Настраиваем перетаскивание списка, если пользователь - администратор
+        // Setup list dragging if admin
         if (isAdmin) {
             setupDraggableList(listElement);
         }
         
+        // Add completed list to container
         listsContainer.appendChild(listElement);
     });
     
-    // Добавляем контейнер для кнопки добавления списка (только для администраторов)
+    // Add container for add list button (admin only)
     if (isAdmin) {
         const addListContainer = document.createElement('div');
         addListContainer.className = 'add-list-container';
@@ -1927,180 +2338,350 @@ function renderLists() {
             </button>
         `;
         
-        // Добавляем обработчик для кнопки добавления списка
-        addListContainer.querySelector('#addListBtn')?.addEventListener('click', () => openModal(createListModal));
+        // Add handler for add list button
+        const addListBtn = addListContainer.querySelector('#addListBtn');
+        if (addListBtn) {
+            addListBtn.addEventListener('click', () => openModal(createListModal));
+        }
         
         listsContainer.appendChild(addListContainer);
     }
     
-    // Настраиваем контейнер списков для перетаскивания
+    // Setup lists container for dragging
     if (isAdmin) {
         setupListsContainer();
     }
 }
 
-// Обновим функцию создания карточки, добавив position в карточку
+
 function createCardElement(card, listId) {
-    const cardElement = document.createElement('div');
-    cardElement.className = `card ${card.completed ? 'completed' : ''}`;
-    cardElement.dataset.cardId = card.id;
-    cardElement.dataset.listId = listId;
-    cardElement.dataset.priority = card.priority || 'medium';
-    cardElement.dataset.position = card.position || 0; // Добавляем позицию
-    
-    // Make card draggable only for admins
-    if (isAdmin) {
-        cardElement.draggable = true;
-        setupDraggable(cardElement);
+    if (!card || !listId) {
+        console.error('Invalid card or listId provided to createCardElement');
+        return null;
     }
     
-    // Prepare priority information
-    let priorityClass = '';
-    let priorityText = '';
-    
-    switch (card.priority) {
-        case 'low':
-            priorityClass = 'priority-low';
-            priorityText = 'Low';
-            break;
-        case 'medium':
-            priorityClass = 'priority-medium';
-            priorityText = 'Medium';
-            break;
-        case 'high':
-            priorityClass = 'priority-high';
-            priorityText = 'High';
-            break;
-        default:
-            priorityClass = 'priority-medium';
-            priorityText = 'Medium';
-    }
-    
-    // Apply full color style if enabled
-    if (useFullColorPriority) {
-        cardElement.classList.add(`full-color-priority-${card.priority || 'medium'}`);
-    } else {
-        cardElement.classList.add(`priority-${card.priority || 'medium'}`);
-    }
-    
-// Get user information if card is assigned
-let assigneeHtml = '';
-if (card.assigned_to) {
-    const assignedUser = users.find(user => user.id === parseInt(card.assigned_to));
-    if (assignedUser) {
-        const initials = getInitials(assignedUser.username || assignedUser.name || '');
-        assigneeHtml = `
-            <div class="user-badge" title="${assignedUser.username || assignedUser.name}">
-                <div class="user-avatar">${initials}</div>
-                <span>${assignedUser.username || assignedUser.name}</span>
-            </div>
-        `;
-    }
-}
+    try {
+        const cardElement = document.createElement('div');
+        cardElement.className = `card ${card.completed ? 'completed' : ''}`;
+        cardElement.dataset.cardId = card.id;
+        cardElement.dataset.listId = listId;
+        cardElement.dataset.priority = card.priority || 'medium';
+        cardElement.dataset.position = card.position || 0;
+        
+        // Get creator information - use creator_name from backend if available
+        let creatorName = card.creator_name || 'Unknown User';
+        
+        // Fallback to looking up user if creator_name not available
+        if (!card.creator_name && window.users && Array.isArray(window.users) && card.user_id) {
+            const creator = window.users.find(user => user && user.id === card.user_id);
+            if (creator) {
+                creatorName = creator.username || creator.name || `User ${creator.id}`;
+            }
+        }
+        
+        // Format creation date - with error handling
+        let creationDate = 'unknown date';
+        try {
+            if (card.created_at) {
+                if (typeof formatDate === 'function') {
+                    creationDate = formatDate(new Date(card.created_at));
+                } else {
+                    creationDate = new Date(card.created_at).toLocaleDateString();
+                }
+            }
+        } catch (e) {
+            console.error('Error formatting date:', e);
+        }
+        
+        // Determine priority styling
+        let priorityClass = '';
+        let priorityText = '';
+        
+        switch (card.priority) {
+            case 'low':
+                priorityClass = 'priority-low';
+                priorityText = 'Low';
+                break;
+            case 'medium':
+                priorityClass = 'priority-medium';
+                priorityText = 'Medium';
+                break;
+            case 'high':
+                priorityClass = 'priority-high';
+                priorityText = 'High';
+                break;
+            default:
+                priorityClass = 'priority-medium';
+                priorityText = 'Medium';
+        }
+        
+        // Safely apply color priority class
+        if (typeof useFullColorPriority !== 'undefined' && useFullColorPriority) {
+            cardElement.classList.add(`full-color-priority-${card.priority || 'medium'}`);
+        } else {
+            cardElement.classList.add(`priority-${card.priority || 'medium'}`);
+        }
+        
+        // Generate assignee HTML safely
+        let assigneesHtml = '';
+        
+        if (card.assigned_users && Array.isArray(card.assigned_users) && card.assigned_users.length > 0) {
+            // If we have multiple assigned users
+            assigneesHtml = `<div class="assignees-container">`;
             
-            // Prepare deadline information
-            let deadlineHtml = '';
-            if (card.deadline) {
+            // Create a group of avatars for up to 3 users
+            assigneesHtml += `<div class="user-avatar-group">`;
+            
+            const displayedUsers = card.assigned_users.slice(0, 3);
+            displayedUsers.forEach(user => {
+                if (user) {
+                    const initials = typeof getInitials === 'function' ? 
+                        getInitials(user.username || user.name || '') : 
+                        (user.username ? user.username.charAt(0).toUpperCase() : '?');
+                    
+                    assigneesHtml += `
+                        <div class="user-avatar small" title="${user.username || user.name || 'User ' + user.id}">
+                            ${initials}
+                        </div>
+                    `;
+                }
+            });
+            
+            // If there are more than 3 users, show a count
+            if (card.assigned_users.length > 3) {
+                assigneesHtml += `
+                    <div class="user-avatar small more" title="${card.assigned_users.length - 3} more users">
+                        +${card.assigned_users.length - 3}
+                    </div>
+                `;
+            }
+            
+            assigneesHtml += `</div>`;
+            
+            // Add primary assignee name (first user)
+            if (card.assigned_users[0]) {
+                const primaryUser = card.assigned_users[0];
+                assigneesHtml += `
+                    <span class="assignee-name">${primaryUser.username || primaryUser.name || 'User ' + primaryUser.id}</span>
+                `;
+            }
+            
+            assigneesHtml += `</div>`;
+        } else if (card.assigned_to) {
+            // Use assigned_username provided by backend if available
+            let assignedUsername = card.assigned_username;
+            
+            // Fallback to looking up user if assigned_username not available
+            if (!assignedUsername && window.users && Array.isArray(window.users)) {
+                const assignedUser = window.users.find(user => user && user.id === parseInt(card.assigned_to));
+                if (assignedUser) {
+                    assignedUsername = assignedUser.username || assignedUser.name || `User ${assignedUser.id}`;
+                } else {
+                    assignedUsername = 'Assigned User';
+                }
+            }
+            
+            // Generate avatar and name
+            const initials = typeof getInitials === 'function' ? 
+                getInitials(assignedUsername || '') : 
+                (assignedUsername ? assignedUsername.charAt(0).toUpperCase() : '?');
+            
+            assigneesHtml = `
+                <div class="user-badge" title="${assignedUsername}">
+                    <div class="user-avatar">${initials}</div>
+                    <span>${assignedUsername}</span>
+                </div>
+            `;
+        }
+        
+        // Deadline HTML
+        let deadlineHtml = '';
+        if (card.deadline) {
+            try {
                 const deadline = new Date(card.deadline);
                 const now = new Date();
                 const isOverdue = deadline < now && !card.completed;
                 
+                const formattedDate = typeof formatDate === 'function' ? 
+                    formatDate(deadline) : 
+                    deadline.toLocaleDateString();
+                
+                const formattedDateWithTime = typeof formatDate === 'function' ? 
+                    formatDate(deadline, true) : 
+                    deadline.toLocaleString();
+                
                 deadlineHtml = `
-                    <div class="deadline ${isOverdue ? 'overdue' : ''}" title="${formatDate(deadline, true)}">
+                    <div class="deadline ${isOverdue ? 'overdue' : ''}" title="${formattedDateWithTime}">
                         <i class="fas fa-calendar-alt"></i>
-                        <span>${formatDate(deadline)}</span>
+                        <span>${formattedDate}</span>
                     </div>
                 `;
+            } catch (e) {
+                console.error('Error formatting deadline:', e);
             }
+        }
+        
+        // Tasks/todos HTML
+        let todosHtml = '';
+        if (card.todos && Array.isArray(card.todos) && card.todos.length > 0) {
+            const totalTodos = card.todos.length;
+            const completedTodos = card.todos.filter(todo => todo.completed).length;
             
-            // Prepare task information
-            let todosHtml = '';
-            let todoProgress = 0;
+            const todoProgress = totalTodos > 0 ? (completedTodos / totalTodos) * 100 : 0;
             
-            if (card.todos && card.todos.length > 0) {
-                const totalTodos = card.todos.length;
-                const completedTodos = card.todos.filter(todo => todo.completed).length;
-                
-                todoProgress = totalTodos > 0 ? (completedTodos / totalTodos) * 100 : 0;
-                
-                todosHtml = `
-                    <div class="todo-list">
-                        <div class="todo-progress">
-                            <div class="todo-progress-bar" style="width: ${todoProgress}%"></div>
-                        </div>
-                        <div class="todo-summary">
-                            ${completedTodos}/${totalTodos} tasks completed
-                        </div>
+            todosHtml = `
+                <div class="todo-list">
+                    <div class="todo-progress">
+                        <div class="todo-progress-bar" style="width: ${todoProgress}%"></div>
                     </div>
-                `;
-            }
-            
-            // Build HTML for card
-            cardElement.innerHTML = `
-                <div class="card-header">
-                    <h4 class="card-title">${card.title}</h4>
-                    <span class="badge ${priorityClass}">${priorityText}</span>
-                </div>
-                ${card.description ? `<div class="card-description">${card.description}</div>` : ''}
-                <div class="card-info">
-                    ${assigneeHtml}
-                    ${deadlineHtml}
-                    ${todosHtml}
-                </div>
-                <div class="card-actions">
-                    <button class="btn-toggle-completion" title="${card.completed ? 'Mark as incomplete' : 'Mark as complete'}">
-                        <i class="fas ${card.completed ? 'fa-check-square' : 'fa-square'}"></i>
-                    </button>
-                    ${isAdmin ? `
-                        <button class="btn-edit-card" title="Edit card">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn-delete-card" title="Delete card">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    ` : ''}
+                    <div class="todo-summary">
+                        ${completedTodos}/${totalTodos} tasks completed
+                    </div>
                 </div>
             `;
+        }
+        
+        // Build the card content with creator info
+        cardElement.innerHTML = `
+            <div class="card-header">
+                <h4 class="card-title">${card.title || 'Untitled Card'}</h4>
+                <div class="card-header-right">
+                    <span class="badge ${priorityClass}">${priorityText}</span>
+                </div>
+            </div>
+            <div class="creator-info">
+                <small>Created by ${creatorName} on ${creationDate}</small>
+            </div>
+            ${card.description ? `<div class="card-description">${card.description}</div>` : ''}
+            <div class="card-info">
+                ${assigneesHtml}
+                ${deadlineHtml}
+                ${todosHtml}
+            </div>
+            <div class="card-actions">
+                <button class="btn-toggle-completion" title="${card.completed ? 'Mark as incomplete' : 'Mark as complete'}">
+                    <i class="fas ${card.completed ? 'fa-check-square' : 'fa-square'}"></i>
+                </button>
+                ${typeof isAdmin !== 'undefined' && isAdmin ? `
+                    <button class="btn-edit-card" title="Edit card">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-delete-card" title="Delete card">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                ` : ''}
+            </div>
+        `;
+        
+        // Add event handlers
+        cardElement.addEventListener('click', (e) => {
+            if (e.target.closest('.card-actions')) {
+                return;
+            }
             
-            // Add event handlers
-            // Modified card click event handler to allow users to access todos
-            cardElement.addEventListener('click', (e) => {
-                // Skip if clicked on card actions (complete button, etc.)
-                if (e.target.closest('.card-actions')) {
-                    return;
-                }
-                
-                if (isAdmin) {
-                    // Admin can open full edit modal
-                    openEditCardModal(card.id, listId);
-                } else {
-                    // Regular users can only access todos
-                    openUserTodoModal(card.id, card.title);
-                }
-            });
-            
-            // Handler for toggling completion status (available to all users)
-            cardElement.querySelector('.btn-toggle-completion').addEventListener('click', (e) => {
+            if (typeof isAdmin !== 'undefined' && isAdmin) {
+                openEditCardModal(card.id, listId);
+            } else if (typeof openUserTodoModal === 'function') {
+                openUserTodoModal(card.id, card.title);
+            }
+        });
+        
+        const toggleButton = cardElement.querySelector('.btn-toggle-completion');
+        if (toggleButton) {
+            toggleButton.addEventListener('click', (e) => {
                 e.stopPropagation();
-                handleToggleCardCompletion(card.id, listId, card.completed);
+                if (typeof handleToggleCardCompletion === 'function') {
+                    handleToggleCardCompletion(card.id, listId, card.completed);
+                }
             });
-            
-            if (isAdmin) {
-                // Handler for editing card (admin only)
-                cardElement.querySelector('.btn-edit-card')?.addEventListener('click', (e) => {
+        }
+        
+        if (typeof isAdmin !== 'undefined' && isAdmin) {
+            const editButton = cardElement.querySelector('.btn-edit-card');
+            if (editButton) {
+                editButton.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    openEditCardModal(card.id, listId);
-                });
-                
-                // Handler for deleting card (admin only)
-                cardElement.querySelector('.btn-delete-card')?.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    handleDeleteCard(card.id, listId);
+                    if (typeof openEditCardModal === 'function') {
+                        openEditCardModal(card.id, listId);
+                    }
                 });
             }
             
-            return cardElement;
+            const deleteButton = cardElement.querySelector('.btn-delete-card');
+            if (deleteButton) {
+                deleteButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (typeof handleDeleteCard === 'function') {
+                        handleDeleteCard(card.id, listId);
+                    }
+                });
+            }
         }
+        
+        // Enable dragging if admin
+        if (typeof isAdmin !== 'undefined' && isAdmin && typeof setupDraggable === 'function') {
+            setupDraggable(cardElement);
+        }
+        
+        return cardElement;
+    } catch (error) {
+        console.error('Error in createCardElement:', error);
+        return null; // Return null to avoid further errors
+    }
+}
+function openCreateCardModal(listId) {
+    // Save list ID in the form
+    const createCardForm = document.getElementById('createCardForm');
+    if (createCardForm) {
+        createCardForm.dataset.listId = listId;
+    }
+    
+    // Clear form fields
+    document.getElementById('cardTitle').value = '';
+    document.getElementById('cardDescription').value = '';
+    document.getElementById('cardPriority').value = 'medium';
+    
+    // Handle single assignee dropdown if it exists
+    const cardAssignee = document.getElementById('cardAssignee');
+    if (cardAssignee) {
+        cardAssignee.value = '';
+        populateUserSelect(cardAssignee);
+    }
+    
+    // Handle multi-select assignees if it exists
+    const cardAssignees = document.getElementById('cardAssignees');
+    if (cardAssignees) {
+        // Clear selections
+        Array.from(cardAssignees.options).forEach(option => {
+            option.selected = false;
+        });
+        populateMultiSelect('cardAssignees');
+    }
+    
+    const cardDeadline = document.getElementById('cardDeadline');
+    if (cardDeadline) {
+        cardDeadline.value = '';
+    }
+    
+    // Clear and reset task list
+    const todoItemsContainer = document.getElementById('todoItems');
+    if (todoItemsContainer) {
+        todoItemsContainer.innerHTML = `
+            <div class="todo-item">
+                <input type="text" class="todo-input" placeholder="Add a task...">
+                <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+            </div>
+        `;
+    }
+    
+    // Set up event handlers for task removal
+    attachRemoveTodoHandlers();
+    
+    // Open modal
+    openModal(createCardModal);
+}
+
+
         
         // Function to open a simplified modal for regular users
 function openUserTodoModal(cardId, cardTitle) {
@@ -2271,25 +2852,6 @@ function displayUserTodos(todos, container, cardId) {
     container.appendChild(todoList);
 }
 
-// Add CSS for admin indicators
-function addAdminStyles() {
-    const style = document.createElement('style');
-    style.textContent = `
-        .admin-only {
-            position: relative;
-        }
-        
-        .admin-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-left: 6px;
-            color: #6c757d;
-            font-size: 0.8em;
-        }
-    `;
-    document.head.appendChild(style);
-}
 
 // Modal functions
 function openModal(modal) {
@@ -2313,7 +2875,6 @@ function closeAllModals() {
     });
 }
 
-// Helper functions
 function selectBoard(board) {
     activeBoard = board;
     
@@ -2333,7 +2894,7 @@ function selectBoard(board) {
     // Load lists for selected board
     loadLists(board.id);
 }
-// Add this loadLists function after the loadBoards function
+
 async function loadLists(boardId) {
     if (!boardId) {
         console.error('Board ID is required to load lists');
@@ -2342,21 +2903,40 @@ async function loadLists(boardId) {
     
     showLoading('listsLoading');
     try {
-        console.log(`Fetching lists for board ${boardId}`);
-        const response = await fetch(`${apiBaseUrl}/boards/${boardId}/lists`);
+        console.log(`Fetching full data for board ${boardId}`);
+        
+        // Use the new comprehensive endpoint
+        const response = await fetch(`${apiBaseUrl}/api/board/${boardId}/full_data`);
         
         if (!response.ok) {
-            throw new Error(`Failed to fetch lists. Status: ${response.status}`);
+            // Fallback to the old endpoint if the new one fails
+            console.warn('New endpoint failed, trying fallback...');
+            return await loadListsLegacy(boardId);
         }
         
-        lists = await response.json();
-        console.log('Lists loaded successfully:', lists);
+        const data = await response.json();
         
-        // Load cards for each list
-        const cardPromises = lists.map(list => loadCards(boardId, list.id));
-        await Promise.all(cardPromises);
+        // Update lists and users from the response
+        lists = data.lists;
         
+        // If users array doesn't exist, create it
+        if (!window.users) {
+            window.users = [];
+        }
+        
+        // Update users array with board users
+        data.users.forEach(user => {
+            const existingUserIndex = window.users.findIndex(u => u.id === user.id);
+            if (existingUserIndex !== -1) {
+                window.users[existingUserIndex] = user;
+            } else {
+                window.users.push(user);
+            }
+        });
+        
+        // Render the lists
         renderLists();
+        
         hideLoading('listsLoading');
         
         // Check if there's a highlighted card to find
@@ -2384,10 +2964,42 @@ async function loadLists(boardId) {
                 }
             }, 500);
         }
+        
+        return data;
+    } catch (error) {
+        console.error(`Error loading board data: ${error}`);
+        showToast('Error', 'Failed to load board data. Please try again.', 'error');
+        hideLoading('listsLoading');
+        
+        // Try legacy method as fallback
+        return await loadListsLegacy(boardId);
+    }
+}
+async function loadListsLegacy(boardId) {
+    try {
+        console.log(`Fetching lists for board ${boardId} (legacy method)`);
+        const response = await fetch(`${apiBaseUrl}/boards/${boardId}/lists`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch lists. Status: ${response.status}`);
+        }
+        
+        lists = await response.json();
+        console.log('Lists loaded successfully:', lists);
+        
+        // Load cards for each list
+        const cardPromises = lists.map(list => loadCards(boardId, list.id));
+        await Promise.all(cardPromises);
+        
+        renderLists();
+        hideLoading('listsLoading');
+        
+        return { lists, board: activeBoard };
     } catch (error) {
         console.error(`Error loading lists for board ${boardId}:`, error);
         showToast('Error', 'Failed to load lists. Please try again.', 'error');
         hideLoading('listsLoading');
+        return null;
     }
 }
 
@@ -2427,6 +3039,39 @@ function hideLoading(elementId) {
     if (element) {
         element.style.display = 'none';
     }
+}
+
+
+function getContrastColor(bgColor) {
+    if (!bgColor) return '#000000';
+
+    let r, g, b;
+    
+    if (bgColor.startsWith('#')) {
+        if (bgColor.length === 4) {
+            r = parseInt(bgColor.charAt(1) + bgColor.charAt(1), 16);
+            g = parseInt(bgColor.charAt(2) + bgColor.charAt(2), 16);
+            b = parseInt(bgColor.charAt(3) + bgColor.charAt(3), 16);
+        } else {
+            r = parseInt(bgColor.substring(1, 3), 16);
+            g = parseInt(bgColor.substring(3, 5), 16);
+            b = parseInt(bgColor.substring(5, 7), 16);
+        }
+    } else if (bgColor.startsWith('rgb')) {
+        const rgbValues = bgColor.match(/\d+/g);
+        if (rgbValues && rgbValues.length === 3) {
+            r = parseInt(rgbValues[0]);
+            g = parseInt(rgbValues[1]);
+            b = parseInt(rgbValues[2]);
+        } else {
+            return '#000000';
+        }
+    } else {
+        return '#000000';
+    }
+    
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    return luminance > 128 ? '#000000' : '#ffffff';
 }
 
 function formatDate(date, showTime = false) {
@@ -2485,50 +3130,98 @@ function toggleSidebar() {
 // Initialize edit list form handler
 document.getElementById('editListForm').addEventListener('submit', handleEditList);
 
+
+
+
+// In kanban.js, replace the existing color picker functions with these:
+
+// Функция для определения контрастного цвета текста (черный или белый)
+function getContrastYIQ(hexcolor) {
+    if (!hexcolor) return 'black';
+    
+    // Если цвет начинается с #, удаляем его
+    hexcolor = hexcolor.replace('#', '');
+    
+    const r = parseInt(hexcolor.substr(0, 2), 16);
+    const g = parseInt(hexcolor.substr(2, 2), 16);
+    const b = parseInt(hexcolor.substr(4, 2), 16);
+    
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    
+    return (yiq >= 128) ? 'black' : 'white';
+}
+
 // Функция для создания модального окна выбора цвета списка
 function createListColorModal() {
-    // Проверяем, существует ли уже модальное окно
-    let colorModal = document.getElementById('listColorModal');
-    if (colorModal) return;
+    // Удаляем старое модальное окно, если оно существует
+    const oldModal = document.getElementById('listColorModal');
+    if (oldModal) {
+        oldModal.remove();
+    }
     
-    // Предопределенные цвета для списков
+    // Предопределенные цвета для списков с лучшими названиями и отображением
     const LIST_COLORS = [
-        { name: 'Синий', value: '#1976D2', text: 'white' },
-        { name: 'Фиолетовый', value: '#9C27B0', text: 'white' },
-        { name: 'Красный', value: '#D32F2F', text: 'white' },
-        { name: 'Оранжевый', value: '#FF9800', text: 'black' },
-        { name: 'Зеленый', value: '#2E7D32', text: 'white' },
-        { name: 'Бирюзовый', value: '#00897B', text: 'white' },
-        { name: 'Серый', value: '#757575', text: 'white' },
-        { name: 'Розовый', value: '#E91E63', text: 'white' },
-        { name: 'Коричневый', value: '#795548', text: 'white' },
-        { name: 'Желтый', value: '#FFC107', text: 'black' },
-        { name: 'По умолчанию', value: '#f0f2f5', text: 'black' }
+        { name: 'Berry Red', value: '#b8255f', text: 'white' },
+        { name: 'Red', value: '#db4035', text: 'white' },
+        { name: 'Orange', value: '#ff9933', text: 'black' },
+        { name: 'Yellow', value: '#fad000', text: 'black' },
+        { name: 'Olive Green', value: '#afb83b', text: 'black' },
+        { name: 'Lime Green', value: '#7ecc49', text: 'black' },
+        { name: 'Green', value: '#299438', text: 'white' },
+        { name: 'Mint Green', value: '#6accbc', text: 'black' },
+        { name: 'Teal', value: '#158fad', text: 'white' },
+        { name: 'Sky Blue', value: '#14aaf5', text: 'white' },
+        { name: 'Light Blue', value: '#96c3eb', text: 'black' },
+        { name: 'Blue', value: '#4073ff', text: 'white' },
+        { name: 'Grape', value: '#884dff', text: 'white' },
+        { name: 'Violet', value: '#af38eb', text: 'white' },
+        { name: 'Lavender', value: '#eb96eb', text: 'black' },
+        { name: 'Magenta', value: '#e05194', text: 'white' },
+        { name: 'Salmon', value: '#ff8d85', text: 'black' },
+        { name: 'Charcoal', value: '#808080', text: 'white' },
+        { name: 'Grey', value: '#b8b8b8', text: 'black' },
+        { name: 'Default', value: '#f0f2f5', text: 'black' }
     ];
     
     // Создаем модальное окно
-    colorModal = document.createElement('div');
+    const colorModal = document.createElement('div');
     colorModal.id = 'listColorModal';
     colorModal.className = 'modal';
     
-    // Создаем содержимое модального окна
+    // Создаем содержимое модального окна с улучшенным внешним видом
     colorModal.innerHTML = `
-        <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
                 <h2>Выберите цвет списка</h2>
                 <button class="close-modal"><i class="fas fa-times"></i></button>
             </div>
             <div class="color-picker-container" style="padding: 16px;">
-                <div class="color-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                <div class="color-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px;">
                     ${LIST_COLORS.map(color => `
                         <div class="color-option" data-color="${color.value}" data-text="${color.text}" 
                              style="background-color: ${color.value}; color: ${color.text}; 
-                                   height: 40px; border-radius: 4px; cursor: pointer; 
+                                   height: 48px; border-radius: 6px; cursor: pointer; 
                                    display: flex; align-items: center; justify-content: center; 
-                                   box-shadow: 0 1px 3px rgba(0,0,0,0.12);">
+                                   box-shadow: 0 2px 5px rgba(0,0,0,0.15); font-size: 12px;
+                                   transition: transform 0.2s, box-shadow 0.2s;"
+                             onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)';"
+                             onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 5px rgba(0,0,0,0.15)';">
                             ${color.name}
                         </div>
                     `).join('')}
+                </div>
+                <div class="custom-color-section" style="margin-top: 16px; border-top: 1px solid #eee; padding-top: 16px;">
+                    <label for="customColorPicker" style="display: block; margin-bottom: 8px; font-weight: 500;">Выберите свой цвет:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="customColorPicker" style="width: 100px; height: 40px;">
+                        <button id="applyCustomColor" class="btn btn-primary" style="flex: 1;">Применить</button>
+                    </div>
+                </div>
+                <div id="colorPreview" style="margin-top: 16px; padding: 16px; border-radius: 6px; border: 1px solid #ddd; display: none;">
+                    <h3>Предпросмотр</h3>
+                    <div id="previewHeader" style="padding: 10px; border-radius: 4px; margin-top: 8px; font-weight: 500;">
+                        Заголовок списка
+                    </div>
                 </div>
             </div>
         </div>
@@ -2542,6 +3235,7 @@ function createListColorModal() {
         colorModal.classList.remove('active');
     });
     
+    // Обработчик выбора предустановленного цвета
     colorModal.querySelectorAll('.color-option').forEach(option => {
         option.addEventListener('click', () => {
             const listId = colorModal.dataset.listId;
@@ -2553,6 +3247,45 @@ function createListColorModal() {
                 colorModal.classList.remove('active');
             }
         });
+        
+        // Показываем предпросмотр при наведении
+        option.addEventListener('mouseover', () => {
+            const preview = document.getElementById('colorPreview');
+            const previewHeader = document.getElementById('previewHeader');
+            
+            preview.style.display = 'block';
+            previewHeader.style.backgroundColor = option.dataset.color;
+            previewHeader.style.color = option.dataset.text;
+        });
+    });
+    
+    // Обработчик для пользовательского цвета
+    const customColorPicker = document.getElementById('customColorPicker');
+    const applyCustomColor = document.getElementById('applyCustomColor');
+    
+    customColorPicker.addEventListener('input', () => {
+        const preview = document.getElementById('colorPreview');
+        const previewHeader = document.getElementById('previewHeader');
+        
+        preview.style.display = 'block';
+        previewHeader.style.backgroundColor = customColorPicker.value;
+        
+        // Определяем контрастный текст для выбранного цвета
+        const textColor = getContrastYIQ(customColorPicker.value);
+        previewHeader.style.color = textColor;
+    });
+    
+    applyCustomColor.addEventListener('click', () => {
+        const listId = colorModal.dataset.listId;
+        const color = customColorPicker.value;
+        
+        // Определяем контрастный текст для выбранного цвета
+        const textColor = getContrastYIQ(color);
+        
+        if (listId && color) {
+            setListColor(listId, color, textColor);
+            colorModal.classList.remove('active');
+        }
     });
     
     // Закрытие при клике вне модального окна
@@ -2561,6 +3294,8 @@ function createListColorModal() {
             colorModal.classList.remove('active');
         }
     });
+    
+    return colorModal;
 }
 
 // Функция для открытия модального окна выбора цвета
@@ -2579,32 +3314,75 @@ function openListColorPicker(listId) {
 }
 
 // Функция для установки цвета списка
-function setListColor(listId, color, textColor) {
+
+async function setListColor(listId, color, textColor) {
+    if (!activeBoard) return;
+
     // Обновляем UI
     const listElement = document.querySelector(`.list[data-list-id="${listId}"]`);
     if (listElement) {
         const headerElement = listElement.querySelector('.list-header');
         if (headerElement) {
-            headerElement.style.backgroundColor = color;
-            headerElement.style.color = textColor;
-            
-            // Сохраняем цвета в атрибутах для восстановления при перерисовке
-            listElement.dataset.color = color;
-            listElement.dataset.textColor = textColor;
+            if (color) {
+                headerElement.style.backgroundColor = color;
+                headerElement.style.color = textColor || getContrastColor(color);
+                
+                // Показываем индикатор цвета
+                const colorIndicator = listElement.querySelector('.list-color-indicator');
+                if (colorIndicator) {
+                    colorIndicator.style.backgroundColor = color;
+                    colorIndicator.style.display = 'block';
+                }
+                
+                // Сохраняем цвета в dataset
+                listElement.dataset.color = color;
+                listElement.dataset.textColor = textColor || getContrastColor(color);
+            } else {
+                // Сбрасываем на значения по умолчанию
+                headerElement.style.backgroundColor = '';
+                headerElement.style.color = '';
+                
+                // Скрываем индикатор цвета
+                const colorIndicator = listElement.querySelector('.list-color-indicator');
+                if (colorIndicator) {
+                    colorIndicator.style.display = 'none';
+                }
+                
+                // Удаляем из dataset
+                delete listElement.dataset.color;
+                delete listElement.dataset.textColor;
+            }
         }
     }
-    
-    // Находим список в массиве
+
+    // Обновляем в памяти и сохраняем на сервере
     const listIndex = lists.findIndex(list => list.id === parseInt(listId));
     if (listIndex !== -1) {
-        // Добавляем свойства цвета к объекту списка
         lists[listIndex].color = color;
-        lists[listIndex].textColor = textColor;
+        lists[listIndex].textColor = textColor || (color ? getContrastColor(color) : null);
         
-        // Сохраняем на сервере
-        saveListColor(listId, color, textColor);
+        try {
+            const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/color`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    color: color,
+                    text_color: textColor || (color ? getContrastColor(color) : null)
+                }),
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to save list color. Status: ${response.status}`);
+            }
+            
+            showToast('Success', 'List color updated', 'success');
+        } catch (error) {
+            console.error('Error saving list color:', error);
+            showToast('Error', 'Failed to save list color', 'error');
+        }
     }
 }
+
 
 // Функция для сохранения цвета списка на сервере
 function saveListColor(listId, color, textColor) {
@@ -2630,7 +3408,14 @@ function saveListColor(listId, color, textColor) {
     });
 }
 
-// Add drag & drop styles
+
+
+
+
+
+
+
+// Обновленные стили для перетаскивания
 function addDragAndDropStyles() {
     const style = document.createElement('style');
     style.id = 'kanban-drag-styles';
@@ -2642,385 +3427,24 @@ function addDragAndDropStyles() {
             z-index: 1000;
         }
         
-        .list.list-drop-zone::before {
-            content: '';
+        .list-header {
+            cursor: grab;
+        }
+        
+        .list-header:active {
+            cursor: grabbing;
+        }
+        
+        .list-drop-indicator {
             position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 6px;
-            background-color: #4299e1;
-            z-index: 1;
-        }
-        
-        .list.list-drop-zone[data-drop-position="before"]::before {
-            left: -3px;
-        }
-        
-        .list.list-drop-zone[data-drop-position="after"]::before {
-            right: -3px;
-        }
-        
-        .card.dragging {
-            opacity: 0.7;
-            transform: scale(0.98);
-            z-index: 1000;
-        }
-        
-        .list-cards.drag-over {
-            background-color: rgba(66, 153, 225, 0.1);
+            background-color: rgba(66, 153, 225, 0.3);
+            border: 2px dashed #4299e1;
+            pointer-events: none;
+            display: none;
+            z-index: 1001;
         }
     `;
     document.head.appendChild(style);
-}
-
-// Functions for draggable cards
-function setupDraggable(element) {
-    element.addEventListener('dragstart', (e) => {
-        // Убедимся, что перетаскивается карточка, а не список
-        e.stopPropagation(); // Предотвращаем всплытие события к родительскому списку
-        
-        e.dataTransfer.setData('card-id', e.target.dataset.cardId);
-        e.dataTransfer.setData('source-list', e.target.dataset.listId);
-        e.dataTransfer.effectAllowed = 'move';
-        
-        // Добавляем класс для визуального отображения перетаскивания
-        setTimeout(() => {
-            e.target.classList.add('dragging');
-        }, 0);
-    });
-    
-    element.addEventListener('dragend', (e) => {
-        e.target.classList.remove('dragging');
-        document.querySelectorAll('.drag-over').forEach(el => {
-            el.classList.remove('drag-over');
-        });
-    });
-}
-
-// Functions for drop zones
-function setupDropZone(element) {
-    element.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        
-        // Проверяем, является ли перетаскиваемый элемент карточкой
-        if (isDraggingList) return;
-        
-        const cardBeingDragged = document.querySelector('.dragging');
-        if (!cardBeingDragged) return;
-        
-        // Определяем, над какой карточкой находится курсор
-        const cardsInThisList = Array.from(element.querySelectorAll('.card:not(.dragging)'));
-        const cardAfterCursor = getCardAfterCursor(cardsInThisList, e.clientY);
-        
-        // Визуальная индикация для зоны сброса
-        element.classList.add('drag-over');
-        
-        // Если карточка найдена, вставляем перетаскиваемую карточку перед ней
-        if (cardAfterCursor) {
-            element.insertBefore(cardBeingDragged, cardAfterCursor);
-        } else {
-            // Если курсор ниже всех карточек или список пуст, добавляем в конец
-            element.appendChild(cardBeingDragged);
-        }
-    });
-    
-    element.addEventListener('dragleave', () => {
-        element.classList.remove('drag-over');
-    });
-    
-    element.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        element.classList.remove('drag-over');
-        
-        // Проверяем, является ли перетаскиваемый элемент карточкой
-        const cardId = e.dataTransfer.getData('card-id');
-        if (!cardId) return; // Если нет id карточки, то пропускаем
-        
-        const sourceListId = parseInt(e.dataTransfer.getData('source-list'));
-        const targetListId = parseInt(element.dataset.listId);
-        
-        // Если перемещение между разными списками
-        if (sourceListId !== targetListId) {
-            await handleCardMove(parseInt(cardId), sourceListId, targetListId);
-        }
-        // Если перемещение внутри одного списка
-        else {
-            // Собираем новый порядок карточек
-            const cards = Array.from(element.querySelectorAll('.card'));
-            const cardIds = cards.map(card => parseInt(card.dataset.cardId));
-            
-            // Сохраняем новый порядок
-            saveCardsOrder(targetListId, cardIds);
-        }
-    });
-}
-
-// Get card that should come after the dragged card
-function getCardAfterCursor(cards, cursorY) {
-    return cards.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = cursorY - box.top - box.height / 2;
-        
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-
-// Save new order of cards
-async function saveCardsOrder(listId, cardIds) {
-    if (!activeBoard) return;
-    
-    try {
-        console.log(`Saving new cards order for list ${listId}:`, cardIds);
-        
-        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/${listId}/cards/reorder`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ card_ids: cardIds }),
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to save cards order. Status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Cards order saved:', data);
-        
-        // Обновляем порядок карточек в массиве списков
-        updateCardsOrderInMemory(listId, cardIds);
-        
-        showToast('Success', 'Cards order saved successfully', 'success');
-    } catch (error) {
-        console.error('Error saving cards order:', error);
-        showToast('Error', 'Failed to save cards order', 'error');
-    }
-}
-
-// Update order of cards in memory
-function updateCardsOrderInMemory(listId, cardIds) {
-    const listIndex = lists.findIndex(list => list.id === listId);
-    if (listIndex === -1 || !lists[listIndex].cards) return;
-    
-    const newOrderCards = [];
-    cardIds.forEach(cardId => {
-        const card = lists[listIndex].cards.find(c => c.id === cardId);
-        if (card) {
-            newOrderCards.push(card);
-        }
-    });
-    
-    lists[listIndex].cards = newOrderCards;
-}
-
-// Functions for draggable lists
-function setupDraggableList(listElement) {
-    listElement.setAttribute('draggable', 'true');
-    
-    listElement.addEventListener('dragstart', (e) => {
-        console.log('List dragstart event triggered', e.target);
-        
-        // Проверяем, что тянут за заголовок списка
-        const isHeader = e.target.classList.contains('list-header') || 
-                       e.target.closest('.list-header');
-                       
-        // Если тянут не за заголовок или пользователь не админ, отменяем
-        if (!isHeader || !isAdmin) {
-            e.preventDefault();
-            return false;
-        }
-        
-        isDraggingList = true;
-        draggedList = listElement;
-        
-        const rect = listElement.getBoundingClientRect();
-        listElement.style.setProperty('--list-width', `${rect.width}px`);
-        
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', listElement.dataset.listId);
-        
-        // Добавляем классы с небольшой задержкой для лучшей визуализации
-        setTimeout(() => {
-            listElement.classList.add('dragging-list');
-        }, 0);
-        
-        console.log('List drag started for list ID:', listElement.dataset.listId);
-    });
-    
-    listElement.addEventListener('dragend', (e) => {
-        console.log('List dragend event triggered');
-        isDraggingList = false;
-        draggedList = null;
-        listElement.classList.remove('dragging-list');
-        
-        // Удаляем все маркеры зон перетаскивания
-        document.querySelectorAll('.list-drop-zone').forEach(el => {
-            el.classList.remove('list-drop-zone');
-            el.removeAttribute('data-drop-position');
-        });
-    });
-}
-// Модифицированная функция setupListsContainer
-function setupListsContainer() {
-    const container = document.getElementById('listsContainer');
-    if (!container) return;
-    
-    container.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        
-        // Если не тащим список или пользователь не админ, игнорируем
-        if (!isDraggingList || !isAdmin) return;
-        
-        const draggingElement = document.querySelector('.dragging-list');
-        if (!draggingElement) return;
-        
-        // Получаем элемент, после которого нужно вставить
-        const afterElement = getDragAfterElement(container, e.clientX);
-        
-        // Очищаем предыдущие зоны перетаскивания
-        document.querySelectorAll('.list-drop-zone').forEach(el => {
-            el.classList.remove('list-drop-zone');
-            el.removeAttribute('data-drop-position');
-        });
-        
-        if (afterElement) {
-            // Если есть элемент, после которого вставляем
-            afterElement.classList.add('list-drop-zone');
-            afterElement.setAttribute('data-drop-position', 'before');
-        } else if (container.lastElementChild && 
-                  container.lastElementChild !== draggingElement) {
-            // Если нет элемента (конец контейнера), выделяем последний элемент
-            container.lastElementChild.classList.add('list-drop-zone');
-            container.lastElementChild.setAttribute('data-drop-position', 'after');
-        }
-    });
-    
-    container.addEventListener('drop', (e) => {
-        e.preventDefault();
-        
-        // Если не тащим список или пользователь не админ, игнорируем
-        if (!isDraggingList || !isAdmin || !draggedList) return;
-        
-        console.log('List dropped, rearranging lists');
-        
-        const draggingElement = document.querySelector('.dragging-list');
-        if (!draggingElement) return;
-        
-        // Получаем элемент, после которого нужно вставить
-        const afterElement = getDragAfterElement(container, e.clientX);
-        
-        // Вставляем перетаскиваемый элемент
-        if (afterElement) {
-            container.insertBefore(draggingElement, afterElement);
-        } else {
-            container.appendChild(draggingElement);
-        }
-        
-        // Очищаем маркеры
-        document.querySelectorAll('.list-drop-zone').forEach(el => {
-            el.classList.remove('list-drop-zone');
-            el.removeAttribute('data-drop-position');
-        });
-        
-        // Обновляем порядок списков и сохраняем его
-        updateListsOrder();
-        saveListsOrder();
-    });
-}
-
-
-// Улучшенная функция getDragAfterElement
-function getDragAfterElement(container, x) {
-    const draggingElement = document.querySelector('.dragging-list');
-    if (!draggingElement) return null;
-    
-    const draggableElements = [...container.querySelectorAll('.list:not(.dragging-list)')];
-    if (draggableElements.length === 0) return null;
-    
-    // Находим элемент, после которого нужно вставить перетаскиваемый
-    let closestElement = null;
-    let closestOffset = Number.NEGATIVE_INFINITY;
-    
-    draggableElements.forEach(element => {
-        const box = element.getBoundingClientRect();
-        const offset = x - box.left - box.width / 2;
-        
-        if (offset < 0 && offset > closestOffset) {
-            closestOffset = offset;
-            closestElement = element;
-        }
-    });
-    
-    return closestElement;
-}
-// Модифицированная функция updateListsOrder
-function updateListsOrder() {
-    const listElements = document.querySelectorAll('.list');
-    const newOrder = Array.from(listElements)
-        .filter(el => el.dataset.listId) // Убедимся, что у элемента есть ID
-        .map(el => parseInt(el.dataset.listId));
-    
-    console.log('New list order:', newOrder);
-    
-    // Проверяем, не пустой ли массив
-    if (newOrder.length === 0) {
-        console.warn('No lists found to update order');
-        return;
-    }
-    
-    // Создаем новый массив с списками в новом порядке
-    const newLists = [];
-    for (const listId of newOrder) {
-        const list = lists.find(l => l.id === listId);
-        if (list) {
-            newLists.push(list);
-        } else {
-            console.warn(`List with ID ${listId} not found in lists array`);
-        }
-    }
-    
-    // Проверяем, не пустой ли получившийся массив
-    if (newLists.length === 0) {
-        console.warn('No lists in new order. Keeping original order.');
-        return;
-    }
-    
-    // Обновляем глобальный массив списков
-    lists = newLists;
-    console.log('Lists order updated in memory');
-}
-// Function to save lists order on the server
-async function saveListsOrder() {
-    if (!activeBoard) return;
-    
-    // Get the current order of lists from the DOM
-    const listElements = document.querySelectorAll('.list');
-    const listIds = Array.from(listElements).map(el => parseInt(el.dataset.listId));
-    
-    console.log('Saving lists order to server:', listIds);
-    
-    try {
-        const response = await fetch(`${apiBaseUrl}/boards/${activeBoard.id}/lists/reorder`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ list_ids: listIds }),
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to save lists order. Status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Lists order saved successfully:', data);
-        
-        // Notify user of success
-        showToast('Success', 'List order saved successfully', 'success');
-    } catch (error) {
-        console.error('Error saving lists order:', error);
-        showToast('Error', 'Failed to save list order. Please try again.', 'error');
-    }
 }
 
 // Добавьте несколько debugging функций
@@ -3040,6 +3464,351 @@ if (typeof isDraggingList === 'undefined') {
 if (typeof draggedList === 'undefined') {
     let draggedList = null;
 }
+function createImprovedListColorModal() {
+    // Удаляем старое модальное окно, если оно существует
+    const oldModal = document.getElementById('listColorModal');
+    if (oldModal) {
+        oldModal.remove();
+    }
+    
+    // Предопределенные цвета для списков с лучшими названиями и отображением
+    const LIST_COLORS = [
+        { name: 'Berry Red', value: '#b8255f', text: 'white' },
+        { name: 'Red', value: '#db4035', text: 'white' },
+        { name: 'Orange', value: '#ff9933', text: 'black' },
+        { name: 'Yellow', value: '#fad000', text: 'black' },
+        { name: 'Olive Green', value: '#afb83b', text: 'black' },
+        { name: 'Lime Green', value: '#7ecc49', text: 'black' },
+        { name: 'Green', value: '#299438', text: 'white' },
+        { name: 'Mint Green', value: '#6accbc', text: 'black' },
+        { name: 'Teal', value: '#158fad', text: 'white' },
+        { name: 'Sky Blue', value: '#14aaf5', text: 'white' },
+        { name: 'Light Blue', value: '#96c3eb', text: 'black' },
+        { name: 'Blue', value: '#4073ff', text: 'white' },
+        { name: 'Grape', value: '#884dff', text: 'white' },
+        { name: 'Violet', value: '#af38eb', text: 'white' },
+        { name: 'Lavender', value: '#eb96eb', text: 'black' },
+        { name: 'Magenta', value: '#e05194', text: 'white' },
+        { name: 'Salmon', value: '#ff8d85', text: 'black' },
+        { name: 'Charcoal', value: '#808080', text: 'white' },
+        { name: 'Grey', value: '#b8b8b8', text: 'black' },
+        { name: 'Default', value: '#f0f2f5', text: 'black' }
+    ];
+    
+    // Создаем модальное окно
+    const colorModal = document.createElement('div');
+    colorModal.id = 'listColorModal';
+    colorModal.className = 'modal';
+    
+    // Создаем содержимое модального окна с улучшенным внешним видом
+    colorModal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Выберите цвет списка</h2>
+                <button class="close-modal"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="color-picker-container" style="padding: 16px;">
+                <div class="color-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px;">
+                    ${LIST_COLORS.map(color => `
+                        <div class="color-option" data-color="${color.value}" data-text="${color.text}" 
+                             style="background-color: ${color.value}; color: ${color.text}; 
+                                   height: 48px; border-radius: 6px; cursor: pointer; 
+                                   display: flex; align-items: center; justify-content: center; 
+                                   box-shadow: 0 2px 5px rgba(0,0,0,0.15); font-size: 12px;
+                                   transition: transform 0.2s, box-shadow 0.2s;"
+                             onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)';"
+                             onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 5px rgba(0,0,0,0.15)';">
+                            ${color.name}
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="custom-color-section" style="margin-top: 16px; border-top: 1px solid #eee; padding-top: 16px;">
+                    <label for="customColorPicker" style="display: block; margin-bottom: 8px; font-weight: 500;">Выберите свой цвет:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="customColorPicker" style="width: 100px; height: 40px;">
+                        <button id="applyCustomColor" class="btn btn-primary" style="flex: 1;">Применить</button>
+                    </div>
+                </div>
+                <div id="colorPreview" style="margin-top: 16px; padding: 16px; border-radius: 6px; border: 1px solid #ddd; display: none;">
+                    <h3>Предпросмотр</h3>
+                    <div id="previewHeader" style="padding: 10px; border-radius: 4px; margin-top: 8px; font-weight: 500;">
+                        Заголовок списка
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Добавляем модальное окно в DOM
+    document.body.appendChild(colorModal);
+    
+    // Добавляем обработчики событий
+    colorModal.querySelector('.close-modal').addEventListener('click', () => {
+        colorModal.classList.remove('active');
+    });
+    
+    // Обработчик выбора предустановленного цвета
+    colorModal.querySelectorAll('.color-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const listId = colorModal.dataset.listId;
+            const color = option.dataset.color;
+            const textColor = option.dataset.text;
+            
+            if (listId && color) {
+                setListColor(listId, color, textColor);
+                colorModal.classList.remove('active');
+            }
+        });
+        
+        // Показываем предпросмотр при наведении
+        option.addEventListener('mouseover', () => {
+            const preview = document.getElementById('colorPreview');
+            const previewHeader = document.getElementById('previewHeader');
+            
+            preview.style.display = 'block';
+            previewHeader.style.backgroundColor = option.dataset.color;
+            previewHeader.style.color = option.dataset.text;
+        });
+    });
+    
+    // Обработчик для пользовательского цвета
+    const customColorPicker = document.getElementById('customColorPicker');
+    const applyCustomColor = document.getElementById('applyCustomColor');
+    
+    customColorPicker.addEventListener('input', () => {
+        const preview = document.getElementById('colorPreview');
+        const previewHeader = document.getElementById('previewHeader');
+        
+        preview.style.display = 'block';
+        previewHeader.style.backgroundColor = customColorPicker.value;
+        
+        // Определяем контрастный текст для выбранного цвета
+        const textColor = getContrastYIQ(customColorPicker.value);
+        previewHeader.style.color = textColor;
+    });
+    
+    applyCustomColor.addEventListener('click', () => {
+        const listId = colorModal.dataset.listId;
+        const color = customColorPicker.value;
+        
+        // Определяем контрастный текст для выбранного цвета
+        const textColor = getContrastYIQ(color);
+        
+        if (listId && color) {
+            setListColor(listId, color, textColor);
+            colorModal.classList.remove('active');
+        }
+    });
+    
+    // Закрытие при клике вне модального окна
+    colorModal.addEventListener('click', (e) => {
+        if (e.target === colorModal) {
+            colorModal.classList.remove('active');
+        }
+    });
+    
+    return colorModal;
+}
+// Функция для определения контрастного цвета текста (черный или белый)
+function getContrastYIQ(hexcolor) {
+    if (!hexcolor) return 'black';
+    
+    // Если цвет начинается с #, удаляем его
+    hexcolor = hexcolor.replace('#', '');
+    
+    const r = parseInt(hexcolor.substr(0, 2), 16);
+    const g = parseInt(hexcolor.substr(2, 2), 16);
+    const b = parseInt(hexcolor.substr(4, 2), 16);
+    
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    
+    return (yiq >= 128) ? 'black' : 'white';
+}
+
+// Функция для открытия улучшенного модального окна выбора цвета
+function openImprovedListColorPicker(listId) {
+    const colorModal = createImprovedListColorModal();
+    colorModal.dataset.listId = listId;
+    colorModal.classList.add('active');
+}
+function openEditCardModal(cardId, listId) {
+    if (!activeBoard) return;
+    
+    const list = lists.find(list => list.id === listId);
+    if (!list || !list.cards) return;
+    
+    const card = list.cards.find(card => card.id === cardId);
+    if (!card) return;
+    
+    // Save card information in the form
+    const form = document.getElementById('editCardForm');
+    form.dataset.cardId = cardId;
+    form.dataset.listId = listId;
+    
+    // Fill form with card data
+    document.getElementById('editCardTitle').value = card.title || '';
+    document.getElementById('editCardDescription').value = card.description || '';
+    document.getElementById('editCardPriority').value = card.priority || 'medium';
+    document.getElementById('editCardCompleted').checked = card.completed || false;
+    
+    // Set deadline date
+    const deadlineInput = document.getElementById('editCardDeadline');
+    if (deadlineInput && card.deadline) {
+        // Format date for input[type="date"]
+        const deadline = new Date(card.deadline);
+        const year = deadline.getFullYear();
+        const month = String(deadline.getMonth() + 1).padStart(2, '0');
+        const day = String(deadline.getDate()).padStart(2, '0');
+        deadlineInput.value = `${year}-${month}-${day}`;
+    } else if (deadlineInput) {
+        deadlineInput.value = '';
+    }
+    
+    // Handle assignees - check both multi-select and single select
+    const multiAssigneesElement = document.getElementById('editCardAssignees');
+    if (multiAssigneesElement) {
+        // Clear selections first
+        Array.from(multiAssigneesElement.options).forEach(option => {
+            option.selected = false;
+        });
+        
+        // Populate with users
+        populateMultiSelect('editCardAssignees');
+        
+        // Set selections based on assigned_users if available
+        if (card.assigned_users && card.assigned_users.length > 0) {
+            const assignedIds = card.assigned_users.map(user => user.id);
+            
+            Array.from(multiAssigneesElement.options).forEach(option => {
+                if (assignedIds.includes(parseInt(option.value))) {
+                    option.selected = true;
+                }
+            });
+        } else if (card.assigned_to) {
+            // Fallback to single assigned_to
+            Array.from(multiAssigneesElement.options).forEach(option => {
+                if (parseInt(option.value) === card.assigned_to) {
+                    option.selected = true;
+                }
+            });
+        }
+    } else {
+        // Handle single select assignee if that's what we have
+        const assigneeElement = document.getElementById('editCardAssignee');
+        if (assigneeElement) {
+            assigneeElement.value = card.assigned_to ? card.assigned_to.toString() : '';
+            populateUserSelect(assigneeElement);
+        }
+    }
+    
+    // Fill tasks
+    const todoItemsContainer = document.getElementById('editTodoItems');
+    if (todoItemsContainer) {
+        todoItemsContainer.innerHTML = '';
+        
+        if (card.todos && card.todos.length > 0) {
+            card.todos.forEach(todo => {
+                const todoItem = document.createElement('div');
+                todoItem.className = 'todo-item';
+                todoItem.dataset.todoId = todo.id;
+                
+                todoItem.innerHTML = `
+                    <div class="form-check">
+                        <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
+                        <input type="text" class="todo-input" value="${todo.content}" placeholder="Task...">
+                    </div>
+                    <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+                `;
+                
+                todoItemsContainer.appendChild(todoItem);
+            });
+        }
+        
+        // Add empty line for new task
+        const emptyTodoItem = document.createElement('div');
+        emptyTodoItem.className = 'todo-item';
+        emptyTodoItem.innerHTML = `
+            <input type="text" class="todo-input" placeholder="Add new task...">
+            <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
+        `;
+        todoItemsContainer.appendChild(emptyTodoItem);
+    }
+    
+    // Add handlers for task delete buttons
+    attachRemoveTodoHandlers();
+    
+    // Add event handler for delete card button
+    const deleteCardBtn = document.getElementById('deleteCardBtn');
+    if (deleteCardBtn) {
+        deleteCardBtn.onclick = () => handleDeleteCard(cardId, listId);
+    }
+    
+    // Open modal
+    openModal(editCardModal);
+
+
+    // Load data in correct sequence
+    fetchAllUsers().then(() => {
+        loadBoards().then(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const boardIdFromUrl = urlParams.get('board_id');
+            
+            if (boardIdFromUrl) {
+                const boardToSelect = boards.find(board => board.id === parseInt(boardIdFromUrl));
+                if (boardToSelect) {
+                    selectBoard(boardToSelect);
+                } else if (boards.length > 0) {
+                    selectBoard(boards[0]);
+                }
+            } else if (boards.length > 0) {
+                selectBoard(boards[0]);
+            }
+        });
+    });
+
+    // Add drag-and-drop styles
+    addDragAndDropStyles();
+    
+    // Add highlight styles for cards
+    addHighlightStyles();
+
+    // Ensure board items are clickable using event delegation
+    document.getElementById('boardsList').addEventListener('click', function(e) {
+        const boardItem = e.target.closest('.board-item');
+        if (boardItem && !e.target.closest('.btn-edit-board') && !e.target.closest('.btn-delete-board')) {
+            const boardId = parseInt(boardItem.dataset.boardId);
+            const board = boards.find(b => b.id === boardId);
+            if (board) {
+                selectBoard(board);
+                return;
+            }
+        }
+        
+        const editBtn = e.target.closest('.btn-edit-board');
+        if (editBtn) {
+            e.stopPropagation();
+            const boardItem = editBtn.closest('.board-item');
+            const boardId = parseInt(boardItem.dataset.boardId);
+            const board = boards.find(b => b.id === boardId);
+            if (board) {
+                activeBoard = board;
+                openEditBoardModal();
+            }
+        }
+        
+        const deleteBtn = e.target.closest('.btn-delete-board');
+        if (deleteBtn) {
+            e.stopPropagation();
+            const boardItem = deleteBtn.closest('.board-item');
+            const boardId = parseInt(boardItem.dataset.boardId);
+            const board = boards.find(b => b.id === boardId);
+            if (board) {
+                activeBoard = board;
+                handleDeleteBoard();
+            }
+        }
+    });
+};
 // Экспортировать основные функции в глобальное пространство имен
 window.loadLists = loadLists;
 window.loadCards = loadCards;
