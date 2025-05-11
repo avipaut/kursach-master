@@ -231,7 +231,7 @@ class KPITemplate(db.Model):
     def repr(self):
         return f"<KPITemplate: {self.column_name} [{self.row_index}] = {self.value}>"
 
-# Then modify the Board class to add the relationship with users
+# Enhanced Board class with improved to_dict method
 class Board(db.Model):
     __tablename__ = 'board'
     id = Column(Integer, primary_key=True)
@@ -246,13 +246,22 @@ class Board(db.Model):
                            backref=db.backref('accessible_boards', lazy='dynamic'))
 
     def to_dict(self):
+        # Get creator information if available
+        creator = None
+        creator_name = "Unknown User"
+        if self.user_id:
+            creator = User.query.get(self.user_id)
+            if creator:
+                creator_name = creator.username
+        
         return {
             'id': self.id,
             'name': self.name,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'user_id': self.user_id,
             'admin_only': self.admin_only,
-            'users': [{'id': user.id, 'username': user.username} for user in self.users]
+            'users': [{'id': user.id, 'username': user.username} for user in self.users],
+            'creator_name': creator_name  # Add creator name to the dictionary
         }
 
     def __repr__(self):
@@ -283,6 +292,7 @@ class List(db.Model):
         return f"<List {self.name}>"
 
 
+# Enhanced Card class with improved to_dict method
 class Card(db.Model):
     __tablename__ = 'card'
     id = Column(Integer, primary_key=True)
@@ -303,8 +313,24 @@ class Card(db.Model):
     assigned_users = db.relationship('User', 
                                   secondary=card_assignees,
                                   backref=db.backref('assigned_cards_multi', lazy='dynamic'))
-     # Also update the to_dict method to include assigned users:
+    
+    # Enhanced to_dict method with creator information
     def to_dict(self):
+        # Get creator information if available
+        creator = None
+        creator_name = "Unknown User"
+        if self.user_id:
+            creator = User.query.get(self.user_id)
+            if creator:
+                creator_name = creator.username
+        
+        # Get assigned user information if available
+        assigned_username = None
+        if self.assigned_to:
+            assignee = User.query.get(self.assigned_to)
+            if assignee:
+                assigned_username = assignee.username
+        
         base_dict = {
             'id': self.id,
             'title': self.title,
@@ -315,12 +341,13 @@ class Card(db.Model):
             'priority': self.priority.value if self.priority else 'low',
             'completed': self.completed,
             'assigned_to': self.assigned_to,
+            'assigned_username': assigned_username,  # Add assigned username to the dictionary
             'deadline': self.deadline.isoformat() if self.deadline else None,
             'custom_color': self.custom_color,
             'position': self.position,
             'todos': [todo.to_dict() for todo in self.todos],
-            # Add assigned users
-            'assigned_users': [{'id': user.id, 'username': user.username} for user in self.assigned_users]
+            'assigned_users': [{'id': user.id, 'username': user.username} for user in self.assigned_users],
+            'creator_name': creator_name  # Add creator name to the dictionary
         }
         
         # Add list and board info if available
@@ -330,6 +357,7 @@ class Card(db.Model):
                 base_dict['board_name'] = self.list.board.name
         
         return base_dict
+    
     def __repr__(self):
         return f"<Card {self.title} (Priority: {self.priority.name if self.priority else 'None'})>"
 
@@ -454,3 +482,11 @@ class UserForm(FlaskForm):
 class RoleForm(FlaskForm):
     name = StringField('Название роли', validators=[DataRequired(), Length(max=80)])
     description = TextAreaField('Описание', validators=[Optional(), Length(max=255)])
+
+# Function to apply model enhancements
+def apply_model_enhancements():
+    """Apply enhancements to models for better creator and assignee information"""
+    print("Applying model enhancements to ensure creator information is displayed correctly")
+    
+    # No need for additional modifications since we've updated the to_dict methods directly
+    pass

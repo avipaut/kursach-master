@@ -13,9 +13,6 @@
   <!-- Custom CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/board_sharing_styles.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/card_assignment.css') }}">
-  <link rel="stylesheet" href="/static/css/card-styles.css">
 </head>
 
 <body>
@@ -291,11 +288,13 @@
   <div id="toastContainer" class="toast-container"></div>
   
   <!-- Bootstrap Bundle with Popper -->
-  <script defer src="{{ url_for('static', filename='js/kanban.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='js/board_sharing.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/card_assignment.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/kanban_debug.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/card_assignment_fixer.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/kanban.js') }}"></script>
+  <script  src="{{ url_for('static', filename='js/card_assignment.js') }}"></script>
+  <!-- <script  src="{{ url_for('static', filename='js/card_assignment_fixer.js') }}"></script>
+  <script  src="{{ url_for('static', filename='js/board_sharing.js') }}"></script> -->
+  <script  src="{{ url_for('static', filename='js/kanban-fixes.js') }}"></script>
+
+
 </body>
 
 </html>
