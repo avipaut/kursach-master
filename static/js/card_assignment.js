@@ -138,7 +138,7 @@ function enhanceExistingCards() {
         // Create info element
         const creatorInfo = document.createElement('div');
         creatorInfo.className = 'creator-info';
-        creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+        creatorInfo.innerHTML = `<small>Создатель: ${creatorName}, ${creationDate}</small>`;
         
         // Insert in DOM
         const cardHeader = cardElement.querySelector('.card-header');
@@ -185,7 +185,7 @@ function enhanceExistingBoards() {
         // Create creator info element
         const creatorInfo = document.createElement('div');
         creatorInfo.className = 'board-creator-info';
-        creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+        creatorInfo.innerHTML = `<small>Создатель ${creatorName}, ${creationDate}</small>`;
         
         // Insert after board name
         const boardName = boardItem.querySelector('.board-name');
@@ -221,7 +221,7 @@ function updateCardCompletionPermission(cardElement, card) {
         toggleBtn.onclick = function(e) {
             e.preventDefault();
             e.stopPropagation();
-            showToast('Info', 'Only assigned users can mark this card as completed', 'info');
+            //('Info', 'Only assigned users can mark this card as completed', 'info');
             return false;
         };
     }
@@ -249,14 +249,14 @@ function setupCreateCardModal() {
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
         formGroup.innerHTML = `
-            <label for="cardAssignees">Assignees</label>
+            <label for="cardAssignees">Ответственные</label>
             <div class="select-with-search">
                 <input type="text" class="search-input" placeholder="Search users...">
                 <select id="cardAssignees" multiple class="form-control">
-                    <option value="" disabled>Select assignees</option>
+                    <option value="" disabled>Выберите пользователей</option>
                 </select>
             </div>
-            <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+            <small class="form-text text-muted"></small>
         `;
         
         if (insertAfter.nextSibling) {
@@ -287,14 +287,14 @@ function setupEditCardModal() {
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
         formGroup.innerHTML = `
-            <label for="editCardAssignees">Assignees</label>
+            <label for="editCardAssignees">Ответственные</label>
             <div class="select-with-search">
                 <input type="text" class="search-input" placeholder="Search users...">
                 <select id="editCardAssignees" multiple class="form-control">
-                    <option value="" disabled>Select assignees</option>
+                    <option value="" disabled>Выберите пользователей</option>
                 </select>
             </div>
-            <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+            <small class="form-text text-muted">Зажмите Ctrl для выбора нескольких пользователей</small>
         `;
         
         if (insertAfter.nextSibling) {
@@ -531,7 +531,7 @@ async function handleCreateCardWithMultipleAssignees(event) {
         if (typeof window.closeAllModals === 'function') window.closeAllModals();
         
         // Show message
-        showToast('Success', 'Card created successfully', 'success');
+        //('Success', 'Card created successfully', 'success');
     } catch (error) {
         console.error('Error creating card:', error);
         alert('Failed to create card: ' + error.message);
@@ -712,7 +712,7 @@ async function handleUpdateCardWithMultipleAssignees(event) {
         if (typeof window.closeAllModals === 'function') window.closeAllModals();
         
         // Show message
-        showToast('Success', 'Card updated successfully', 'success');
+        //('Success', 'Card updated successfully', 'success');
     } catch (error) {
         console.error('Error updating card:', error);
         alert('Failed to update card: ' + error.message);
@@ -745,19 +745,19 @@ function createAddUserModal() {
     modal.innerHTML = `
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Add User to Board</h2>
+                <h2>Прикрепите пользователей к доске</h2>
                 <button class="close-modal"><i class="fas fa-times"></i></button>
             </div>
             <form id="addUserToBoardForm">
                 <div class="form-group">
-                    <label for="userSelect">Select User</label>
+                    <label for="userSelect">Выберите пользователей</label>
                     <select id="userSelect" class="form-control" required>
-                        <option value="">-- Select User --</option>
+                        <option value="">-- Выбрать --</option>
                     </select>
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary btn-cancel">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add User</button>
+                    <button type="button" class="btn btn-secondary btn-cancel">Удалить</button>
+                    <button type="submit" class="btn btn-primary">Добавить</button>
                 </div>
             </form>
         </div>
@@ -791,19 +791,19 @@ function createBoardUsersListModal() {
     modal.innerHTML = `
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Board Users</h2>
+                <h2>Добавьте пользователей</h2>
                 <button class="close-modal"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
                 <div class="board-users-list"></div>
                 <div class="empty-users-message" style="display: none;">
-                    <p>No users have been added to this board yet.</p>
+                    <p>Пользователи еще не были добавлены</p>
                 </div>
                 <div class="form-actions mt-4">
                     <button type="button" id="addUserBtn" class="btn btn-primary">
-                        <i class="fas fa-user-plus"></i> Add User
+                        <i class="fas fa-user-plus"></i> Добавьте пользователя
                     </button>
-                    <button type="button" class="btn btn-secondary btn-cancel">Close</button>
+                    <button type="button" class="btn btn-secondary btn-cancel">Закрыть</button>
                 </div>
             </div>
         </div>
@@ -835,7 +835,7 @@ function addBoardSharingButton() {
     const shareButton = document.createElement('button');
     shareButton.id = 'shareBoardBtn';
     shareButton.className = 'btn btn-light';
-    shareButton.innerHTML = '<i class="fas fa-users"></i> Share Board';
+    shareButton.innerHTML = '<i class="fas fa-users"></i> Добавить пользователей';
     
     // Add click event listener
     shareButton.addEventListener('click', openBoardUsersListModal);
@@ -846,7 +846,7 @@ function addBoardSharingButton() {
 
 function openAddUserModal() {
     if (!activeBoard) {
-        showToast('Error', 'Please select a board first', 'error');
+        //('Error', 'Please select a board first', 'error');
         return;
     }
     
@@ -859,7 +859,7 @@ function openAddUserModal() {
 
 function openBoardUsersListModal() {
     if (!activeBoard) {
-        showToast('Error', 'Please select a board first', 'error');
+        //('Error', 'Please select a board first', 'error');
         return;
     }
     
@@ -923,7 +923,7 @@ async function fetchBoardUsers() {
         displayBoardUsers();
     } catch (error) {
         console.error('Error fetching board users:', error);
-        showToast('Error', 'Failed to load board users. Please try again.', 'error');
+        //('Error', 'Failed to load board users. Please try again.', 'error');
     }
 }
 
@@ -961,10 +961,10 @@ function displayBoardUsers() {
             <div class="user-info">
                 <span class="user-avatar">${getInitials(user.username || '')}</span>
                 <span class="user-name">${user.username}</span>
-                ${isCreator ? '<span class="user-role">(Owner)</span>' : ''}
+                ${isCreator ? '<span class="user-role">(Владелец)</span>' : ''}
             </div>
             ${!isCreator ? `
-                <button class="btn-remove-user" data-user-id="${user.id}" title="Remove user">
+                <button class="btn-remove-user" data-user-id="${user.id}" title="Удалить пользователя">
                     <i class="fas fa-times"></i>
                 </button>
             ` : ''}
@@ -986,7 +986,7 @@ async function handleAddUserToBoard(event) {
     event.preventDefault();
     
     if (!activeBoard) {
-        showToast('Error', 'Please select a board first', 'error');
+        //('Error', 'Please select a board first', 'error');
         return;
     }
     
@@ -994,7 +994,7 @@ async function handleAddUserToBoard(event) {
     const userId = userSelect.value;
     
     if (!userId) {
-        showToast('Error', 'Please select a user', 'error');
+        //('Error', 'Please select a user', 'error');
         return;
     }
     
@@ -1018,16 +1018,16 @@ async function handleAddUserToBoard(event) {
         closeAllModals();
         openBoardUsersListModal();
         
-        showToast('Success', 'User added to board successfully', 'success');
+        //('Success', 'User added to board successfully', 'success');
     } catch (error) {
         console.error('Error adding user to board:', error);
-        showToast('Error', 'Failed to add user to board. Please try again.', 'error');
+        //('Error', 'Failed to add user to board. Please try again.', 'error');
     }
 }
 
 async function handleRemoveUserFromBoard(userId) {
     if (!activeBoard) {
-        showToast('Error', 'Please select a board first', 'error');
+        //('Error', 'Please select a board first', 'error');
         return;
     }
     
@@ -1050,10 +1050,10 @@ async function handleRemoveUserFromBoard(userId) {
         // Refresh the board users list
         await fetchBoardUsers();
         
-        showToast('Success', 'User removed from board successfully', 'success');
+        //('Success', 'User removed from board successfully', 'success');
     } catch (error) {
         console.error('Error removing user from board:', error);
-        showToast('Error', 'Failed to remove user from board. Please try again.', 'error');
+        //('Error', 'Failed to remove user from board. Please try again.', 'error');
     }
 }
 
@@ -1148,7 +1148,7 @@ function patchKanbanFunctions() {
                     
                     const creatorInfo = document.createElement('div');
                     creatorInfo.className = 'creator-info';
-                    creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+                    creatorInfo.innerHTML = `<small>Создатель: ${creatorName}, ${creationDate}</small>`;
                     
                     const cardHeader = cardElement.querySelector('.card-header');
                     if (cardHeader && cardHeader.nextSibling) {
@@ -1393,12 +1393,6 @@ function overrideFormSubmitHandlers() {
                     window.closeAllModals();
                 }
                 
-                // Show success message
-                if (typeof window.showToast === 'function') {
-                    window.showToast('Success', 'Card created successfully', 'success');
-                } else {
-                    alert('Card created successfully');
-                }
                 
                 // Run fixes to ensure creator info is shown
                 setTimeout(fixCardCreatorInfo, 500);
@@ -1592,12 +1586,7 @@ function overrideFormSubmitHandlers() {
                     window.closeAllModals();
                 }
                 
-                // Show success message
-                if (typeof window.showToast === 'function') {
-                    window.showToast('Success', 'Card updated successfully', 'success');
-                } else {
-                    alert('Card updated successfully');
-                }
+                
                 
                 // Run fixes to ensure creator info is shown
                 setTimeout(fixCardCreatorInfo, 500);
@@ -1709,7 +1698,7 @@ function fixBoardCreatorInfo() {
             // Create and add creator info element
             const creatorInfo = document.createElement('div');
             creatorInfo.className = 'board-creator-info';
-            creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+            creatorInfo.innerHTML = `<small>Создатель: ${creatorName}, ${creationDate}</small>`;
             
             // Find the board name and append to it
             const boardName = boardItem.querySelector('.board-name');
@@ -1813,7 +1802,7 @@ function fixCardCreatorInfo() {
             // Create and add creator info element
             const creatorInfo = document.createElement('div');
             creatorInfo.className = 'creator-info';
-            creatorInfo.innerHTML = `<small>Created by ${creatorName} on ${creationDate}</small>`;
+            creatorInfo.innerHTML = `<small>Создатель: ${creatorName}, ${creationDate}</small>`;
             
             // Try multiple insertion strategies
             // 1. After card header
@@ -1865,22 +1854,22 @@ function fixModalForms() {
             if (existingAssigneeGroup) {
                 // Replace with multi-select
                 existingAssigneeGroup.innerHTML = `
-                    <label for="cardAssignees">Assignees</label>
+                    <label for="editCardAssignees">Ответственные</label>
                     <select id="cardAssignees" multiple class="form-control">
-                        <option value="" disabled>Select assignees</option>
+                        <option value="" disabled>Выберите пользователей</option>
                     </select>
-                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                    <small class="form-text text-muted">Зажмите Ctrl для выбора нескольких пользователей</small>
                 `;
             } else {
                 // Create new form group
                 const formGroup = document.createElement('div');
                 formGroup.className = 'form-group';
                 formGroup.innerHTML = `
-                    <label for="cardAssignees">Assignees</label>
+                    <label for="editCardAssignees">Ответственные</label>
                     <select id="cardAssignees" multiple class="form-control">
-                        <option value="" disabled>Select assignees</option>
+                        <option value="" disabled>Выберите пользователей</option>
                     </select>
-                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                    <small class="form-text text-muted">Зажмите Ctrl для выбора нескольких пользователей</small>
                 `;
                 
                 // Insert after priority field
@@ -1913,22 +1902,22 @@ function fixModalForms() {
             if (existingAssigneeGroup) {
                 // Replace with multi-select
                 existingAssigneeGroup.innerHTML = `
-                    <label for="editCardAssignees">Assignees</label>
+                    <label for="editCardAssignees">Ответственные</label>
                     <select id="editCardAssignees" multiple class="form-control">
-                        <option value="" disabled>Select assignees</option>
+                        <option value="" disabled>Выберите пользователей</option>
                     </select>
-                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                    <small class="form-text text-muted">Зажмите Ctrl для выбора нескольких пользователей</small>
                 `;
             } else {
                 // Create new form group
                 const formGroup = document.createElement('div');
                 formGroup.className = 'form-group';
                 formGroup.innerHTML = `
-                    <label for="editCardAssignees">Assignees</label>
+                    <label for="editCardAssignees">Ответственные</label>
                     <select id="editCardAssignees" multiple class="form-control">
-                        <option value="" disabled>Select assignees</option>
+                        <option value="" disabled>Выберите пользователей</option>
                     </select>
-                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple users</small>
+                    <small class="form-text text-muted">Зажмите Ctrl для выбора нескольких пользователей</small>
                 `;
                 
                 // Insert after priority field
@@ -2204,64 +2193,6 @@ function addBoardSharingStyles() {
     document.head.appendChild(style);
 }
 
-function showToast(title, message, type = 'info') {
-    // Check if the original showToast exists and is different from this one
-    if (typeof window.showToast === 'function' && window.showToast !== showToast) {
-        window.showToast(title, message, type);
-        return;
-    }
-    
-    // Fallback implementation
-    let toastContainer = document.getElementById('toastContainer') || 
-                       document.querySelector('.toast-container');
-    
-    if (!toastContainer) {
-        const newContainer = document.createElement('div');
-        newContainer.id = 'toastContainer';
-        newContainer.className = 'toast-container';
-        newContainer.style.cssText = 'position: fixed; top: 16px; right: 16px; z-index: 1100;';
-        document.body.appendChild(newContainer);
-        toastContainer = newContainer;
-    }
-    
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.style.cssText = 'display: flex; align-items: center; padding: 12px 16px; margin-bottom: 8px; background-color: white; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); max-width: 300px; animation: fadeIn 0.3s, fadeOut 0.3s 3s';
-    
-    switch (type) {
-        case 'success': toast.style.borderLeft = '4px solid #10b981'; break;
-        case 'error': toast.style.borderLeft = '4px solid #ef4444'; break;
-        case 'info': toast.style.borderLeft = '4px solid #3b82f6'; break;
-        case 'warning': toast.style.borderLeft = '4px solid #f59e0b'; break;
-    }
-    
-    toast.innerHTML = `
-        <div style="margin-right: 12px; font-size: 20px;">
-            ${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'info' ? 'ℹ️' : '⚠️'}
-        </div>
-        <div>
-            <div style="font-weight: 600; margin-bottom: 4px;">${title}</div>
-            <div style="font-size: 14px; color: #4b5563;">${message}</div>
-        </div>
-    `;
-    
-    toastContainer.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-    
-    if (!document.getElementById('toast-animations')) {
-        const style = document.createElement('style');
-        style.id = 'toast-animations';
-        style.textContent = `
-            @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-            @keyframes fadeOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(20px); } }
-        `;
-        document.head.appendChild(style);
-    }
-}
 // Add this code to a new file called board-specific-user-fix.js or add it at the end of card_assignment.js
 
 /**

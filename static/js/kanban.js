@@ -2489,15 +2489,27 @@ function createCardElement(card, listId) {
             `;
         }
         
-        deadlineHtml = `
+        // Deadline HTML
+        // In the createCardElement function in kanban.js, modify the deadline HTML section:
+let deadlineHtml = '';
+if (card.deadline) {
+    const deadline = new Date(card.deadline);
+    const isOverdue = deadline < new Date();
+    
+    // Format date for display
+    const formattedDate = formatDate(deadline);
+    const formattedDateWithTime = formatDate(deadline, true);
+    
+    deadlineHtml = `
         <div class="deadline ${isOverdue ? 'overdue' : ''}" title="${formattedDateWithTime}">
-            <a href="/calendar?highlight_deadline=${encodeURIComponent(deadline.toISOString())}" class="deadline-link">
+            <a href="/calendar?highlight_deadline=${encodeURIComponent(deadline.toISOString())}" class="deadline-link" onclick="event.stopPropagation();">
                 <i class="fas fa-calendar-alt"></i>
             </a>
             <span>${formattedDate}</span>
         </div>
     `;
-    
+}
+        
         // Tasks/todos HTML
         let todosHtml = '';
         if (card.todos && Array.isArray(card.todos) && card.todos.length > 0) {

@@ -66,7 +66,7 @@ function fixBoardCreatorDisplay() {
             if (!boards || boards.length === 0) {
                 const emptyMessage = document.createElement('div');
                 emptyMessage.className = 'empty-message';
-                emptyMessage.textContent = 'You don\'t have any boards yet. Create a new board.';
+                emptyMessage.textContent = 'У вас пока нет досок. Начните создание!';
                 boardsList.appendChild(emptyMessage);
                 return;
             }
@@ -102,7 +102,7 @@ function fixBoardCreatorDisplay() {
                         <span>${board.name}</span>
                         ${board.admin_only ? '<span class="admin-badge"><i class="fas fa-lock"></i></span>' : ''}
                         <div class="board-creator-info">
-                            <small>Created by ${creatorName} on ${creationDate}</small>
+                            <small>Создано: ${creatorName}, ${creationDate}</small>
                         </div>
                     </div>
                     <div class="board-actions">
@@ -259,12 +259,15 @@ function fixCardCreatorDisplay() {
                             formatDate(deadline, true) : 
                             deadline.toLocaleString();
                         
-                        deadlineHtml = `
-                            <div class="deadline ${isOverdue ? 'overdue' : ''}" title="${formattedDateWithTime}">
-                                <i class="fas fa-calendar-alt"></i>
-                                <span>${formattedDate}</span>
-                            </div>
-                        `;
+                        // И заменяем его на:
+deadlineHtml = `
+    <div class="deadline ${isOverdue ? 'overdue' : ''}" title="${formattedDateWithTime}">
+        <a href="/calendar?highlight_deadline=${encodeURIComponent(deadline.toISOString())}" class="deadline-link" onclick="event.stopPropagation();">
+            <i class="fas fa-calendar-alt"></i>
+        </a>
+        <span>${formattedDate}</span>
+    </div>
+`;
                     } catch (e) {
                         console.error('Error formatting deadline:', e);
                     }
@@ -284,7 +287,7 @@ function fixCardCreatorDisplay() {
                                 <div class="todo-progress-bar" style="width: ${todoProgress}%"></div>
                             </div>
                             <div class="todo-summary">
-                                ${completedTodos}/${totalTodos} tasks completed
+                                ${completedTodos}/${totalTodos} задач выполнено
                             </div>
                         </div>
                     `;
@@ -479,7 +482,7 @@ function fixUserAssignmentInModals() {
                 const emptyTodoItem = document.createElement('div');
                 emptyTodoItem.className = 'todo-item';
                 emptyTodoItem.innerHTML = `
-                    <input type="text" class="todo-input" placeholder="Add new task...">
+                    <input type="text" class="todo-input" placeholder="Введите название...">
                     <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
                 `;
                 todoItemsContainer.appendChild(emptyTodoItem);
@@ -541,7 +544,7 @@ function fixUserAssignmentInModals() {
             if (todoItemsContainer) {
                 todoItemsContainer.innerHTML = `
                     <div class="todo-item">
-                        <input type="text" class="todo-input" placeholder="Add a task...">
+                        <input type="text" class="todo-input" placeholder="Добавьте подзадачу...">
                         <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
                     </div>
                 `;
