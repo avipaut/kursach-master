@@ -1,30 +1,30 @@
 <!-- kanban.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kanban Board</title>
+  <title>Канбан доска</title>
   
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Font Awesome for icons -->
+  <!-- Font Awesome для иконок -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Custom CSS -->
+  <!-- Пользовательские CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/navbar.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
 </head>
 
 <body>
-  <!-- Include navbar with active page set to 'kanban' -->
+  <!-- Подключаем навбар с активной страницей 'kanban' -->
   {% set active_page = 'kanban' %}
   {% include 'navbar/navbar.html' %}
 
   <div class="app-container">
-    <!-- Sidebar -->
+    <!-- Боковая панель -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <h2>Boards</h2>
+        <h2>Доски</h2>
         <button id="toggleSidebar" class="toggle-sidebar">
           <i class="fas fa-chevron-left"></i>
         </button>
@@ -32,21 +32,21 @@
       <div class="sidebar-content">
         <button id="createBoardBtn" class="create-board-btn">
           <i class="fas fa-plus"></i>
-          <span>Create New Board</span>
+          <span>Создать новую доску</span>
         </button>
         <div class="boards-list" id="boardsList">
           <div id="boardsLoading" class="loading-spinner">
             <i class="fas fa-spinner fa-spin"></i>
           </div>
-          <!-- Boards will be dynamically added here -->
+          <!-- Доски будут добавлены динамически -->
         </div>
       </div>
     </aside>
 
-    <!-- Main Content -->
+    <!-- Основное содержимое -->
     <main class="main-content">
       <div id="boardActions" class="board-actions" style="display: none;">
-        <h1 id="activeBoardTitle">Kanban Board</h1>
+        <h1 id="activeBoardTitle">Канбан доска</h1>
         <div class="board-controls">
           <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-info">
             <i class="fas fa-tachometer-alt"></i>
@@ -54,17 +54,17 @@
           </a>
           <button id="editBoardBtn" class="btn btn-edit">
             <i class="fas fa-edit"></i>
-            <span>Edit Board</span>
+            <span>Редактировать</span>
           </button>
           <button id="deleteBoardBtn" class="btn btn-delete">
             <i class="fas fa-trash"></i>
-            <span>Delete Board</span>
+            <span>Удалить</span>
           </button>
         </div>
       </div>
       
       <div id="selectBoardMessage" class="select-board-message">
-        <p>Select a board or create a new one</p>
+        <p>Выберите доску или создайте новую</p>
         <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-info mt-3">
           <i class="fas fa-tachometer-alt"></i>
           <span>Перейти на дашборд</span>
@@ -72,229 +72,222 @@
       </div>
       
       <div id="listsContainer" class="lists-container" style="display: none;">
-        <!-- Lists will be dynamically added here -->
+        <!-- Списки будут добавлены динамически -->
       </div>
     </main>
   </div>
 
-  <!-- Modal Overlays -->
-  <!-- Create Board Modal -->
+  <!-- Модальные окна -->
+  <!-- Модальное окно создания доски -->
   <div id="createBoardModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Create Board</h2>
+        <h2>Создать доску</h2>
         <button class="close-modal"><i class="fas fa-times"></i></button>
       </div>
       <form id="createBoardForm">
         <div class="form-group">
-          <label for="boardName">Board Name</label>
-          <input type="text" id="boardName" placeholder="Enter board name" required>
+          <label for="boardName">Название доски</label>
+          <input type="text" id="boardName" placeholder="Введите название доски" required>
         </div>
         <div class="form-actions">
-          <button type="button" class="btn btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-cancel">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Edit Board Modal -->
+  <!-- Модальное окно редактирования доски -->
   <div id="editBoardModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Edit Board</h2>
+        <h2>Редактировать доску</h2>
         <button class="close-modal"><i class="fas fa-times"></i></button>
       </div>
       <form id="editBoardForm">
         <div class="form-group">
-          <label for="editBoardName">Board Name</label>
-          <input type="text" id="editBoardName" placeholder="Enter board name" required>
+          <label for="editBoardName">Название доски</label>
+          <input type="text" id="editBoardName" placeholder="Введите название доски" required>
         </div>
         <div class="form-actions">
-          <button type="button" class="btn btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-cancel">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Create List Modal -->
+  <!-- Модальное окно создания списка -->
   <div id="createListModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Create List</h2>
+        <h2>Создать список</h2>
         <button class="close-modal"><i class="fas fa-times"></i></button>
       </div>
       <form id="createListForm">
         <div class="form-group">
-          <label for="listName">List Name</label>
-          <input type="text" id="listName" placeholder="Enter list name" required>
+          <label for="listName">Название списка</label>
+          <input type="text" id="listName" placeholder="Введите название списка" required>
         </div>
         <div class="form-actions">
-          <button type="button" class="btn btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-cancel">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Edit List Modal -->
+  <!-- Модальное окно редактирования списка -->
   <div id="editListModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Edit List</h2>
+        <h2>Редактировать список</h2>
         <button class="close-modal"><i class="fas fa-times"></i></button>
       </div>
       <form id="editListForm">
         <div class="form-group">
-          <label for="editListName">List Name</label>
-          <input type="text" id="editListName" placeholder="Enter list name" required>
+          <label for="editListName">Название списка</label>
+          <input type="text" id="editListName" placeholder="Введите название списка" required>
         </div>
         <div class="form-actions">
-          <button type="button" class="btn btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-cancel">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Create Card Modal -->
+  <!-- Модальное окно создания карточки -->
   <div id="createCardModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Create Card</h2>
+        <h2>Создать карточку</h2>
         <button class="close-modal"><i class="fas fa-times"></i></button>
       </div>
       <form id="createCardForm">
         <div class="form-group">
-          <label for="cardTitle">Title</label>
-          <input type="text" id="cardTitle" placeholder="Enter card title" required>
+          <label for="cardTitle">Заголовок</label>
+          <input type="text" id="cardTitle" placeholder="Введите заголовок карточки" required>
         </div>
         <div class="form-group">
-          <label for="cardDescription">Description</label>
-          <textarea id="cardDescription" placeholder="Enter card description" rows="3"></textarea>
+          <label for="cardDescription">Описание</label>
+          <textarea id="cardDescription" placeholder="Введите описание карточки" rows="3"></textarea>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="cardPriority">Priority</label>
+            <label for="cardPriority">Приоритет</label>
             <select id="cardPriority">
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
+              <option value="low">Низкий</option>
+              <option value="medium" selected>Средний</option>
+              <option value="high">Высокий</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="cardAssignee">Assignee</label>
+            <label for="cardAssignee">Исполнитель</label>
             <select id="cardAssignee">
-              <option value="">Not assigned</option>
-              <!-- Users will be added dynamically -->
+              <option value="">Не назначен</option>
+              <!-- Пользователи будут добавлены динамически -->
             </select>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="cardDeadline">Deadline</label>
+            <label for="cardDeadline">Срок выполнения</label>
             <input type="date" id="cardDeadline">
           </div>
         </div>
         <div class="form-group">
           <div class="todo-header">
-            <label>Tasks</label>
+            <label>Задачи</label>
             <button type="button" id="addTodoBtn" class="btn-add-todo">
-              <i class="fas fa-plus"></i> Add Task
+              <i class="fas fa-plus"></i> Добавить задачу
             </button>
           </div>
           <div id="todoItems" class="todo-items">
             <div class="todo-item">
-              <input type="text" class="todo-input" placeholder="Add a task...">
+              <input type="text" class="todo-input" placeholder="Добавить задачу...">
               <button type="button" class="btn-remove-todo"><i class="fas fa-times"></i></button>
             </div>
           </div>
         </div>
         <div class="form-actions">
-          <button type="button" class="btn btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-cancel">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Edit Card Modal -->
+  <!-- Модальное окно редактирования карточки -->
   <div id="editCardModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Edit Card</h2>
+        <h2>Редактировать карточку</h2>
         <button class="close-modal"><i class="fas fa-times"></i></button>
       </div>
       <form id="editCardForm">
         <div class="form-group">
-          <label for="editCardTitle">Title</label>
-          <input type="text" id="editCardTitle" placeholder="Enter card title" required>
+          <label for="editCardTitle">Заголовок</label>
+          <input type="text" id="editCardTitle" placeholder="Введите заголовок карточки" required>
         </div>
         <div class="form-group">
-          <label for="editCardDescription">Description</label>
-          <textarea id="editCardDescription" placeholder="Enter card description" rows="3"></textarea>
+          <label for="editCardDescription">Описание</label>
+          <textarea id="editCardDescription" placeholder="Введите описание карточки" rows="3"></textarea>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="editCardPriority">Priority</label>
+            <label for="editCardPriority">Приоритет</label>
             <select id="editCardPriority">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="low">Низкий</option>
+              <option value="medium">Средний</option>
+              <option value="high">Высокий</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="editCardAssignee">Assignee</label>
+            <label for="editCardAssignee">Исполнитель</label>
             <select id="editCardAssignee">
-              <option value="">Not assigned</option>
-              <!-- Users will be added dynamically -->
+              <option value="">Не назначен</option>
+              <!-- Пользователи будут добавлены динамически -->
             </select>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="editCardDeadline">Deadline</label>
+            <label for="editCardDeadline">Срок выполнения</label>
             <input type="date" id="editCardDeadline">
           </div>
           <div class="form-group checkbox-group">
             <input type="checkbox" id="editCardCompleted">
-            <label for="editCardCompleted">Mark as completed</label>
+            <label for="editCardCompleted">Отметить как выполненную</label>
           </div>
         </div>
         <div class="form-group">
           <div class="todo-header">
-            <label>Tasks</label>
+            <label>Задачи</label>
             <button type="button" id="editAddTodoBtn" class="btn-add-todo">
-              <i class="fas fa-plus"></i> Add Task
+              <i class="fas fa-plus"></i> Добавить задачу
             </button>
           </div>
           <div id="editTodoItems" class="todo-items">
-            <!-- Todo items will be added dynamically -->
+            <!-- Задачи будут добавлены динамически -->
           </div>
         </div>
         <div class="form-actions">
-          <button type="button" id="deleteCardBtn" class="btn btn-delete">Delete</button>
+          <button type="button" id="deleteCardBtn" class="btn btn-delete">Удалить</button>
           <div class="right-actions">
-            <button type="button" class="btn btn-cancel">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn btn-cancel">Отмена</button>
+            <button type="submit" class="btn btn-primary">Сохранить</button>
           </div>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Toast Container -->
-  <div id="toastContainer" class="toast-container"></div>
-  
-  <!-- Bootstrap Bundle with Popper -->
+  <!-- Bootstrap Bundle с Popper -->
   <script src="{{ url_for('static', filename='js/kanban.js') }}"></script>
-  <script  src="{{ url_for('static', filename='js/card_assignment.js') }}"></script>
-  <!-- <script  src="{{ url_for('static', filename='js/card_assignment_fixer.js') }}"></script>
-  <script  src="{{ url_for('static', filename='js/board_sharing.js') }}"></script> -->
-  <script  src="{{ url_for('static', filename='js/kanban-fixes.js') }}"></script>
-
+  <script src="{{ url_for('static', filename='js/card_assignment.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/kanban-fixes.js') }}"></script>
 
 </body>
-
 </html>

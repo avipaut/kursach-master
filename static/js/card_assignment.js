@@ -2262,3 +2262,297 @@ function showToast(title, message, type = 'info') {
         document.head.appendChild(style);
     }
 }
+// Add this code to a new file called board-specific-user-fix.js or add it at the end of card_assignment.js
+
+/**
+ * Enhanced Board-Specific User Assignment Fix
+ * 
+ * This script ensures that when assigning users to cards, only users who have
+ * access to the current board are displayed in the dropdown menus.
+ */
+
+// Store board-specific users
+window.boardAssignableUsers = window.boardAssignableUsers || [];
+window.cardAssignments = window.cardAssignments || new Map();
+
+// Load board users when a board is selected
+async function loadBoardUsers(boardId) {
+    console.log("Loading users for board:", boardId);
+    
+    if (!boardId) {
+        console.warn("No board ID provided to loadBoardUsers");
+        return [];
+    }
+    
+    try {
+        const apiBaseUrl = window.location.hostname === 'localhost' ? '' : '/kanban';
+        const response = await fetch(`${apiBaseUrl}/boards/${boardId}/users`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch board users. Status: ${response.status}`);
+        }
+        
+        const users = await response.json();
+        console.log('Board users loaded:', users);
+        
+        // Update global variable for board users
+        window.boardAssignableUsers = users;
+        
+        // Update all user dropdowns
+        updateAllUserDropdowns();
+        
+        return users;
+    } catch (error) {
+        console.error('Error loading board users:', error);
+        return [];
+    }
+}
+
+// Update all user selection dropdowns with board-specific users
+function updateAllUserDropdowns() {
+    // Update create card form
+    updateDropdown('cardAssignee');
+    updateMultiSelect('cardAssignees');
+    
+    // Update edit card form
+    updateDropdown('editCardAssignee');
+    updateMultiSelect('editCardAssignees');
+}
+
+// Update a single-select dropdown with board users
+function updateDropdown(elementId) {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+    
+    // Clear existing options but keep the first one (usually "Not assigned")
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+    
+    // Use board-specific users if available, otherwise fall back to all users
+    const usersToShow = window.boardAssignableUsers && window.boardAssignableUsers.length > 0 
+        ? window.boardAssignableUsers 
+        : window.users;
+    
+    if (!usersToShow || !Array.isArray(usersToShow)) {
+        console.warn(`No users available to populate ${elementId}`);
+        return;
+    }
+    
+    // Add users to the dropdown
+    usersToShow.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.username || user.name || `User ${user.id}`;
+        select.appendChild(option);
+    });
+    
+    console.log(`Updated dropdown ${elementId} with ${usersToShow.length} users`);
+}
+
+// Update a multi-select dropdown with board users
+function updateMultiSelect(elementId) {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+    
+    // Clear existing options (keep first option if it's a "Select users" placeholder)
+    const firstOption = select.options[0];
+    const keepFirst = firstOption && firstOption.disabled;
+    
+    while (select.options.length > (keepFirst ? 1 : 0)) {
+        select.remove(keepFirst ? 1 : 0);
+    }
+    
+    // Use board-specific users if available, otherwise fall back to all users
+    const usersToShow = window.boardAssignableUsers && window.boardAssignableUsers.length > 0 
+        ? window.boardAssignableUsers 
+        : window.users;
+    
+    if (!usersToShow || !Array.isArray(usersToShow)) {
+        console.warn(`No users available to populate ${elementId}`);
+        return;
+    }
+    
+    // Add users to the dropdown
+    usersToShow.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.username || user.name || `User ${user.id}`;
+        select.appendChild(option);
+    });
+    
+    console.log(`Updated multi-select ${elementId} with ${usersToShow.length} users`);
+}
+
+// Hook into the board selection process to load board users
+const originalSelectBoard = window.selectBoard;
+window.selectBoard = function(board) {
+    // Call the original selectBoard function
+    if (typeof originalSelectBoard === 'function') {
+        originalSelectBoard(board);
+    }
+    
+    // Load board users after selecting a board
+    if (board && board.id) {
+        setTimeout(() => {
+            loadBoardUsers(board.id);
+        }, 300);
+    }
+};
+
+// Hook into the openCreateCardModal function to ensure user dropdowns are up to date
+const originalOpenCreateCardModal = window.openCreateCardModal;
+window.openCreateCardModal = function(listId) {
+    // Call the original function
+    if (typeof originalOpenCreateCardModal === 'function') {
+        originalOpenCreateCardModal(listId);
+    } else {
+        // Default implementation if original function is missing
+        const createCardForm = document.getElementById('createCardForm');
+        if (createCardForm) {
+            createCardForm.dataset.listId = listId;
+        }
+        
+        // Open modal
+        if (typeof openModal === 'function') {
+            openModal(document.getElementById('createCardModal'));
+        }
+    }
+    
+    // Update user dropdowns
+    setTimeout(() => {
+        // Update single-select if it exists
+        const cardAssignee = document.getElementById('cardAssignee');
+        if (cardAssignee) {
+            updateDropdown('cardAssignee');
+        }
+        
+        // Update multi-select if it exists
+        const cardAssignees = document.getElementById('cardAssignees');
+        if (cardAssignees) {
+            updateMultiSelect('cardAssignees');
+        }
+    }, 100);
+};
+
+// Hook into the openEditCardModal function to ensure user dropdowns are up to date
+const originalOpenEditCardModal = window.openEditCardModal;
+window.openEditCardModal = function(cardId, listId) {
+    // Call the original function
+    if (typeof originalOpenEditCardModal === 'function') {
+        originalOpenEditCardModal(cardId, listId);
+    }
+    
+    // Find the card in the lists
+    let card = null;
+    if (window.lists) {
+        for (const list of window.lists) {
+            if (list.cards) {
+                const foundCard = list.cards.find(c => c.id === cardId);
+                if (foundCard) {
+                    card = foundCard;
+                    break;
+                }
+            }
+        }
+    }
+    
+    setTimeout(() => {
+        // Update user dropdowns
+        const editCardAssignee = document.getElementById('editCardAssignee');
+        if (editCardAssignee) {
+            updateDropdown('editCardAssignee');
+            
+            // Select the correct user
+            if (card && card.assigned_to) {
+                editCardAssignee.value = card.assigned_to;
+            }
+        }
+        
+        // Update multi-select if it exists
+        const editCardAssignees = document.getElementById('editCardAssignees');
+        if (editCardAssignees) {
+            updateMultiSelect('editCardAssignees');
+            
+            // Select the assigned users
+            if (card) {
+                if (card.assigned_users && Array.isArray(card.assigned_users)) {
+                    // Use assigned_users array if available
+                    const assignedIds = card.assigned_users.map(user => user.id);
+                    
+                    for (let i = 0; i < editCardAssignees.options.length; i++) {
+                        const option = editCardAssignees.options[i];
+                        option.selected = assignedIds.includes(parseInt(option.value));
+                    }
+                } else if (card.assigned_to) {
+                    // Fallback to single assigned_to
+                    for (let i = 0; i < editCardAssignees.options.length; i++) {
+                        const option = editCardAssignees.options[i];
+                        option.selected = parseInt(option.value) === parseInt(card.assigned_to);
+                    }
+                }
+            }
+        }
+    }, 100);
+};
+
+// Create a MutationObserver to watch for modal openings
+function setupModalObserver() {
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const target = mutation.target;
+                
+                // Check if a modal was opened
+                if (target.classList.contains('active') || target.classList.contains('show')) {
+                    if (target.id === 'createCardModal') {
+                        updateAllUserDropdowns();
+                    } else if (target.id === 'editCardModal') {
+                        updateAllUserDropdowns();
+                    }
+                }
+            }
+        });
+    });
+    
+    // Observe all existing modals
+    document.querySelectorAll('.modal').forEach(modal => {
+        observer.observe(modal, { attributes: true });
+    });
+}
+
+// Initialize everything when the DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("Board-specific user assignment fix initializing...");
+    
+    // Load users for the active board if there is one
+    if (window.activeBoard) {
+        loadBoardUsers(window.activeBoard.id);
+    }
+    
+    // Set up observer for modals
+    setupModalObserver();
+    
+    // If you have a board list with clickable boards, ensure they load users on click
+    const boardsList = document.getElementById('boardsList');
+    if (boardsList) {
+        boardsList.addEventListener('click', function(e) {
+            const boardItem = e.target.closest('.board-item');
+            if (boardItem && !e.target.closest('.board-actions')) {
+                const boardId = parseInt(boardItem.dataset.boardId);
+                if (boardId) {
+                    setTimeout(() => {
+                        loadBoardUsers(boardId);
+                    }, 300);
+                }
+            }
+        });
+    }
+    
+    console.log("Board-specific user assignment fix initialized");
+});
+
+// Optional: Replace the existing populateUserSelect and populateMultiSelect functions
+// with our new versions that use board-specific users
+window.populateUserSelect = updateDropdown;
+window.populateMultiSelect = updateMultiSelect;

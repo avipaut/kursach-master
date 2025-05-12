@@ -352,10 +352,10 @@ async function saveListsOrder() {
         
         if (!response.ok) throw new Error(`Failed to save lists order. Status: ${response.status}`);
         
-        showToast('Success', 'List order saved successfully', 'success');
+        //('Success', 'List order saved successfully', 'success');
     } catch (error) {
         console.error('Error saving lists order:', error);
-        showToast('Error', 'Failed to save list order', 'error');
+        //('Error', 'Failed to save list order', 'error');
     }
 }
 
@@ -561,7 +561,7 @@ async function fetchCurrentUser() {
         return userData;
     } catch (error) {
         console.error('Error fetching current user:', error);
-        showToast('Error', 'Failed to get user information', 'error');
+        //('Error', 'Failed to get user information', 'error');
         return null;
     }
 }
@@ -658,7 +658,7 @@ async function loadBoards() {
         }
     } catch (error) {
         console.error('Error loading boards:', error);
-        showToast('Error', 'Failed to load boards. Please try again.', 'error');
+        //('Error', 'Failed to load boards. Please try again.', 'error');
         hideLoading('boardsLoading');
     }
 }
@@ -863,7 +863,7 @@ async function loadFullBoardData(boardId) {
         return data;
     } catch (error) {
         console.error(`Error loading board data: ${error}`);
-        showToast('Error', 'Failed to load board data. Please try again.', 'error');
+        //('Error', 'Failed to load board data. Please try again.', 'error');
         hideLoading('listsLoading');
         return null;
     }
@@ -913,7 +913,7 @@ async function loadListsWithCards(boardId) {
         return lists;
     } catch (error) {
         console.error(`Error loading lists with cards: ${error}`);
-        showToast('Error', 'Failed to load lists with cards. Please try again.', 'error');
+        //('Error', 'Failed to load lists with cards. Please try again.', 'error');
         hideLoading('listsLoading');
         return [];
     }
@@ -1016,7 +1016,7 @@ async function fetchAllUsers() {
         populateUserSelect();
     } catch (error) {
         console.error('Error fetching users:', error);
-        showToast('Error', 'Failed to load users. Please try again.', 'error');
+        //('Error', 'Failed to load users. Please try again.', 'error');
     }
 }
 
@@ -1075,7 +1075,7 @@ async function handleCreateBoardWithUsers(event) {
         
         if (!response.ok) {
             if (response.status === 403) {
-                showToast('Error', 'You need administrator privileges to create boards', 'error');
+                //('Error', 'You need administrator privileges to create boards', 'error');
                 return;
             }
             throw new Error(`Failed to create board. Status: ${response.status}`);
@@ -1088,10 +1088,10 @@ async function handleCreateBoardWithUsers(event) {
         closeAllModals();
         nameInput.value = '';
         
-        showToast('Success', 'Board created successfully', 'success');
+        //('Success', 'Board created successfully', 'success');
     } catch (error) {
         console.error('Error creating board:', error);
-        showToast('Error', 'Failed to create board. Please try again.', 'error');
+        //('Error', 'Failed to create board. Please try again.', 'error');
     }
 }
 
@@ -1142,7 +1142,7 @@ async function handleEditBoardWithUsers(event) {
         
         if (!response.ok) {
             if (response.status === 403) {
-                showToast('Error', 'You need administrator privileges to edit boards', 'error');
+                //('Error', 'You need administrator privileges to edit boards', 'error');
                 return;
             }
             throw new Error(`Failed to update board. Status: ${response.status}`);
@@ -1167,10 +1167,10 @@ async function handleEditBoardWithUsers(event) {
         document.getElementById('activeBoardTitle').textContent = name;
         closeAllModals();
         
-        showToast('Success', 'Board updated successfully', 'success');
+        //('Success', 'Board updated successfully', 'success');
     } catch (error) {
         console.error('Error updating board:', error);
-        showToast('Error', 'Failed to update board. Please try again.', 'error');
+        //('Error', 'Failed to update board. Please try again.', 'error');
     }
 }
 
@@ -1370,10 +1370,10 @@ async function handleDeleteBoard() {
             selectBoard(boards[0]);
         }
         
-        showToast('Success', 'Board deleted successfully', 'success');
+        //('Success', 'Board deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting board:', error);
-        showToast('Error', 'Failed to delete board. Please try again.', 'error');
+        //('Error', 'Failed to delete board. Please try again.', 'error');
     }
 }
 
@@ -1406,10 +1406,10 @@ async function handleCreateList(event) {
         closeAllModals();
         nameInput.value = '';
         
-        showToast('Success', 'List created successfully', 'success');
+        //('Success', 'List created successfully', 'success');
     } catch (error) {
         console.error('Error creating list:', error);
-        showToast('Error', 'Failed to create list. Please try again.', 'error');
+        //('Error', 'Failed to create list. Please try again.', 'error');
     }
 }
 
@@ -1456,10 +1456,10 @@ async function handleEditList(event) {
         renderLists();
         closeAllModals();
         
-        showToast('Success', 'List updated successfully', 'success');
+        //('Success', 'List updated successfully', 'success');
     } catch (error) {
         console.error('Error updating list:', error);
-        showToast('Error', 'Failed to update list. Please try again.', 'error');
+        //('Error', 'Failed to update list. Please try again.', 'error');
     }
 }
 
@@ -1479,10 +1479,10 @@ async function handleDeleteList(listId) {
         lists = lists.filter(list => list.id !== listId);
         renderLists();
         
-        showToast('Success', 'List deleted successfully', 'success');
+        //('Success', 'List deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting list:', error);
-        showToast('Error', 'Failed to delete list. Please try again.', 'error');
+        //('Error', 'Failed to delete list. Please try again.', 'error');
     }
 }
 
@@ -1642,10 +1642,10 @@ async function handleCreateCard(event) {
         
         closeAllModals();
         
-        showToast('Success', 'Card created successfully', 'success');
+        //('Success', 'Card created successfully', 'success');
     } catch (error) {
         console.error('Error creating card:', error);
-        showToast('Error', 'Failed to create card. Please try again.', 'error');
+        //('Error', 'Failed to create card. Please try again.', 'error');
     }
 }
 
@@ -1680,15 +1680,15 @@ async function syncCardsToCalendar() {
         
         if (!response.ok) {
             console.error('Error syncing cards with calendar:', response.status);
-            showToast('Error', 'Failed to sync cards with calendar', 'error');
+            //('Error', 'Failed to sync cards with calendar', 'error');
             return;
         }
         
         const result = await response.json();
-        showToast('Success', 'Cards successfully synchronized with calendar', 'success');
+        //('Success', 'Cards successfully synchronized with calendar', 'success');
     } catch (error) {
         console.error('Error syncing cards with calendar:', error);
-        showToast('Error', 'Failed to sync cards with calendar', 'error');
+        //('Error', 'Failed to sync cards with calendar', 'error');
     }
 }
 // В CSS стили добавьте более заметные индикаторы перетаскивания
@@ -1908,9 +1908,9 @@ async function handleUpdateCard(event) {
         const failures = results.filter(result => result.status === 'rejected');
         if (failures.length > 0) {
             console.error('Some card update operations failed:', failures);
-            showToast('Warning', 'Card partially updated. Some operations failed.', 'warning');
+            //('Warning', 'Card partially updated. Some operations failed.', 'warning');
         } else {
-            showToast('Success', 'Card updated successfully', 'success');
+            //('Success', 'Card updated successfully', 'success');
         }
         
         // Reload cards for updated list and re-render
@@ -1920,7 +1920,7 @@ async function handleUpdateCard(event) {
         closeAllModals();
     } catch (error) {
         console.error('Error updating card:', error);
-        showToast('Error', 'Failed to update card. Please try again.', 'error');
+        //('Error', 'Failed to update card. Please try again.', 'error');
     }
 }
 
@@ -1957,7 +1957,7 @@ async function handleDeleteCard(cardId, listId) {
         
     } catch (error) {
         console.error('Error deleting card:', error);
-        showToast('Error', 'Failed to delete card. Please try again.', 'error');
+        //('Error', 'Failed to delete card. Please try again.', 'error');
         
         // Fallback: Update UI even if API failed
         const listIndex = lists.findIndex(list => list.id === listId);
@@ -1995,7 +1995,7 @@ async function handleToggleCardCompletion(cardId, listId, currentStatus) {
         renderLists();
     } catch (error) {
         console.error('Error toggling card completion:', error);
-        showToast('Error', 'Failed to update card status. Please try again.', 'error');
+        //('Error', 'Failed to update card status. Please try again.', 'error');
     }
 }
 
@@ -2033,7 +2033,6 @@ async function moveCardToList(cardId, sourceListId, targetListId, position = nul
         return await response.json();
     } catch (error) {
         console.error('Error moving card:', error);
-        showToast('Error', 'Failed to move card. Please try again.', 'error');
         throw error;
     }
 }
@@ -2071,10 +2070,8 @@ async function handleCardMove(cardId, sourceListId, targetListId) {
         }
         
         // Success - can leave UI as is since the card has already been moved in the DOM
-        showToast('Success', 'Card moved successfully', 'success');
     } catch (error) {
         console.error('Error moving card:', error);
-        showToast('Error', 'Failed to move card, refreshing lists...', 'error');
         
         // Reload lists to ensure UI matches backend state
         if (activeBoard) {
@@ -2106,7 +2103,6 @@ async function handleUpdateTodoStatus(todoId, completed) {
         }
     } catch (error) {
         console.error('Error updating todo status:', error);
-        showToast('Error', 'Failed to update task status. Please try again.', 'error');
     }
 }
 
@@ -2130,7 +2126,6 @@ async function handleDeleteTodo(todoId) {
         
     } catch (error) {
         console.error('Error deleting todo:', error);
-        showToast('Error', 'Failed to delete task. Please try again.', 'error');
     }
 }
 
@@ -2494,33 +2489,15 @@ function createCardElement(card, listId) {
             `;
         }
         
-        // Deadline HTML
-        let deadlineHtml = '';
-        if (card.deadline) {
-            try {
-                const deadline = new Date(card.deadline);
-                const now = new Date();
-                const isOverdue = deadline < now && !card.completed;
-                
-                const formattedDate = typeof formatDate === 'function' ? 
-                    formatDate(deadline) : 
-                    deadline.toLocaleDateString();
-                
-                const formattedDateWithTime = typeof formatDate === 'function' ? 
-                    formatDate(deadline, true) : 
-                    deadline.toLocaleString();
-                
-                deadlineHtml = `
-                    <div class="deadline ${isOverdue ? 'overdue' : ''}" title="${formattedDateWithTime}">
-                        <i class="fas fa-calendar-alt"></i>
-                        <span>${formattedDate}</span>
-                    </div>
-                `;
-            } catch (e) {
-                console.error('Error formatting deadline:', e);
-            }
-        }
-        
+        deadlineHtml = `
+        <div class="deadline ${isOverdue ? 'overdue' : ''}" title="${formattedDateWithTime}">
+            <a href="/calendar?highlight_deadline=${encodeURIComponent(deadline.toISOString())}" class="deadline-link">
+                <i class="fas fa-calendar-alt"></i>
+            </a>
+            <span>${formattedDate}</span>
+        </div>
+    `;
+    
         // Tasks/todos HTML
         let todosHtml = '';
         if (card.todos && Array.isArray(card.todos) && card.todos.length > 0) {
@@ -2968,7 +2945,6 @@ async function loadLists(boardId) {
         return data;
     } catch (error) {
         console.error(`Error loading board data: ${error}`);
-        showToast('Error', 'Failed to load board data. Please try again.', 'error');
         hideLoading('listsLoading');
         
         // Try legacy method as fallback
@@ -2997,35 +2973,12 @@ async function loadListsLegacy(boardId) {
         return { lists, board: activeBoard };
     } catch (error) {
         console.error(`Error loading lists for board ${boardId}:`, error);
-        showToast('Error', 'Failed to load lists. Please try again.', 'error');
         hideLoading('listsLoading');
         return null;
     }
 }
 
-function showToast(title, message, type = 'success') {
-    const toastContainer = document.getElementById('toastContainer');
-    
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    
-    toast.innerHTML = `
-        <div class="toast-icon">
-            <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
-        </div>
-        <div class="toast-content">
-            <div class="toast-title">${title}</div>
-            <div class="toast-message">${message}</div>
-        </div>
-    `;
-    
-    toastContainer.appendChild(toast);
-    
-    // Remove toast after 3 seconds
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
-}
+
 
 function showLoading(elementId) {
     const element = document.getElementById(elementId);
@@ -3375,10 +3328,8 @@ async function setListColor(listId, color, textColor) {
                 throw new Error(`Failed to save list color. Status: ${response.status}`);
             }
             
-            showToast('Success', 'List color updated', 'success');
         } catch (error) {
             console.error('Error saving list color:', error);
-            showToast('Error', 'Failed to save list color', 'error');
         }
     }
 }
@@ -3404,7 +3355,7 @@ function saveListColor(listId, color, textColor) {
     })
     .catch(error => {
         console.error('Error saving list color:', error);
-        showToast('Error', 'Failed to save list color', 'error');
+        //('Error', 'Failed to save list color', 'error');
     });
 }
 
@@ -3809,13 +3760,49 @@ function openEditCardModal(cardId, listId) {
         }
     });
 };
+// Добавьте этот код в конец файла kanban.js или в функцию, выполняемую после загрузки DOM
+document.getElementById('boardsList').addEventListener('click', function(e) {
+    const boardItem = e.target.closest('.board-item');
+    if (boardItem && !e.target.closest('.btn-edit-board') && !e.target.closest('.btn-delete-board')) {
+        const boardId = parseInt(boardItem.dataset.boardId);
+        const board = boards.find(b => b.id === boardId);
+        if (board) {
+            selectBoard(board);
+            return;
+        }
+    }
+    
+    const editBtn = e.target.closest('.btn-edit-board');
+    if (editBtn) {
+        e.stopPropagation();
+        const boardItem = editBtn.closest('.board-item');
+        const boardId = parseInt(boardItem.dataset.boardId);
+        const board = boards.find(b => b.id === boardId);
+        if (board) {
+            activeBoard = board;
+            openEditBoardModal();
+        }
+    }
+    
+    const deleteBtn = e.target.closest('.btn-delete-board');
+    if (deleteBtn) {
+        e.stopPropagation();
+        const boardItem = deleteBtn.closest('.board-item');
+        const boardId = parseInt(boardItem.dataset.boardId);
+        const board = boards.find(b => b.id === boardId);
+        if (board) {
+            activeBoard = board;
+            handleDeleteBoard();
+        }
+    }
+});
 // Экспортировать основные функции в глобальное пространство имен
 window.loadLists = loadLists;
 window.loadCards = loadCards;
 window.renderLists = renderLists;
 window.createCardElement = createCardElement;
 window.selectBoard = selectBoard;
-window.showToast = showToast;
+window.// = //;
 window.addTodoItem = addTodoItem;
 window.getTodoItems = getTodoItems;
 window.openModal = openModal;
