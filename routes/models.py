@@ -272,6 +272,14 @@ class Board(db.Model):
             if creator:
                 creator_name = creator.username
         
+        # Get creator information if available
+        creator = None
+        creator_name = "Unknown User"
+        if self.user_id:
+            creator = User.query.get(self.user_id)
+            if creator:
+                creator_name = creator.username
+        
         return {
             'id': self.id,
             'name': self.name,
@@ -348,6 +356,21 @@ class Card(db.Model):
             if assignee:
                 assigned_username = assignee.username
         
+        # Get creator information if available
+        creator = None
+        creator_name = "Unknown User"
+        if self.user_id:
+            creator = User.query.get(self.user_id)
+            if creator:
+                creator_name = creator.username
+        
+        # Get assigned user information if available
+        assigned_username = None
+        if self.assigned_to:
+            assignee = User.query.get(self.assigned_to)
+            if assignee:
+                assigned_username = assignee.username
+        
         base_dict = {
             'id': self.id,
             'title': self.title,
@@ -374,6 +397,7 @@ class Card(db.Model):
                 base_dict['board_name'] = self.list.board.name
         
         return base_dict
+    
     
     def __repr__(self):
         return f"<Card {self.title} (Priority: {self.priority.name if self.priority else 'None'})>"
