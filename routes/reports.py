@@ -2,8 +2,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, send_f
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import login_required, current_user
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 import os
 import pandas as pd
+from openpyxl import Workbook
 import json
 from datetime import datetime, timedelta
 import calendar
@@ -158,10 +160,11 @@ def get_user_workload_data(board_id=None, period_start=None, period_end=None):
                 if card.deadline and card.deadline < datetime.now() and not card.completed:
                     user_workload[username]['overdue'] += 1
                 
-                # Count by priority
-                priority = str(card.priority).lower()
-                if priority in user_workload[username]['priority']:
-                    user_workload[username]['priority'][priority] += 1
+                # Count by priority - исправленная обработка приоритетов
+                if hasattr(card, 'priority') and card.priority:
+                    priority = card.priority.name.lower() if hasattr(card.priority, 'name') else str(card.priority).lower()
+                    if priority in user_workload[username]['priority']:
+                        user_workload[username]['priority'][priority] += 1
     
     return {
         'user_workload': user_workload
@@ -461,68 +464,220 @@ def export_report(report_type):
         return export_as_pdf(report_type, report_data, filename, board_name, start_date, end_date)
     elif export_format == 'excel':
         return export_as_excel(report_type, report_data, filename, board_name, start_date, end_date)
-    elif export_format == 'json':
-        return export_as_json(report_type, report_data, filename, board_name, start_date, end_date)
     else:
         flash('Unsupported export format', 'error')
         return redirect(url_for('reports.reports_dashboard'))
 
-def export_as_pdf(report_type, report_data, filename, board_name, start_date, end_date):
-    """Export report as PDF"""
-    pdf = FPDF()
-    pdf.add_page()
+class PDF(FPDF):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Use built-in fonts instead of DejaVu
+        # FPDF has built-in support for standard fonts: Courier, Helvetica, Times, Symbol, ZapfDingbats
+        self.set_font('helvetica', size=12)
     
-    # Add header
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 10, f"{REPORT_TYPES.get(report_type, 'Custom Report')}", ln=True, align='C')
-    pdf.set_font('Arial', 'I', 12)
-    pdf.cell(0, 10, f"Board: {board_name}", ln=True)
-    pdf.cell(0, 10, f"Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
-    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
+    def header(self):
+        self.set_font('helvetica', 'B', 12)
+        self.cell(0, 10, 'Report', ln=1, align='C')  # ln=1 — переход на новую строку
+    
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('helvetica', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}', align='C')
+
+def export_as_pdf(report_type, report_data, filename, board_name, start_date, end_date):
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font("helvetica", size=12)
+    
+    def safe_cell(w, h, txt, ln=0, align=''):
+        try:
+            if ln:
+                pdf.cell(w, h, txt, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align=align)
+            else:
+                pdf.cell(w, h, txt, align=align)
+        except Exception as e:
+            print(f"Error writing text: {e}")
+            # Fallback for problematic characters
+            pdf.cell(w, h, '?', align=align)
+    
+    # Report title
+    pdf.set_font('helvetica', 'B', 16)
+    safe_cell(0, 10, f"{REPORT_TYPES.get(report_type, 'Custom Report')}", ln=True, align='C')
+    
+    pdf.set_font('helvetica', 'I', 12)
+    safe_cell(0, 10, f"Board: {board_name.replace('_', ' ')}", ln=True)
+    safe_cell(0, 10, f"Period: {start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}", ln=True)
+    safe_cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
     pdf.ln(10)
     
     # Add report content based on type
-    pdf.set_font('Arial', '', 12)
+    pdf.set_font('helvetica', '', 12)
     
     if report_type == 'project_status':
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Project Overview", ln=True)
-        pdf.set_font('Arial', '', 12)
-        pdf.cell(0, 10, f"Total Cards: {report_data['total_cards']}", ln=True)
-        pdf.cell(0, 10, f"Completed Cards: {report_data['completed_cards']}", ln=True)
-        pdf.cell(0, 10, f"Completion Rate: {report_data['completion_rate']:.1f}%", ln=True)
+        # Overall stats
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Project Overview", ln=True)
+        pdf.set_font('helvetica', '', 12)
+        safe_cell(0, 10, f"Total Cards: {report_data['total_cards']}", ln=True)
+        safe_cell(0, 10, f"Completed Cards: {report_data['completed_cards']}", ln=True)
+        safe_cell(0, 10, f"Completion Rate: {report_data['completion_rate']:.1f}%", ln=True)
         
+        # Lists overview
         pdf.ln(5)
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "Lists Overview", ln=True)
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Lists Overview", ln=True)
         
         for list_name, list_data in report_data['cards_by_list'].items():
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 10, f"{list_name}", ln=True)
-            pdf.set_font('Arial', '', 12)
-            pdf.cell(0, 10, f"Total Cards: {list_data['total']}", ln=True)
-            pdf.cell(0, 10, f"Completed: {list_data['completed']}", ln=True)
-            pdf.cell(0, 10, f"Completion Rate: {list_data['completion_rate']:.1f}%", ln=True)
+            pdf.set_font('helvetica', 'B', 12)
+            safe_cell(0, 10, f"{list_name}", ln=True)
+            pdf.set_font('helvetica', '', 12)
+            safe_cell(0, 10, f"Total Cards: {list_data['total']}", ln=True)
+            safe_cell(0, 10, f"Completed: {list_data['completed']}", ln=True)
+            safe_cell(0, 10, f"Completion Rate: {list_data['completion_rate']:.1f}%", ln=True)
             pdf.ln(5)
             
     elif report_type == 'user_workload':
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, "User Workload Summary", ln=True)
+        # User workload summary
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "User Workload Summary", ln=True)
         
         for username, user_data in report_data['user_workload'].items():
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 10, f"User: {username}", ln=True)
-            pdf.set_font('Arial', '', 12)
-            pdf.cell(0, 10, f"Total Tasks: {user_data['total']}", ln=True)
-            pdf.cell(0, 10, f"Completed: {user_data['completed']}", ln=True)
-            pdf.cell(0, 10, f"Overdue: {user_data['overdue']}", ln=True)
+            pdf.set_font('helvetica', 'B', 12)
+            safe_cell(0, 10, f"User: {username}", ln=True)
+            pdf.set_font('helvetica', '', 12)
+            safe_cell(0, 10, f"Total Tasks: {user_data['total']}", ln=True)
+            safe_cell(0, 10, f"Completed: {user_data['completed']}", ln=True)
+            safe_cell(0, 10, f"Overdue: {user_data['overdue']}", ln=True)
             
-            pdf.set_font('Arial', 'I', 12)
-            pdf.cell(0, 10, "Tasks by Priority:", ln=True)
+            # Completion rate
+            completion_rate = (user_data['completed'] / user_data['total'] * 100) if user_data['total'] > 0 else 0
+            safe_cell(0, 10, f"Completion Rate: {completion_rate:.1f}%", ln=True)
+            
+            # Tasks by priority
+            pdf.set_font('helvetica', 'I', 12)
+            safe_cell(0, 10, "Tasks by Priority:", ln=True)
             for priority, count in user_data['priority'].items():
                 if count > 0:
-                    pdf.cell(0, 10, f"{priority.capitalize()}: {count}", ln=True)
+                    safe_cell(0, 10, f"{priority.capitalize()}: {count}", ln=True)
             pdf.ln(5)
+    
+    elif report_type == 'deadline_statistics':
+        # Deadline overview
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Deadline Overview", ln=True)
+        pdf.set_font('helvetica', '', 12)
+        safe_cell(0, 10, f"Total Cards: {report_data['total_cards']}", ln=True)
+        safe_cell(0, 10, f"Cards with Deadline: {report_data['total_with_deadline']}", ln=True)
+        safe_cell(0, 10, f"Overdue Cards: {report_data['overdue']}", ln=True)
+        safe_cell(0, 10, f"Completed On Time: {report_data['completed_on_time']}", ln=True)
+        safe_cell(0, 10, f"Completed Late: {report_data['completed_late']}", ln=True)
+        
+        # Upcoming deadlines
+        pdf.ln(5)
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Upcoming Deadlines", ln=True)
+        
+        if 'upcoming_deadlines' in report_data:
+            for period, cards in report_data['upcoming_deadlines'].items():
+                if cards:
+                    period_name = {
+                        'today_tomorrow': 'Due Today or Tomorrow',
+                        'this_week': 'Due This Week',
+                        'this_month': 'Due This Month',
+                        'future': 'Future Deadlines'
+                    }.get(period, period)
+                    
+                    pdf.set_font('helvetica', 'B', 12)
+                    safe_cell(0, 10, period_name, ln=True)
+                    pdf.set_font('helvetica', '', 12)
+                    
+                    for card in cards:
+                        assigned_to = card['assigned_to'] or 'Unassigned'
+                        safe_cell(0, 10, f"- {card['title']} (Due: {card['deadline']}, Days Left: {card['days_left']}, Assigned: {assigned_to})", ln=True)
+                    pdf.ln(5)
+                    
+    elif report_type == 'priority_distribution':
+        # Priority counts
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Priority Distribution", ln=True)
+        pdf.set_font('helvetica', '', 12)
+        
+        if 'priority_counts' in report_data:
+            for priority, count in report_data['priority_counts'].items():
+                safe_cell(0, 10, f"{priority.capitalize()}: {count} tasks", ln=True)
+            
+        # Completion by priority
+        pdf.ln(5)
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Completion by Priority", ln=True)
+        
+        if 'priority_completion' in report_data:
+            for priority, data in report_data['priority_completion'].items():
+                if data['total'] > 0:
+                    pdf.set_font('helvetica', 'B', 12)
+                    safe_cell(0, 10, f"{priority.capitalize()}", ln=True)
+                    pdf.set_font('helvetica', '', 12)
+                    safe_cell(0, 10, f"Total: {data['total']}, Completed: {data['completed']}", ln=True)
+                    safe_cell(0, 10, f"Completion Rate: {data['completion_rate']:.1f}%", ln=True)
+                    pdf.ln(5)
+        
+        # Priority tasks
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Tasks by Priority", ln=True)
+        
+        if 'priority_tasks' in report_data:
+            for priority, tasks in report_data['priority_tasks'].items():
+                if tasks:
+                    pdf.set_font('helvetica', 'B', 12)
+                    safe_cell(0, 10, f"{priority.capitalize()} Priority Tasks", ln=True)
+                    pdf.set_font('helvetica', '', 12)
+                    
+                    for task in tasks:
+                        status = "Completed" if task['completed'] else "In Progress"
+                        deadline = task['deadline'] or "No deadline"
+                        assigned_to = task['assigned_to'] or "Unassigned"
+                        safe_cell(0, 10, f"- {task['title']} (Status: {status}, Deadline: {deadline}, Assigned: {assigned_to})", ln=True)
+                    pdf.ln(5)
+    
+    elif report_type == 'completion_rates':
+        project_data = report_data['project_status']
+        priority_data = report_data['priority_data']
+        
+        # Overall completion
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Overall Completion", ln=True)
+        pdf.set_font('helvetica', '', 12)
+        safe_cell(0, 10, f"Total Cards: {project_data['total_cards']}", ln=True)
+        safe_cell(0, 10, f"Completed Cards: {project_data['completed_cards']}", ln=True)
+        safe_cell(0, 10, f"Completion Rate: {project_data['completion_rate']:.1f}%", ln=True)
+        
+        # Completion by list
+        pdf.ln(5)
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Completion by List", ln=True)
+        
+        for list_name, list_data in project_data['cards_by_list'].items():
+            pdf.set_font('helvetica', 'B', 12)
+            safe_cell(0, 10, f"{list_name}", ln=True)
+            pdf.set_font('helvetica', '', 12)
+            safe_cell(0, 10, f"Completion Rate: {list_data['completion_rate']:.1f}%", ln=True)
+            safe_cell(0, 10, f"Completed: {list_data['completed']} of {list_data['total']}", ln=True)
+            pdf.ln(3)
+        
+        # Completion by priority
+        pdf.ln(5)
+        pdf.set_font('helvetica', 'B', 14)
+        safe_cell(0, 10, "Completion by Priority", ln=True)
+        
+        if 'priority_completion' in priority_data:
+            for priority, data in priority_data['priority_completion'].items():
+                if data['total'] > 0:
+                    pdf.set_font('helvetica', 'B', 12)
+                    safe_cell(0, 10, f"{priority.capitalize()}", ln=True)
+                    pdf.set_font('helvetica', '', 12)
+                    safe_cell(0, 10, f"Completion Rate: {data['completion_rate']:.1f}%", ln=True)
+                    safe_cell(0, 10, f"Completed: {data['completed']} of {data['total']}", ln=True)
+                    pdf.ln(3)
     
     # Save the PDF
     pdf_path = os.path.join(EXPORT_FOLDER, f"{filename}.pdf")
@@ -531,107 +686,480 @@ def export_as_pdf(report_type, report_data, filename, board_name, start_date, en
     return send_file(pdf_path, as_attachment=True)
 
 def export_as_excel(report_type, report_data, filename, board_name, start_date, end_date):
-    """Export report as Excel"""
-    # Create a Pandas Excel writer using XlsxWriter as the engine
-    excel_path = os.path.join(EXPORT_FOLDER, f"{filename}.xlsx")
-    writer = pd.ExcelWriter(excel_path, engine='xlsxwriter')
+    """Export report as Excel with complete information and formatting"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
     
-    # Create a metadata sheet with report info
-    metadata = pd.DataFrame({
-        'Report Type': [REPORT_TYPES.get(report_type, 'Custom Report')],
-        'Board': [board_name],
-        'Start Date': [start_date.strftime('%Y-%m-%d')],
-        'End Date': [end_date.strftime('%Y-%m-%d')],
-        'Generated': [datetime.now().strftime('%Y-%m-%d %H:%M')]
-    })
-    metadata.to_excel(writer, sheet_name='Report Info', index=False)
+    wb = Workbook()
     
-    # Create data sheets based on report type
+    # Define styles
+    header_font = Font(bold=True, size=12, color="FFFFFF")
+    header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    subheader_font = Font(bold=True, size=11)
+    subheader_fill = PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid")
+    regular_font = Font(size=10)
+    percent_format = '0.0%'
+    
+    # Define borders
+    thin_border = Border(
+        left=Side(style='thin'), 
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    def apply_header_style(ws, row_num, col_start=1, col_end=None):
+        """Apply header style to a row"""
+        if not col_end:
+            col_end = ws.max_column
+        
+        for col in range(col_start, col_end + 1):
+            cell = ws.cell(row=row_num, column=col)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+    
+    def apply_subheader_style(ws, row_num, col_start=1, col_end=None):
+        """Apply subheader style to a row"""
+        if not col_end:
+            col_end = ws.max_column
+        
+        for col in range(col_start, col_end + 1):
+            cell = ws.cell(row=row_num, column=col)
+            cell.font = subheader_font
+            cell.fill = subheader_fill
+            cell.alignment = Alignment(horizontal='left', vertical='center')
+            cell.border = thin_border
+    
+    def apply_data_style(ws, row_num, col_start=1, col_end=None):
+        """Apply data style to a row"""
+        if not col_end:
+            col_end = ws.max_column
+        
+        for col in range(col_start, col_end + 1):
+            cell = ws.cell(row=row_num, column=col)
+            cell.font = regular_font
+            cell.alignment = Alignment(horizontal='left', vertical='center')
+            cell.border = thin_border
+    
+    def format_percentage(ws, row, col):
+        """Format a cell as percentage"""
+        cell = ws.cell(row=row, column=col)
+        if isinstance(cell.value, str) and '%' in cell.value:
+            try:
+                value = float(cell.value.replace('%', '')) / 100
+                cell.value = value
+                cell.number_format = percent_format
+            except ValueError:
+                pass
+    
+    def auto_adjust_columns(ws):
+        """Auto-adjust column widths based on content"""
+        for col in ws.columns:
+            max_length = 0
+            column = col[0].column_letter
+            
+            for cell in col:
+                if cell.value:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+            
+            adjusted_width = (max_length + 2) if max_length < 50 else 50
+            ws.column_dimensions[column].width = adjusted_width
+    
+    # Create metadata sheet
+    ws_meta = wb.active
+    ws_meta.title = 'Report Info'
+    
+    # Add report metadata
+    ws_meta.append(['Report Type', REPORT_TYPES.get(report_type, 'Custom Report')])
+    ws_meta.append(['Board', board_name.replace('_', ' ')])
+    ws_meta.append(['Start Date', start_date.strftime('%Y-%m-%d')])
+    ws_meta.append(['End Date', end_date.strftime('%Y-%m-%d')])
+    ws_meta.append(['Generated', datetime.now().strftime('%Y-%m-%d %H:%M')])
+    
+    # Apply styles to metadata
+    apply_header_style(ws_meta, 1, 1, 2)
+    for i in range(2, 6):
+        apply_data_style(ws_meta, i, 1, 2)
+    
+    # Auto-adjust columns width
+    auto_adjust_columns(ws_meta)
+    
+    # Create appropriate sheets based on report type
     if report_type == 'project_status':
-        # Overall stats
-        overall = pd.DataFrame({
-            'Metric': ['Total Cards', 'Completed Cards', 'Completion Rate (%)'],
-            'Value': [
-                report_data['total_cards'], 
-                report_data['completed_cards'],
-                f"{report_data['completion_rate']:.1f}%"
-            ]
-        })
-        overall.to_excel(writer, sheet_name='Overall Stats', index=False)
+        # Overall stats sheet
+        ws_overall = wb.create_sheet('Overall Stats')
+        ws_overall.append(['Metric', 'Value'])
+        apply_header_style(ws_overall, 1, 1, 2)
         
-        # Lists data
-        lists_data = []
+        # Add data
+        rows = [
+            ['Total Cards', report_data['total_cards']],
+            ['Completed Cards', report_data['completed_cards']],
+            ['Completion Rate', f"{report_data['completion_rate']:.1f}%"]
+        ]
+        
+        for i, row in enumerate(rows, 2):
+            ws_overall.append(row)
+            apply_data_style(ws_overall, i, 1, 2)
+            if 'Rate' in row[0]:
+                format_percentage(ws_overall, i, 2)
+        
+        # Lists data sheet
+        ws_lists = wb.create_sheet('Lists Data')
+        ws_lists.append(['List Name', 'Total Cards', 'Completed Cards', 'Completion Rate'])
+        apply_header_style(ws_lists, 1)
+        
+        row_num = 2
         for list_name, list_data in report_data['cards_by_list'].items():
-            lists_data.append({
-                'List Name': list_name,
-                'Total Cards': list_data['total'],
-                'Completed Cards': list_data['completed'],
-                'Completion Rate (%)': f"{list_data['completion_rate']:.1f}%"
-            })
+            ws_lists.append([
+                list_name, 
+                list_data['total'], 
+                list_data['completed'], 
+                f"{list_data['completion_rate']:.1f}%"
+            ])
+            apply_data_style(ws_lists, row_num)
+            format_percentage(ws_lists, row_num, 4)
+            row_num += 1
         
-        if lists_data:
-            lists_df = pd.DataFrame(lists_data)
-            lists_df.to_excel(writer, sheet_name='Lists Data', index=False)
+        auto_adjust_columns(ws_overall)
+        auto_adjust_columns(ws_lists)
     
     elif report_type == 'user_workload':
-        # User workload data
-        user_data = []
-        priority_data = []
+        # User workload sheet
+        ws_users = wb.create_sheet('User Workload')
+        ws_users.append(['Username', 'Total Tasks', 'Completed', 'Completion Rate', 'Overdue Tasks'])
+        apply_header_style(ws_users, 1)
+        
+        # Priority by user sheet
+        ws_priority = wb.create_sheet('Priority by User')
+        ws_priority.append(['Username', 'Priority', 'Count'])
+        apply_header_style(ws_priority, 1)
+        
+        row_users = 2
+        row_priority = 2
         
         for username, data in report_data['user_workload'].items():
-            user_data.append({
-                'Username': username,
-                'Total Tasks': data['total'],
-                'Completed': data['completed'],
-                'Completion Rate (%)': f"{(data['completed'] / data['total'] * 100):.1f}%" if data['total'] > 0 else '0%',
-                'Overdue Tasks': data['overdue']
-            })
+            completion_rate = f"{(data['completed'] / data['total'] * 100):.1f}%" if data['total'] > 0 else '0%'
+            ws_users.append([
+                username,
+                data['total'],
+                data['completed'],
+                completion_rate,
+                data['overdue']
+            ])
+            apply_data_style(ws_users, row_users)
+            format_percentage(ws_users, row_users, 4)
+            row_users += 1
             
-            # Priority breakdown by user
+            # Add priority data
             for priority, count in data['priority'].items():
                 if count > 0:
-                    priority_data.append({
-                        'Username': username,
-                        'Priority': priority.capitalize(),
-                        'Count': count
-                    })
+                    ws_priority.append([username, priority.capitalize(), count])
+                    apply_data_style(ws_priority, row_priority)
+                    row_priority += 1
         
-        if user_data:
-            users_df = pd.DataFrame(user_data)
-            users_df.to_excel(writer, sheet_name='User Workload', index=False)
+        # Add a detailed user tasks sheet if we have task-level data
+        if any('tasks' in data for username, data in report_data['user_workload'].items()):
+            ws_tasks = wb.create_sheet('User Tasks Detail')
+            ws_tasks.append(['Username', 'Task', 'Status', 'Priority', 'Deadline'])
+            apply_header_style(ws_tasks, 1)
+            # Add task-level data if available
         
-        if priority_data:
-            priority_df = pd.DataFrame(priority_data)
-            priority_df.to_excel(writer, sheet_name='Priority by User', index=False)
+        auto_adjust_columns(ws_users)
+        auto_adjust_columns(ws_priority)
+    
+    elif report_type == 'deadline_statistics':
+        # Deadline overview sheet
+        ws_overview = wb.create_sheet('Deadline Overview')
+        ws_overview.append(['Metric', 'Value'])
+        apply_header_style(ws_overview, 1, 1, 2)
+        
+        # Add data
+        rows = [
+            ['Total Cards', report_data['total_cards']],
+            ['Cards with Deadline', report_data['total_with_deadline']],
+            ['Overdue Cards', report_data['overdue']],
+            ['Completed On Time', report_data['completed_on_time']],
+            ['Completed Late', report_data['completed_late']]
+        ]
+        
+        for i, row in enumerate(rows, 2):
+            ws_overview.append(row)
+            apply_data_style(ws_overview, i, 1, 2)
+        
+        # Calculate and add percentages
+        if report_data['total_with_deadline'] > 0:
+            overdue_percent = report_data['overdue'] / report_data['total_with_deadline'] * 100
+            on_time_percent = report_data['completed_on_time'] / report_data['total_with_deadline'] * 100
+            late_percent = report_data['completed_late'] / report_data['total_with_deadline'] * 100
+            
+            ws_overview.append(['Overdue Rate', f"{overdue_percent:.1f}%"])
+            ws_overview.append(['On-Time Completion Rate', f"{on_time_percent:.1f}%"])
+            ws_overview.append(['Late Completion Rate', f"{late_percent:.1f}%"])
+            
+            for i in range(6, 9):
+                apply_data_style(ws_overview, i, 1, 2)
+                format_percentage(ws_overview, i, 2)
+        
+        # Upcoming deadlines sheet
+        ws_upcoming = wb.create_sheet('Upcoming Deadlines')
+        ws_upcoming.append(['Period', 'Card Title', 'Deadline', 'Days Left', 'Assigned To'])
+        apply_header_style(ws_upcoming, 1)
+        
+        row_num = 2
+        if 'upcoming_deadlines' in report_data:
+            for period, cards in report_data['upcoming_deadlines'].items():
+                period_name = {
+                    'today_tomorrow': 'Today/Tomorrow',
+                    'this_week': 'This Week',
+                    'this_month': 'This Month',
+                    'future': 'Future'
+                }.get(period, period)
+                
+                if cards:  # Add a subheader for each period
+                    ws_upcoming.append([f"{period_name} ({len(cards)} cards)", "", "", "", ""])
+                    apply_subheader_style(ws_upcoming, row_num, 1, 5)
+                    row_num += 1
+                
+                for card in cards:
+                    ws_upcoming.append([
+                        period_name,
+                        card['title'],
+                        card['deadline'],
+                        card['days_left'],
+                        card['assigned_to'] or 'Unassigned'
+                    ])
+                    apply_data_style(ws_upcoming, row_num)
+                    row_num += 1
+        
+        auto_adjust_columns(ws_overview)
+        auto_adjust_columns(ws_upcoming)
+    
+    elif report_type == 'priority_distribution':
+        # Priority counts sheet
+        ws_counts = wb.create_sheet('Priority Counts')
+        ws_counts.append(['Priority', 'Count', 'Percentage'])
+        apply_header_style(ws_counts, 1)
+        
+        # Calculate total for percentage
+        total_priority_cards = sum(report_data['priority_counts'].values())
+        
+        # Add data with percentages
+        row_num = 2
+        for priority, count in report_data['priority_counts'].items():
+            percentage = (count / total_priority_cards * 100) if total_priority_cards > 0 else 0
+            ws_counts.append([
+                priority.capitalize(), 
+                count, 
+                f"{percentage:.1f}%"
+            ])
+            apply_data_style(ws_counts, row_num)
+            format_percentage(ws_counts, row_num, 3)
+            row_num += 1
+        
+        # Add total row
+        ws_counts.append(['Total', total_priority_cards, '100.0%'])
+        apply_subheader_style(ws_counts, row_num)
+        format_percentage(ws_counts, row_num, 3)
+        
+        # Priority completion rates sheet
+        ws_completion = wb.create_sheet('Priority Completion')
+        ws_completion.append(['Priority', 'Total', 'Completed', 'Completion Rate'])
+        apply_header_style(ws_completion, 1)
+        
+        row_num = 2
+        for priority, data in report_data['priority_completion'].items():
+            if data['total'] > 0:
+                ws_completion.append([
+                    priority.capitalize(),
+                    data['total'],
+                    data['completed'],
+                    f"{data['completion_rate']:.1f}%"
+                ])
+                apply_data_style(ws_completion, row_num)
+                format_percentage(ws_completion, row_num, 4)
+                row_num += 1
+        
+        # Priority tasks sheet - with groups by priority
+        ws_tasks = wb.create_sheet('Priority Tasks')
+        ws_tasks.append(['Priority', 'Task Title', 'Status', 'Deadline', 'Assigned To'])
+        apply_header_style(ws_tasks, 1)
+        
+        row_num = 2
+        for priority, tasks in report_data['priority_tasks'].items():
+            if tasks:
+                # Add a header for each priority level
+                ws_tasks.append([f"{priority.capitalize()} Priority ({len(tasks)} tasks)", "", "", "", ""])
+                apply_subheader_style(ws_tasks, row_num, 1, 5)
+                row_num += 1
+                
+                for task in tasks:
+                    ws_tasks.append([
+                        priority.capitalize(),
+                        task['title'],
+                        'Completed' if task['completed'] else 'In Progress',
+                        task['deadline'] or 'No deadline',
+                        task['assigned_to'] or 'Unassigned'
+                    ])
+                    apply_data_style(ws_tasks, row_num)
+                    row_num += 1
+        
+        auto_adjust_columns(ws_counts)
+        auto_adjust_columns(ws_completion)
+        auto_adjust_columns(ws_tasks)
+    
+    elif report_type == 'completion_rates':
+        project_data = report_data['project_status']
+        priority_data = report_data['priority_data']
+        
+        # Overall completion sheet
+        ws_overall = wb.create_sheet('Overall Completion')
+        ws_overall.append(['Metric', 'Value'])
+        apply_header_style(ws_overall, 1, 1, 2)
+        
+        # Add data
+        rows = [
+            ['Total Cards', project_data['total_cards']],
+            ['Completed Cards', project_data['completed_cards']],
+            ['Overall Completion Rate', f"{project_data['completion_rate']:.1f}%"]
+        ]
+        
+        for i, row in enumerate(rows, 2):
+            ws_overall.append(row)
+            apply_data_style(ws_overall, i, 1, 2)
+            if 'Rate' in row[0]:
+                format_percentage(ws_overall, i, 2)
+        
+        # Lists completion sheet
+        ws_lists = wb.create_sheet('Lists Completion')
+        ws_lists.append(['List Name', 'Total Cards', 'Completed Cards', 'Completion Rate'])
+        apply_header_style(ws_lists, 1)
+        
+        row_num = 2
+        for list_name, list_data in project_data['cards_by_list'].items():
+            ws_lists.append([
+                list_name, 
+                list_data['total'], 
+                list_data['completed'], 
+                f"{list_data['completion_rate']:.1f}%"
+            ])
+            apply_data_style(ws_lists, row_num)
+            format_percentage(ws_lists, row_num, 4)
+            row_num += 1
+        
+        # Priority completion sheet
+        ws_priority = wb.create_sheet('Priority Completion')
+        ws_priority.append(['Priority', 'Total', 'Completed', 'Completion Rate'])
+        apply_header_style(ws_priority, 1)
+        
+        row_num = 2
+        for priority, data in priority_data['priority_completion'].items():
+            if data['total'] > 0:
+                ws_priority.append([
+                    priority.capitalize(),
+                    data['total'],
+                    data['completed'],
+                    f"{data['completion_rate']:.1f}%"
+                ])
+                apply_data_style(ws_priority, row_num)
+                format_percentage(ws_priority, row_num, 4)
+                row_num += 1
+        
+        # Add a completion trends sheet (if we had time-series data)
+        # This could be filled with data if the API provided time-based completion info
+        
+        auto_adjust_columns(ws_overall)
+        auto_adjust_columns(ws_lists)
+        auto_adjust_columns(ws_priority)
+    
+    # Add a summary dashboard sheet as the first visible sheet
+    ws_dashboard = wb.create_sheet("Dashboard", 1)
+    ws_dashboard.append(['Report Summary'])
+    apply_header_style(ws_dashboard, 1, 1, 1)
+    
+    ws_dashboard.append(['Report Type', REPORT_TYPES.get(report_type, 'Custom Report')])
+    ws_dashboard.append(['Board', board_name.replace('_', ' ')])
+    ws_dashboard.append(['Period', f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"])
+    
+    for i in range(2, 5):
+        apply_data_style(ws_dashboard, i, 1, 2)
+    
+    # Add report-specific summary data
+    ws_dashboard.append([])
+    ws_dashboard.append(['Key Metrics'])
+    apply_subheader_style(ws_dashboard, 6, 1, 2)
+    
+    if report_type == 'project_status':
+        ws_dashboard.append(['Total Cards', report_data['total_cards']])
+        ws_dashboard.append(['Completion Rate', f"{report_data['completion_rate']:.1f}%"])
+        format_percentage(ws_dashboard, 8, 2)
+        
+    elif report_type == 'user_workload':
+        # Find user with most tasks
+        most_tasks_user = max(report_data['user_workload'].items(), 
+                             key=lambda x: x[1]['total'], 
+                             default=(None, {'total': 0}))
+        
+        ws_dashboard.append(['Total Users', len(report_data['user_workload'])])
+        if most_tasks_user[0]:
+            ws_dashboard.append(['Most Loaded User', f"{most_tasks_user[0]} ({most_tasks_user[1]['total']} tasks)"])
+        
+    elif report_type == 'deadline_statistics':
+        ws_dashboard.append(['Cards with Deadline', report_data['total_with_deadline']])
+        ws_dashboard.append(['Overdue Cards', report_data['overdue']])
+        
+        if report_data['total_with_deadline'] > 0:
+            overdue_percent = report_data['overdue'] / report_data['total_with_deadline'] * 100
+            ws_dashboard.append(['Overdue Rate', f"{overdue_percent:.1f}%"])
+            format_percentage(ws_dashboard, 9, 2)
+        
+    elif report_type == 'priority_distribution':
+        priority_counts = report_data['priority_counts']
+        ws_dashboard.append(['High Priority Tasks', priority_counts.get('high', 0)])
+        ws_dashboard.append(['Medium Priority Tasks', priority_counts.get('medium', 0)])
+        ws_dashboard.append(['Low Priority Tasks', priority_counts.get('low', 0)])
+        
+    elif report_type == 'completion_rates':
+        project_data = report_data['project_status']
+        ws_dashboard.append(['Overall Completion Rate', f"{project_data['completion_rate']:.1f}%"])
+        format_percentage(ws_dashboard, 7, 2)
+        
+        # Find list with best completion rate
+        best_list = max(project_data['cards_by_list'].items(), 
+                        key=lambda x: x[1]['completion_rate'], 
+                        default=(None, {'completion_rate': 0}))
+        
+        if best_list[0]:
+            ws_dashboard.append(['Best Performing List', 
+                               f"{best_list[0]} ({best_list[1]['completion_rate']:.1f}%)"])
+            
+    # Apply styling to the rest of the dashboard
+    for i in range(7, ws_dashboard.max_row + 1):
+        apply_data_style(ws_dashboard, i, 1, 2)
+    
+    # Add sheet navigation instructions
+    ws_dashboard.append([])
+    ws_dashboard.append(['Available Sheets:'])
+    apply_subheader_style(ws_dashboard, ws_dashboard.max_row, 1, 1)
+    
+    for sheet in wb.sheetnames:
+        if sheet != 'Dashboard':
+            ws_dashboard.append([sheet])
+    
+    auto_adjust_columns(ws_dashboard)
     
     # Save the Excel file
-    writer.close()
+    excel_path = os.path.join(EXPORT_FOLDER, f"{filename}.xlsx")
+    wb.save(excel_path)
     
     return send_file(excel_path, as_attachment=True)
-
-def export_as_json(report_type, report_data, filename, board_name, start_date, end_date):
-    """Export report as JSON"""
-    # Create JSON structure with metadata
-    json_data = {
-        'metadata': {
-            'report_type': report_type,
-            'report_name': REPORT_TYPES.get(report_type, 'Custom Report'),
-            'board': board_name,
-            'period': {
-                'start_date': start_date.strftime('%Y-%m-%d'),
-                'end_date': end_date.strftime('%Y-%m-%d')
-            },
-            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        },
-        'data': report_data
-    }
-    
-    # Save to file
-    json_path = os.path.join(EXPORT_FOLDER, f"{filename}.json")
-    with open(json_path, 'w') as f:
-        json.dump(json_data, f, indent=2, default=str)
-    
-    return send_file(json_path, as_attachment=True)
 
 @reports_bp.route('/api/data/<report_type>')
 @login_required

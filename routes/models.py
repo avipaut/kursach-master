@@ -10,57 +10,68 @@ from sqlalchemy.orm import relationship
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SelectMultipleField, TextAreaField
 from wtforms.validators import DataRequired, Email, Length, Optional
-
-db =  SQLAlchemy()
-# В models.py добавьте в начало файла:
 from flask_login import UserMixin
 
+db = SQLAlchemy()
 
-# Таблица связи пользователей и ролей
+# Association tables
 roles_users = db.Table('roles_users',
-    db.Column('user_id', db.Integer(), db.ForeignKey('users.id')),  # Изменено с 'user.id' на 'users.id'
+    db.Column('user_id', db.Integer(), db.ForeignKey('users.id')),
     db.Column('role_id', db.Integer(), db.ForeignKey('role.id'))
 )
+
 board_users = db.Table('board_users',
     db.Column('board_id', db.Integer(), db.ForeignKey('board.id', ondelete="CASCADE"), primary_key=True),
     db.Column('user_id', db.Integer(), db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
 )
+
 card_assignees = db.Table('card_assignees',
     db.Column('card_id', db.Integer, db.ForeignKey('card.id', ondelete="CASCADE"), primary_key=True),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
 )
 
-class Role(db.Model, RoleMixin):
-    id = db.Column(db.Integer(), primary_key=True)
-    name = db.Column(db.String(80), unique=True)
-    description = db.Column(db.String(255))
-    # Association table for User-Lobby many-to-many relationship
-user_lobby = Table(
+user_lobby = db.Table(
     'user_lobby',
     db.metadata,
     Column('user_id', Integer, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
     Column('lobby_id', Integer, ForeignKey('lobbies.id', ondelete="CASCADE"), primary_key=True)
 )
+
+event_participants = db.Table(
+    'event_participants',
+    db.Column('event_id', db.Integer, db.ForeignKey('calendar_events.id', ondelete="CASCADE"), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
+)
+
+# Role model
+class Role(db.Model, RoleMixin):
+    id = db.Column(db.Integer(), primary_key=True)
+    name = db.Column(db.String(80), unique=True)
+    description = db.Column(db.String(255))
+
+# User model
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(120), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=True)  # Добавлено поле email
-    active = db.Column(db.Boolean(), default=True)  # Добавлено поле active для Flask-Security
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    active = db.Column(db.Boolean(), default=True)
     fs_uniquifier = db.Column(db.String(255), unique=True)
     is_admin = db.Column(db.Boolean, default=False)
-    avatar = Column(String(255), nullable=True)  # Path to user avatar
+    avatar = Column(String(255), nullable=True)
     is_online = db.Column(db.Boolean, default=False)
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
+    phone = db.Column(db.String(20), nullable=True)
+    department = db.Column(db.String(50), nullable=True)
+    building = db.Column(db.String(20), nullable=True)
+    faculty = db.Column(db.String(100), nullable=True)
 
-
-    # Добавим отношения
+    # Relationships
     roles = db.relationship('Role', secondary=roles_users, 
                          backref=db.backref('users', lazy='dynamic'))
     boards = db.relationship('Board', backref='user', lazy=True)
     cards = db.relationship('Card', backref='user', lazy=True, foreign_keys='Card.user_id')
-
     messages = db.relationship('Message', backref='sender', lazy=True, cascade="all, delete-orphan")
     lobbies = db.relationship('Lobby', secondary=user_lobby, back_populates='users')
     created_lobbies = db.relationship('Lobby', backref='creator', lazy=True, foreign_keys='Lobby.created_by')
@@ -76,13 +87,15 @@ class User(UserMixin, db.Model):
             'last_seen': self.last_seen.isoformat() if self.last_seen else None,
             'is_admin': self.is_admin
         }
+
     def __repr__(self):
         return f"<User {self.username}>"
+
     def has_role(self, role_name):
         """Проверяет, имеет ли пользователь указанную роль"""
         return any(role.name == role_name for role in self.roles)
 
-
+# Message types
 class MessageType(PyEnum):
     TEXT = "text"
     IMAGE = "image"
@@ -91,6 +104,7 @@ class MessageType(PyEnum):
     VIDEO = "video"
     STICKER = "sticker"
 
+# Message model
 class Message(db.Model):
     __tablename__ = 'messages'
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -132,6 +146,7 @@ class Message(db.Model):
     def __repr__(self):
         return f"<Message {self.id} from {self.sender_id} in lobby {self.lobby_id}>"
 
+# Read Receipt model
 class ReadReceipt(db.Model):
     __tablename__ = 'read_receipts'
     message_id = Column(Integer, ForeignKey('messages.id', ondelete="CASCADE"), primary_key=True)
@@ -140,8 +155,8 @@ class ReadReceipt(db.Model):
     
     def __repr__(self):
         return f"<ReadReceipt message:{self.message_id} by user:{self.user_id}>"
-    
 
+# Lobby model
 class Lobby(db.Model):
     __tablename__ = 'lobbies'
     id = Column(Integer, primary_key=True)
@@ -162,7 +177,6 @@ class Lobby(db.Model):
     messages = db.relationship('Message', backref='lobby', lazy=True, cascade="all, delete-orphan")
     archiver = db.relationship('User', foreign_keys=[archived_by], backref='archived_lobbies', lazy=True)
     
-    # Update the to_dict method to include archive info
     def to_dict(self):
         return {
             'id': self.id,
@@ -189,13 +203,15 @@ class Lobby(db.Model):
         lobby_type = "Group" if self.is_group else "Direct"
         return f"<{lobby_type} Lobby {self.id}: {self.name or 'Unnamed'}>"
 
+# Priority Level enum
 class PriorityLevel(enum.Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
+# KPI model
 class KPI(db.Model):
-    tablename = 'kpi'
+    __tablename__ = 'kpi'
     id = db.Column(db.Integer, primary_key=True)
     row_index = db.Column(db.Integer, nullable=False)
     column_name = db.Column(db.String(100), nullable=False)
@@ -204,18 +220,20 @@ class KPI(db.Model):
     calculated_value = db.Column(db.String(1000), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    column_order = db.Column(db.Integer, nullable=False, default=0)
 
-    table_args = (
+    __table_args__ = (
         db.UniqueConstraint('row_index', 'column_name', 'user_id', name='uix_kpi_row_column_user'),
     )
 
     user = db.relationship('User', backref=db.backref('kpi_values', lazy=True, cascade="all, delete-orphan"))
 
-    def repr(self):
+    def __repr__(self):
         return f"<KPI: {self.column_name} [{self.row_index}] = {self.value}>"
 
+# KPI Template model
 class KPITemplate(db.Model):
-    tablename = 'kpi_template'
+    __tablename__ = 'kpi_template'
     id = db.Column(db.Integer, primary_key=True)
     row_index = db.Column(db.Integer, nullable=False)
     column_name = db.Column(db.String(100), nullable=False)
@@ -223,15 +241,16 @@ class KPITemplate(db.Model):
     formula = db.Column(db.String(1000), nullable=True)
     calculated_value = db.Column(db.String(1000), nullable=True)
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    column_order = db.Column(db.Integer, nullable=False, default=0)
 
-    table_args = (
+    __table_args__ = (
         db.UniqueConstraint('row_index', 'column_name', name='uix_kpi_template_row_column'),
     )
 
-    def repr(self):
+    def __repr__(self):
         return f"<KPITemplate: {self.column_name} [{self.row_index}] = {self.value}>"
 
-# Then modify the Board class to add the relationship with users
+# Board model
 class Board(db.Model):
     __tablename__ = 'board'
     id = Column(Integer, primary_key=True)
@@ -241,31 +260,40 @@ class Board(db.Model):
     admin_only = db.Column(db.Boolean, default=False)
     
     lists = db.relationship('List', backref='board', cascade="all, delete-orphan", lazy=True)
-    # Add the new relationship
     users = db.relationship('User', secondary=board_users, 
                            backref=db.backref('accessible_boards', lazy='dynamic'))
 
     def to_dict(self):
+        # Get creator information if available
+        creator = None
+        creator_name = "Unknown User"
+        if self.user_id:
+            creator = User.query.get(self.user_id)
+            if creator:
+                creator_name = creator.username
+        
         return {
             'id': self.id,
             'name': self.name,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'user_id': self.user_id,
             'admin_only': self.admin_only,
-            'users': [{'id': user.id, 'username': user.username} for user in self.users]
+            'users': [{'id': user.id, 'username': user.username} for user in self.users],
+            'creator_name': creator_name  # Add creator name to the dictionary
         }
 
     def __repr__(self):
         return f"<Board {self.name}>"
 
+# List model
 class List(db.Model):
     __tablename__ = 'list'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     board_id = Column(Integer, ForeignKey('board.id', ondelete="CASCADE"), nullable=False)
-    position = Column(Integer, default=0)  # Поле для хранения порядка
-    color = Column(String(50), nullable=True)  # Поле для хранения цвета списка
-    text_color = Column(String(50), nullable=True)  # Поле для хранения цвета текста
+    position = Column(Integer, default=0)
+    color = Column(String(50), nullable=True)
+    text_color = Column(String(50), nullable=True)
     
     cards = db.relationship('Card', backref='list', cascade="all, delete-orphan", lazy=True)
 
@@ -282,7 +310,7 @@ class List(db.Model):
     def __repr__(self):
         return f"<List {self.name}>"
 
-
+# Card model
 class Card(db.Model):
     __tablename__ = 'card'
     id = Column(Integer, primary_key=True)
@@ -290,21 +318,36 @@ class Card(db.Model):
     description = Column(String(1000))
     created_at = Column(DateTime, default=datetime.utcnow)
     list_id = Column(Integer, ForeignKey('list.id', ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)  # Creator of the card
+    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     priority = Column(Enum(PriorityLevel), default=PriorityLevel.LOW)
-    completed = Column(db.Boolean, default=False)  # Field for completion status
-    assigned_to = Column(Integer, ForeignKey('users.id'), nullable=True)  # Field for assignment
-    deadline = Column(DateTime, nullable=True)  # Field for deadline
-    custom_color = Column(String(50), nullable=True)  # Поле для хранения пользовательского цвета
-    position = Column(Integer, default=0)  # Новое поле для сортировки карточек
+    completed = Column(db.Boolean, default=False)
+    assigned_to = Column(Integer, ForeignKey('users.id'), nullable=True)
+    deadline = Column(DateTime, nullable=True)
+    custom_color = Column(String(50), nullable=True)
+    position = Column(Integer, default=0)
     
     # Relationships
     todos = db.relationship('Todo', backref='card', cascade="all, delete-orphan", lazy=True)
     assigned_users = db.relationship('User', 
                                   secondary=card_assignees,
                                   backref=db.backref('assigned_cards_multi', lazy='dynamic'))
-     # Also update the to_dict method to include assigned users:
+    
     def to_dict(self):
+        # Get creator information if available
+        creator = None
+        creator_name = "Unknown User"
+        if self.user_id:
+            creator = User.query.get(self.user_id)
+            if creator:
+                creator_name = creator.username
+        
+        # Get assigned user information if available
+        assigned_username = None
+        if self.assigned_to:
+            assignee = User.query.get(self.assigned_to)
+            if assignee:
+                assigned_username = assignee.username
+        
         base_dict = {
             'id': self.id,
             'title': self.title,
@@ -315,12 +358,13 @@ class Card(db.Model):
             'priority': self.priority.value if self.priority else 'low',
             'completed': self.completed,
             'assigned_to': self.assigned_to,
+            'assigned_username': assigned_username,
             'deadline': self.deadline.isoformat() if self.deadline else None,
             'custom_color': self.custom_color,
             'position': self.position,
             'todos': [todo.to_dict() for todo in self.todos],
-            # Add assigned users
-            'assigned_users': [{'id': user.id, 'username': user.username} for user in self.assigned_users]
+            'assigned_users': [{'id': user.id, 'username': user.username} for user in self.assigned_users],
+            'creator_name': creator_name
         }
         
         # Add list and board info if available
@@ -330,10 +374,11 @@ class Card(db.Model):
                 base_dict['board_name'] = self.list.board.name
         
         return base_dict
+    
     def __repr__(self):
         return f"<Card {self.title} (Priority: {self.priority.name if self.priority else 'None'})>"
 
-# New Todo model for to-do lists within cards
+# Todo model
 class Todo(db.Model):
     id = Column(Integer, primary_key=True)
     content = Column(String(500), nullable=False)
@@ -350,17 +395,17 @@ class Todo(db.Model):
 
     def __repr__(self):
         return f"<Todo {self.id}: {self.content[:20]}{'...' if len(self.content) > 20 else ''}>"
-    
+
+# Notification model
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)  # Добавьте эту строку
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     message = db.Column(db.String(500), nullable=False)
     link = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     read = db.Column(db.Boolean, default=False)
     category = db.Column(db.String(50), default='info')
     
-    # Добавьте отношение с таблицей User
     user = db.relationship('User', backref=db.backref('notifications', lazy=True))
     
     def to_dict(self):
@@ -372,6 +417,8 @@ class Notification(db.Model):
             'read': self.read,
             'category': self.category
         }
+
+# Pending File model
 class PendingFile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255), nullable=False)
@@ -385,19 +432,14 @@ class PendingFile(db.Model):
     
     def __repr__(self):
         return f'<PendingFile {self.original_filename}>'
-    
-# Association table for CalendarEvent-User (participants) many-to-many relationship
-event_participants = db.Table(
-    'event_participants',
-    db.Column('event_id', db.Integer, db.ForeignKey('calendar_events.id', ondelete="CASCADE"), primary_key=True),
-    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
-)
 
+# Event Type enum
 class EventType(PyEnum):
     TASK = "task"
     ZOOM = "zoom"
     PERSONAL = "personal"  # For personal tasks
 
+# Calendar Event model
 class CalendarEvent(db.Model):
     __tablename__ = 'calendar_events'
     id = db.Column(db.Integer, primary_key=True)
@@ -439,11 +481,11 @@ class CalendarEvent(db.Model):
             'creator_name': self.creator.username if self.creator else None,
             'zoom_url': self.zoom_url,
             'zoom_meeting_id': self.zoom_meeting_id,
-           
             'participants': [user.to_dict() for user in self.participants],
             'is_private': self.is_private
         }
-    
+
+# Forms
 class UserForm(FlaskForm):
     username = StringField('Имя пользователя', validators=[DataRequired(), Length(min=3, max=50)])
     email = StringField('Email', validators=[Optional(), Email()])
@@ -454,3 +496,10 @@ class UserForm(FlaskForm):
 class RoleForm(FlaskForm):
     name = StringField('Название роли', validators=[DataRequired(), Length(max=80)])
     description = TextAreaField('Описание', validators=[Optional(), Length(max=255)])
+
+# Function to apply model enhancements
+def apply_model_enhancements():
+    """Apply enhancements to models for better creator and assignee information"""
+    print("Applying model enhancements to ensure creator information is displayed correctly")
+    # No need for additional modifications since we've updated the to_dict methods directly
+    pass

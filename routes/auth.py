@@ -93,10 +93,6 @@ def register():
     return render_template('dashboard/register.html')
 from routes.models import db, User  # Импортируй свою модель
 
-
-
-
-
 # from models import db, User  # Импортируй свою модель
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():

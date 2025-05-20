@@ -134,9 +134,19 @@
                   </div>
                   <!-- Action buttons -->
                   <div class="document-actions">
-                    <a href="{{ url_for('documents.view_file', filename=doc.name, category=active_category) }}" class="action-btn" target="_blank">
-                      <i class="bi bi-eye"></i>
-                    </a>
+                    <a href="{{ url_for('documents.download_file', filename=doc.name, category=active_category) }}" 
+                    class="action-btn view-file-btn"
+                    data-filename="{{ doc.name }}"
+                    data-category="{{ active_category }}"
+                    {% if not doc.exists %}hidden{% endif %}>
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <button class="action-btn send-to-chat-btn" 
+                          data-filename="{{ doc.name }}"
+                          data-category="{{ active_category }}">
+                      <i class="bi bi-send"></i>
+                  </button>
+                    
                     <a href="{{ url_for('documents.download_file', filename=doc.name, category=active_category) }}" class="action-btn">
                       <i class="bi bi-download"></i>
                     </a>
@@ -238,6 +248,67 @@
             <button type="submit" class="btn btn-primary">Send File</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="modal fade" id="fileViewerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fileViewerTitle">Document Viewer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="file-viewer-container">
+          <iframe id="fileViewerFrame" class="file-viewer-iframe" frameborder="0"></iframe>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a href="#" class="btn btn-primary" id="downloadFromViewerBtn">
+          <i class="bi bi-download"></i> Download
+        </a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Добавьте этот код в documents.html перед закрывающим тегом body -->
+<div class="modal fade" id="sendToChatModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Отправить документ в чат</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="sendToChatForm">
+          <div class="mb-3">
+            <label for="recipientsSelect" class="form-label">Выберите получателей</label>
+            <select class="form-select" id="recipientsSelect" multiple required>
+              {% for user in all_users %}
+                {% if user.id != current_user.id %}
+                  <option value="{{ user.id }}">{{ user.username }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="messageText" class="form-label">Сообщение (необязательно)</label>
+            <textarea class="form-control" id="messageText" rows="3"></textarea>
+          </div>
+          <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" id="fileToSend">
+          <input type="hidden" id="fileCategory">
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-primary" id="confirmSendToChat">Отправить</button>
       </div>
     </div>
   </div>

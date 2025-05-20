@@ -181,7 +181,7 @@
             <div class="archived-header collapsed" id="archivedHeader">
                 <div class="archived-title">
                     <i class="fas fa-archive"></i>
-                    <span>Archived Chats</span>
+                    <span>Архивированные чаты</span>
                     <span class="archived-count" id="archivedCount">0</span>
                 </div>
                 <div class="archived-toggle">
@@ -200,9 +200,9 @@
             <!-- Confirmation Dialog Templates (initially hidden) -->
             <div class="confirmation-dialog" id="archiveConfirmation" style="display: none;">
                 <div class="confirmation-content">
-                    <div class="confirmation-title">Archive Chat</div>
+                    <div class="confirmation-title">Заархивировать</div>
                     <div class="confirmation-message">
-                        Are you sure you want to archive this chat? It will be moved to the archived chats section.
+                        Вы уверены, что хотите заархивировать этот чат? Он будет перемещен в раздел архивных чатов.
                     </div>
                     <div class="confirmation-buttons">
                         <button class="btn-cancel" id="cancelArchive">Cancel</button>
@@ -213,26 +213,26 @@
 
             <div class="confirmation-dialog" id="unarchiveConfirmation" style="display: none;">
                 <div class="confirmation-content">
-                    <div class="confirmation-title">Unarchive Chat</div>
+                    <div class="confirmation-title">Разархивировать чат</div>
                     <div class="confirmation-message">
-                        Do you want to restore this chat to your main chat list?
+                        Вы хотите вернуть этот чат в основной список чатов?
                     </div>
                     <div class="confirmation-buttons">
-                        <button class="btn-cancel" id="cancelUnarchive">Cancel</button>
-                        <button class="btn-confirm primary" id="confirmUnarchive">Unarchive</button>
+                        <button class="btn-cancel" id="cancelUnarchive">Закрыть</button>
+                        <button class="btn-confirm primary" id="confirmUnarchive">Разархивировать</button>
                     </div>
                 </div>
             </div>
 
             <div class="confirmation-dialog" id="deleteConfirmation" style="display: none;">
                 <div class="confirmation-content">
-                    <div class="confirmation-title">Delete Chat</div>
+                    <div class="confirmation-title">Удалить чат</div>
                     <div class="confirmation-message">
-                        Are you sure you want to permanently delete this chat and all its messages? This action cannot be undone.
+                        Вы уверены, что хотите навсегда удалить этот чат и все его сообщения? Это действие нельзя отменить.
                     </div>
                     <div class="confirmation-buttons">
-                        <button class="btn-cancel" id="cancelDelete">Cancel</button>
-                        <button class="btn-confirm danger" id="confirmDelete">Delete</button>
+                        <button class="btn-cancel" id="cancelDelete">Закрыть</button>
+                        <button class="btn-confirm danger" id="confirmDelete">Удалить</button>
                     </div>
                 </div>
             </div>
@@ -240,19 +240,19 @@
             <div class="chat-context-menu" id="contextMenuTemplate" style="display: none;">
                 <div class="chat-context-menu-item archive-option">
                     <i class="fas fa-archive"></i>
-                    <span>Archive chat</span>
+                    <span>Заархивировать чат</span>
                 </div>
                 <div class="chat-context-menu-item unarchive-option" style="display: none;">
                     <i class="fas fa-inbox"></i>
-                    <span>Unarchive chat</span>
+                    <span>Разархивировать чат</span>
                 </div>
                 <div class="chat-context-menu-item mute-option">
                     <i class="fas fa-bell-slash"></i>
-                    <span>Mute notifications</span>
+                    <span>Отключить уведомления</span>
                 </div>
                 <div class="chat-context-menu-item danger delete-option">
                     <i class="fas fa-trash-alt"></i>
-                    <span>Delete chat</span>
+                    <span>Удалить чат</span>
                 </div>
             </div>
             <div class="contacts-list" id="contactsList">
@@ -269,8 +269,8 @@
                 <div class="no-chat-icon">
                     <i class="far fa-comment-alt"></i>
                 </div>
-                <h3 class="no-chat-title">Your Messages</h3>
-                <p class="no-chat-subtitle">Select a conversation or start a new one by clicking on a user.</p>
+                <h3 class="no-chat-title">Твои чаты</h3>
+                <p class="no-chat-subtitle">Выберите беседу или начните новую, нажав на пользователя.</p>
             </div>
             
             <!-- This will be shown when a chat is selected -->
@@ -308,7 +308,7 @@
                 </div>
                 
                 <div class="chat-typing" id="typingIndicator" style="display: none;">
-                    <span id="typingUsername"></span> is typing
+                    <span id="typingUsername"></span> печатает...
                     <div class="typing-indicator">
                         <span></span>
                         <span></span>
@@ -346,45 +346,67 @@
             </div>
         </div>
         
-        <!-- Profile Panel (Hidden by default) -->
+        <!-- Профильная панель (скрыта по умолчанию) -->
         <div class="profile-panel" id="profilePanel" style="display: none;">
             <div class="profile-header">
-                <div class="profile-title">Profile</div>
-                <div class="profile-close" id="closeProfile">
-                    <i class="fas fa-times"></i>
+            <div class="profile-title">Профиль пользователя</div>
+            <div class="profile-close" id="closeProfile">
+                <i class="fas fa-times"></i>
+            </div>
+            </div>
+            
+            <div class="profile-content">
+            <!-- Информация о пользователе -->
+            <div class="profile-user">
+                <div class="profile-avatar">
+                <img id="profileAvatar" src="" alt="Аватар пользователя">
+                </div>
+                <h3 class="profile-name" id="profileName"></h3>
+                <p class="profile-title" id="profileTitle"></p>
+                <span class="profile-status-badge" id="profileStatusBadge">Неизвестно</span>
+            </div>
+            
+            <!-- О пользователе -->
+            <div class="profile-section">
+                <h4 class="profile-section-title">
+                <i class="fas fa-info-circle"></i>
+                О пользователе
+                </h4>
+                <p class="profile-about" id="profileAbout"></p>
+            </div>
+            
+            <!-- Контактная информация -->
+            <div class="profile-section" id="contactInfoSection">
+                <h4 class="profile-section-title">
+                <i class="fas fa-address-card"></i>
+                Контактная информация
+                </h4>
+                <div class="profile-info-item">
+                <i class="fas fa-envelope profile-info-icon"></i>
+                <span class="profile-info-label">Email:</span>
+                <span class="profile-info-value" id="profileEmail"></span>
+                </div>
+                <div class="profile-info-item">
+                <i class="fas fa-user profile-info-icon"></i>
+                <span class="profile-info-label">Логин:</span>
+                <span class="profile-info-value" id="profileUsername"></span>
+                </div>
+                <div class="profile-info-item">
+                <i class="fas fa-phone profile-info-icon"></i>
+                <span class="profile-info-label">Телефон:</span>
+                <span class="profile-info-value" id="profilePhone"></span>
                 </div>
             </div>
-            <div class="profile-content">
-                <div class="profile-user">
-                    <div class="profile-avatar">
-                        <img id="profileAvatar" src="" alt="Profile Avatar">
-                    </div>
-                    <h3 class="profile-name" id="profileName"></h3>
-                    <p class="profile-title" id="profileTitle"></p>
-                    <span class="profile-status-badge profile-status-online" id="profileStatusBadge">Online</span>
-                </div>
-                
+            
+                <!-- Общие файлы -->
                 <div class="profile-section">
-                    <h4 class="profile-section-title">About</h4>
-                    <p class="profile-about" id="profileAbout"></p>
-                </div>
-                
-                <div class="profile-section">
-                    <h4 class="profile-section-title">Contact Information</h4>
-                    <div class="profile-info-item">
-                        <i class="fas fa-envelope profile-info-icon"></i>
-                        <span id="profileEmail"></span>
-                    </div>
-                    <div class="profile-info-item">
-                        <i class="fas fa-user profile-info-icon"></i>
-                        <span id="profileUsername"></span>
-                    </div>
-                </div>
-                
-                <div class="profile-section">
-                    <h4 class="profile-section-title">Shared Files</h4>
+                    <h4 class="profile-section-title">
+                    <i class="fas fa-file-alt"></i>
+                    Общие файлы
+                    </h4>
                     <div class="shared-files" id="sharedFiles">
-                        <!-- File items will be populated by JavaScript -->
+                    <!-- Файлы будут загружены с помощью JavaScript -->
+                    <div class="no-shared-files">Нет общих файлов</div>
                     </div>
                 </div>
             </div>
@@ -396,28 +418,28 @@
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="createGroupModalLabel">Create Group Chat</h5>
+                    <h5 class="modal-title" id="createGroupModalLabel">Создать групповой чат</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="groupName" class="form-label">Group Name</label>
-                        <input type="text" class="form-control" id="groupName" placeholder="Enter group name">
+                        <label for="groupName" class="form-label">Название Группы</label>
+                        <input type="text" class="form-control" id="groupName" placeholder="Введите название группы" required>
                     </div>
                     <div class="mb-3">
-                        <label for="groupDescription" class="form-label">Description</label>
-                        <textarea class="form-control" id="groupDescription" placeholder="Enter group description" rows="2"></textarea>
+                        <label for="groupDescription" class="form-label">Описание</label>
+                        <textarea class="form-control" id="groupDescription" placeholder="Введите описание группы" rows="2"></textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Add Participants</label>
+                        <label class="form-label">Добавить Участников</label>
                         <div class="participants-list" id="participantsList">
                             <!-- Participants will be populated by JavaScript -->
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="createGroupBtn">Create Group</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-primary" id="createGroupBtn">Создать группу</button>
                 </div>
             </div>
         </div>

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, send_from_directory, flash
+from flask import Blueprint, render_template, request, redirect, url_for, send_from_directory, flash, current_app,jsonify
 import os
 import unicodedata
 import chardet
@@ -12,6 +12,14 @@ from .config import BASE_UPLOAD_FOLDER
 documents_bp = Blueprint('documents', __name__)
 from .trash import TrashManager  # добавьте этот импорт
 from routes.models import User  # Добавим импорт модели User
+from flask import send_file
+import tempfile
+from pdf2image import convert_from_bytes
+from docx2pdf import convert
+import io
+
+
+
 from routes.auth import role_required  # Импортируем декоратор для проверки роли
 # Основная папка для загрузок
 trash_manager = TrashManager(BASE_UPLOAD_FOLDER)
@@ -48,6 +56,256 @@ def get_common_folder():
     common_folder = os.path.join(BASE_UPLOAD_FOLDER, "common")
     os.makedirs(common_folder, exist_ok=True)
     return common_folder
+# Add these imports to your documents.py file
+from docx import Document
+import html
+import re
+import os
+import tempfile
+from bs4 import BeautifulSoup
+import mammoth
+
+
+@documents_bp.route('/send_to_chat', methods=['POST'])
+@login_required
+def send_to_chat():
+    try:
+        data = request.json
+        filename = data.get('filename')
+        category = data.get('category')
+        recipients = data.get('recipients', [])
+        message_text = data.get('message', '')
+
+        if not filename or not category or not recipients:
+            return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
+
+        # Получаем путь к файлу
+        if category == 'personal':
+            folder = get_user_upload_folder(current_user.id)
+        elif category == 'common':
+            folder = get_common_folder()
+        elif category == 'important':
+            folder = get_important_folder()
+        else:
+            return jsonify({'success': False, 'error': 'Invalid category'}), 400
+
+        filepath = os.path.join(folder, filename)
+        if not os.path.exists(filepath):
+            return jsonify({'success': False, 'error': 'File not found'}), 404
+
+        # Создаем лобби с выбранными пользователями
+        user_ids = [int(uid) for uid in recipients]
+        user_ids.append(current_user.id)  # Добавляем текущего пользователя
+
+        # Проверяем, есть ли уже существующее лобби между этими пользователями
+        existing_lobby = Lobby.query.filter(
+            Lobby.is_group.is_(False),
+            Lobby.users.any(User.id.in_(user_ids))
+        ).group_by(Lobby.id).having(
+            db.func.count(User.id) == len(user_ids)
+        ).first()
+
+        if existing_lobby:
+            lobby = existing_lobby
+        else:
+            # Создаем новое лобби
+            lobby = Lobby(is_group=len(user_ids) > 2)
+            for user_id in user_ids:
+                user = User.query.get(user_id)
+                if user:
+                    lobby.users.append(user)
+            db.session.add(lobby)
+            db.session.commit()
+
+        # Отправляем файл в чат
+        file_size = os.path.getsize(filepath)
+        file_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+        destination_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+
+        # Копируем файл в папку загрузок чата
+        shutil.copy(filepath, destination_path)
+
+        # Создаем сообщение
+        new_message = Message(
+            sender_id=current_user.id,
+            lobby_id=lobby.id,
+            text=message_text,
+            message_type=get_file_type(filename),
+            file_path=f'/uploads/{unique_filename}',
+            file_name=filename,
+            file_size=file_size,
+            file_type=file_type
+        )
+        db.session.add(new_message)
+        db.session.commit()
+
+        # Отправляем уведомления получателям
+        for user_id in user_ids:
+            if user_id != current_user.id:
+                socketio.emit('new_message', new_message.to_dict(), room=f'user_{user_id}')
+
+        return jsonify({'success': True, 'lobby_id': lobby.id})
+
+    except Exception as e:
+        current_app.logger.error(f"Error sending file to chat: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@documents_bp.route('/preview/<category>/<path:filename>')
+@login_required
+def preview_file(category, filename):
+    from urllib.parse import unquote
+    from flask import abort, current_app, send_from_directory, Response, render_template_string
+    import os
+    
+    try:
+        # Decode the filename from URL
+        filename = unquote(filename)
+        
+        # Validate category
+        if category not in ['personal', 'common', 'important']:
+            abort(404, description="Invalid category")
+            
+        # Get folder path
+        if category == 'personal':
+            folder = get_user_upload_folder(current_user.id)
+        elif category == 'common':
+            folder = get_common_folder()
+        else:
+            folder = get_important_folder()
+            
+        # Full path to file
+        filepath = os.path.join(folder, filename)
+        
+        # Check if file exists
+        if not os.path.exists(filepath):
+            current_app.logger.error(f"File not found: {filepath}")
+            abort(404, description="File not found")
+        
+        # Get file extension
+        file_ext = os.path.splitext(filename)[1].lower()
+        
+        # For PDF files use browser's built-in viewer
+        if file_ext == '.pdf':
+            response = send_from_directory(folder, filename)
+            response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            response.headers['Content-Security-Policy'] = "frame-ancestors 'self'"
+            return response
+        
+        # For DOCX files, convert to HTML for preview
+        elif file_ext in ['.docx', '.doc']:
+            try:
+                # Convert DOCX to HTML using mammoth
+                with open(filepath, 'rb') as docx_file:
+                    result = mammoth.convert_to_html(docx_file)
+                    html_content = result.value
+                
+                # Create a complete HTML document
+                preview_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>{html.escape(filename)}</title>
+                    <style>
+                        body {{ 
+                            font-family: Arial, sans-serif; 
+                            margin: 40px; 
+                            line-height: 1.6;
+                        }}
+                        img {{ max-width: 100%; }}
+                    </style>
+                </head>
+                <body>
+                    {html_content}
+                </body>
+                </html>
+                """
+                
+                return Response(preview_html, mimetype='text/html')
+            except Exception as e:
+                current_app.logger.error(f"Error converting DOCX to HTML: {str(e)}")
+                # Fall back to download if conversion fails
+                return send_from_directory(folder, filename, as_attachment=True)
+        
+        # For TXT files, display content
+        elif file_ext == '.txt':
+            try:
+                encoding = detect_file_encoding(filepath)
+                with open(filepath, 'r', encoding=encoding, errors='replace') as f:
+                    content = f.read()
+                
+                # Create a simple HTML display
+                preview_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>{html.escape(filename)}</title>
+                    <style>
+                        body {{ 
+                            font-family: monospace; 
+                            margin: 40px; 
+                            white-space: pre-wrap;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    {html.escape(content)}
+                </body>
+                </html>
+                """
+                
+                return Response(preview_html, mimetype='text/html')
+            except Exception as e:
+                current_app.logger.error(f"Error reading TXT file: {str(e)}")
+                return send_from_directory(folder, filename, as_attachment=True)
+        
+        # For other file types
+        else:
+            response = send_from_directory(folder, filename)
+            response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            response.headers['Content-Security-Policy'] = "frame-ancestors 'self'"
+            return response
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in preview_file: {str(e)}")
+        abort(500, description="Internal server error")
+
+def get_common_folder():
+    """Create and return a folder for common documents with proper permissions"""
+    common_folder = os.path.join(BASE_UPLOAD_FOLDER, "common")
+    try:
+        os.makedirs(common_folder, exist_ok=True)
+        # Устанавливаем правильные права доступа
+        os.chmod(common_folder, 0o755)
+    except Exception as e:
+        current_app.logger.error(f"Error creating common folder: {str(e)}")
+        raise
+    return common_folder
+
+# В том же documents.py добавим вспомогательную функцию
+def check_file_exists(category, filename):
+    """Проверяет существование файла и возвращает его путь или None"""
+    try:
+        filename = unquote(filename)
+        
+        if category == 'personal':
+            folder = get_user_upload_folder(current_user.id)
+        elif category == 'common':
+            folder = get_common_folder()
+        elif category == 'important':
+            folder = get_important_folder()
+        else:
+            return None
+            
+        filepath = os.path.join(folder, filename)
+        return filepath if os.path.exists(filepath) else None
+    except:
+        return None
 
 def get_important_folder():
     """Create and return a folder for important documents"""
@@ -84,14 +342,21 @@ def detect_file_encoding(filepath):
 def translate_file(filepath, direction='ky-ru'):
     """Улучшенный перевод файлов с обработкой ошибок"""
     try:
+        # Проверка существования файла
+        if not os.path.exists(filepath):
+            return None, "Файл не существует"
+        
         # Проверка размера файла
         if os.path.getsize(filepath) == 0:
             return None, "Файл пуст"
         
         # Извлечение текста
-        content = extract_text_from_file(filepath)
-        if not content or not content.strip():
-            return None, "Не удалось извлечь текст или файл пуст"
+        try:
+            content = extract_text_from_file(filepath)
+            if not content or not content.strip():
+                return None, "Не удалось извлечь текст или файл пуст"
+        except Exception as e:
+            return None, f"Ошибка извлечения текста: {str(e)}"
         
         # Настройки перевода
         lang_map = {
@@ -103,24 +368,37 @@ def translate_file(filepath, direction='ky-ru'):
             return None, "Неверное направление перевода"
         
         source, target = lang_map[direction]
-        translator = GoogleTranslator(source=source, target=target)
         
         # Разделение на части для больших файлов
-        max_chunk_size = 4000
-        chunks = [content[i:i+max_chunk_size] for i in range(0, len(content), max_chunk_size)]
+        max_chunk_size = 3000  # Уменьшенный размер для надежности
+        chunks = split_text_for_translation(content, max_chunk_size)
         translated = []
         
         for chunk in chunks:
             try:
                 if chunk.strip():
-                    translated.append(translator.translate(chunk))
+                    # Добавляем задержку между запросами
+                    import time
+                    time.sleep(1)  # 1 секунда между запросами
+                    
+                    translator = GoogleTranslator(source=source, target=target)
+                    translated_chunk = translator.translate(chunk)
+                    translated.append(translated_chunk)
             except Exception as e:
-                return None, f"Ошибка перевода: {str(e)}"
+                # Логирование ошибки
+                print(f"Translation error for chunk: {str(e)}")
+                return None, f"Ошибка перевода части текста: {str(e)}"
         
         return ' '.join(translated), None
     
     except Exception as e:
         return None, f"Ошибка обработки файла: {str(e)}"
+
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def translate_with_retry(translator, text):
+    return translator.translate(text)
 def extract_text_from_file(filepath):
     """Универсальное извлечение текста из разных форматов файлов"""
     ext = os.path.splitext(filepath)[1].lower()
@@ -292,15 +570,24 @@ def list_documents(category):
                     'name': filename,
                     'size': f"{file_stats.st_size / 1024:.2f} KB",
                     'uploaded_at': datetime.fromtimestamp(file_stats.st_mtime).strftime('%Y-%m-%d %H:%M'),
-                    'icon': get_file_icon(filename)
+                    'icon': get_file_icon(filename),
+                    'exists': True
                 })
     except Exception as e:
         flash(f'Error reading documents: {str(e)}', 'error')
 
     if not documents:
-        documents = [{'name': "No documents available. Upload a new file!"}]
+        documents = [{'name': "No documents available. Upload a new file!", 'exists': False}]
     
-    return render_template('documents/documents.html', documents=documents, active_category=category)
+    # Получаем всех пользователей для выпадающего списка
+    from .models import User  # Добавляем импорт
+    all_users = User.query.filter(User.id != current_user.id).all()
+    
+    return render_template('documents/documents.html', 
+                         documents=documents, 
+                         active_category=category,
+                         check_file_exists=check_file_exists,
+                         all_users=all_users)  # Передаем список пользователей
 
 @documents_bp.route('/create_documents', methods=['GET', 'POST'])
 def create_documents():

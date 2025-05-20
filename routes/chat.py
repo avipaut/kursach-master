@@ -3,7 +3,7 @@
 import os
 import uuid
 from flask import Blueprint, render_template, request, jsonify, send_from_directory, current_app
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import emit, join_room, leave_room
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 from routes.models import db, User, Message, MessageType, Lobby, ReadReceipt
@@ -11,7 +11,9 @@ from datetime import datetime
 
 # Create Blueprint
 chat_bp = Blueprint('chat', __name__)
-socketio = SocketIO()
+
+# Убираем дублирование создания socketio
+# socketio = SocketIO() - УДАЛЯЕМ эту строку
 
 # Configure upload folder
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'uploads')
@@ -138,7 +140,8 @@ def create_lobby():
     
     # Notify all users in the lobby about its creation
     for user_id in user_ids:
-        emit('lobby_created', lobby.to_dict(), room=f'user_{user_id}', namespace='/')
+        # Используем current_app.socketio вместо emit напрямую
+        current_app.socketio.emit('lobby_created', lobby.to_dict(), room=f'user_{user_id}')
     
     return jsonify(lobby.to_dict()), 201
 
@@ -185,14 +188,14 @@ def get_lobby_messages(lobby_id):
     if unread_messages:
         db.session.commit()
         
-        # Notify other users about message read status
+        # Notify other users about message read status using current_app.socketio
         for user in lobby.users:
             if user.id != current_user.id:
-                emit('messages_read', {
+                current_app.socketio.emit('messages_read', {
                     'lobby_id': lobby_id,
                     'user_id': current_user.id,
                     'message_ids': unread_messages
-                }, room=f'user_{user.id}', namespace='/')
+                }, room=f'user_{user.id}')
     
     return jsonify([message.to_dict() for message in messages])
 
@@ -383,12 +386,15 @@ def upload_file():
                 message_data = new_message.to_dict()
                 print(f"Message data for response: {message_data}")
                 
-                # Emit to all users in lobby
+                # Emit to all users in lobby using current_app.socketio
                 socketio_success = True
                 try:
+                    # Импортируем функцию для создания уведомлений
+                    from routes.notifications import notify_user
+                    
                     for user in lobby.users:
                         print(f"Emitting to user_{user.id}")
-                        socketio.emit('new_message', message_data, room=f'user_{user.id}')
+                        current_app.socketio.emit('new_message', message_data, room=f'user_{user.id}')
                         
                         # Create notification for other users
                         if user.id != current_user.id:
@@ -403,6 +409,24 @@ def upload_file():
                                 notification_text = "📹 Video"
                             elif message_type == MessageType.FILE:
                                 notification_text = f"📎 File: {original_filename}"
+                            
+                            # Создаем уведомление о сообщении
+                            if notification_text:
+                                link = f"/chat?lobby_id={lobby_id}"
+                                if lobby.is_group:
+                                    notify_user(
+                                        user.id, 
+                                        f"{current_user.username} sent in {lobby.name}: {notification_text}", 
+                                        'info', 
+                                        link
+                                    )
+                                else:
+                                    notify_user(
+                                        user.id, 
+                                        f"New message from {current_user.username}: {notification_text}", 
+                                        'info', 
+                                        link
+                                    )
                 except Exception as emit_error:
                     print(f"Socket.IO emit error: {str(emit_error)}")
                     socketio_success = False
@@ -431,26 +455,6 @@ def upload_file():
         print(f"Unexpected exception in upload_file: {str(e)}")
         traceback.print_exc()
         return jsonify({'success': False, 'error': f"Server error: {str(e)}"}), 500
-
-# Also ensure get_file_type is working correctly:
-def get_file_type(filename):
-    """Determine file type based on extension"""
-    print(f"Determining file type for: {filename}")
-    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
-    print(f"File extension: {ext}")
-    
-    if ext in ['jpg', 'jpeg', 'png', 'gif']:
-        print("File type: IMAGE")
-        return MessageType.IMAGE
-    elif ext in ['mp3', 'wav', 'ogg']:
-        print("File type: AUDIO")
-        return MessageType.AUDIO
-    elif ext in ['mp4', 'webm', 'mov']:
-        print("File type: VIDEO")
-        return MessageType.VIDEO
-    else:
-        print("File type: FILE")
-        return MessageType.FILE
 
 @chat_bp.route('/upload_avatar', methods=['POST'])
 @login_required
@@ -558,230 +562,258 @@ def get_lobbies_with_unread():
     
     return jsonify(result)
 
-# Socket.IO event handlers
-@socketio.on('connect')
-def handle_connect():
-    """Handle client connection"""
-    if current_user.is_authenticated:
-        # Обновляем статус онлайн
-        current_user.is_online = True
-        current_user.last_seen = datetime.utcnow()
-        db.session.commit()
-        
-        # Оповещаем других пользователей
-        emit('user_status_change', {
-            'user_id': current_user.id,
-            'is_online': True
-        }, broadcast=True)
-        
-        # Join a room specific to this user
-        join_room(f'user_{current_user.id}')
-        
-        # Join rooms for all lobbies the user is in
-        for lobby in current_user.lobbies:
-            join_room(f'lobby_{lobby.id}')
+# Обработчики Socket.IO
+# Добавляем функцию инициализации для регистрации обработчиков Socket.IO
+def init_socketio(socketio):
+    """Initialize the socketio handlers"""
+    register_socketio_handlers(socketio)
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Handle client disconnection"""
-    if current_user.is_authenticated:
-        # Обновляем статус оффлайн
-        current_user.is_online = False
-        current_user.last_seen = datetime.utcnow()
-        db.session.commit()
-        
-        # Оповещаем других пользователей
-        emit('user_status_change', {
-            'user_id': current_user.id,
-            'is_online': False
-        }, broadcast=True)
-        
-        # Leave user-specific room
-        leave_room(f'user_{current_user.id}')
-        
-        # Leave all lobby rooms
-        for lobby in current_user.lobbies:
-            leave_room(f'lobby_{lobby.id}')
-
-@socketio.on('join_lobby')
-def handle_join_lobby(data):
-    """Handle user joining a specific lobby"""
-    lobby_id = data.get('lobby_id')
+def register_socketio_handlers(socketio):
+    """Register all Socket.IO event handlers"""
     
-    if not lobby_id:
-        return
-    
-    # Check if lobby exists and user is a member
-    lobby = Lobby.query.get(lobby_id)
-    if not lobby or current_user not in lobby.users:
-        return
-    
-    # Join the lobby room
-    join_room(f'lobby_{lobby_id}')
-
-@socketio.on('leave_lobby')
-def handle_leave_lobby(data):
-    """Handle user leaving a specific lobby"""
-    lobby_id = data.get('lobby_id')
-    
-    if lobby_id:
-        leave_room(f'lobby_{lobby_id}')
-
-
-@socketio.on('send_message')
-def handle_send_message(data):
-    """Handle sending a text message"""
-    print(f"Received message: {data}")
-    message_text = data.get('message', '')
-    lobby_id = data.get('lobby_id')
-    
-    if not message_text or not lobby_id:
-        print("Missing message text or lobby_id")
-        return
-    
-    # Check if lobby exists and user is a member
-    lobby = Lobby.query.get(lobby_id)
-    if not lobby or current_user not in lobby.users:
-        print(f"Lobby {lobby_id} not found or user not in lobby")
-        return
-    
-    try:
-        # Create new message
-        new_message = Message(
-            sender_id=current_user.id,
-            lobby_id=lobby_id,
-            text=message_text,
-            message_type=MessageType.TEXT
-        )
-        
-        db.session.add(new_message)
-        db.session.commit()
-        
-        # Automatically mark message as read by sender
-        receipt = ReadReceipt(message_id=new_message.id, user_id=current_user.id)
-        db.session.add(receipt)
-        db.session.commit()
-        
-        # Prepare message data
-        message_data = new_message.to_dict()
-        print(f"Created message: {message_data}")
-        
-        # Import notification module
-        from routes.notifications import create_message_notification
-        
-        # Emit message to all users in the lobby and create notifications
-        for user in lobby.users:
-            print(f"Emitting message to user {user.id}")
-            emit('new_message', message_data, room=f'user_{user.id}')
+    @socketio.on('connect')
+    def handle_connect():
+        """Handle client connection"""
+        if current_user.is_authenticated:
+            # Обновляем статус онлайн
+            current_user.is_online = True
+            current_user.last_seen = datetime.utcnow()
+            db.session.commit()
             
-            # Create notification for other users
-            if user.id != current_user.id:
-                # Create notification - do this after message emission
-                try:
-                    # Use a separate database session to avoid conflicts
-                    create_message_notification(user.id, current_user.id, lobby_id, message_text)
-                except Exception as notification_error:
-                    print(f"Error creating notification: {str(notification_error)}")
-                    # Don't roll back the main transaction if notification fails
-
-        print("Message sent successfully")
-    except Exception as e:
-        print(f"Error sending message: {str(e)}")
-        db.session.rollback()
-    
-@socketio.on('user_typing')
-def handle_user_typing(data):
-    """Handle user typing indicator"""
-    lobby_id = data.get('lobby_id')
-    
-    if not lobby_id:
-        return
-    
-    # Check if lobby exists and user is a member
-    lobby = Lobby.query.get(lobby_id)
-    if not lobby or current_user not in lobby.users:
-        return
-    
-    # Emit typing indicator to all users in the lobby
-    for user in lobby.users:
-        if user.id != current_user.id:
-            emit('user_typing', {
-                'lobby_id': lobby_id,
+            # Оповещаем других пользователей
+            emit('user_status_change', {
                 'user_id': current_user.id,
-                'username': current_user.username
-            }, room=f'user_{user.id}')
-
-@socketio.on('stop_typing')
-def handle_stop_typing(data):
-    """Handle user stop typing indicator"""
-    lobby_id = data.get('lobby_id')
+                'is_online': True
+            }, broadcast=True)
+            
+            # Join a room specific to this user
+            join_room(f'user_{current_user.id}')
+            
+            # Join rooms for all lobbies the user is in
+            for lobby in current_user.lobbies:
+                join_room(f'lobby_{lobby.id}')
     
-    if not lobby_id:
-        return
-    
-    # Check if lobby exists and user is a member
-    lobby = Lobby.query.get(lobby_id)
-    if not lobby or current_user not in lobby.users:
-        return
-    
-    # Emit stop typing indicator to all users in the lobby
-    for user in lobby.users:
-        if user.id != current_user.id:
-            emit('user_stop_typing', {
-                'lobby_id': lobby_id,
-                'user_id': current_user.id
-            }, room=f'user_{user.id}')
-
-@socketio.on('read_messages')
-def handle_read_messages(data):
-    """Mark messages as read and notify other users"""
-    lobby_id = data.get('lobby_id')
-    
-    if not lobby_id:
-        return
-    
-    # Check if lobby exists and user is a member
-    lobby = Lobby.query.get(lobby_id)
-    if not lobby or current_user not in lobby.users:
-        return
-    
-    # Mark all messages in the lobby as read by the current user
-    unread_messages = Message.query.filter_by(lobby_id=lobby_id).filter(
-        Message.sender_id != current_user.id,
-        ~Message.read_by.any(ReadReceipt.user_id == current_user.id)
-    ).all()
-    
-    message_ids = []  # Список ID прочитанных сообщений
-    
-    for message in unread_messages:
-        receipt = ReadReceipt(message_id=message.id, user_id=current_user.id)
-        db.session.add(receipt)
-        message_ids.append(message.id)
-    
-    db.session.commit()
-    
-    # Notify other users that messages were read
-    for user in lobby.users:
-        if user.id != current_user.id:
-            emit('messages_read', {
-                'lobby_id': lobby_id,
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        """Handle client disconnection"""
+        if current_user.is_authenticated:
+            # Обновляем статус оффлайн
+            current_user.is_online = False
+            current_user.last_seen = datetime.utcnow()
+            db.session.commit()
+            
+            # Оповещаем других пользователей
+            emit('user_status_change', {
                 'user_id': current_user.id,
-                'message_ids': message_ids
-            }, room=f'user_{user.id}')
-
-@socketio.on('join_user_room')
-def handle_join_user_room(data):
-    """Handle user joining their personal notification room for global notifications"""
-    user_id = data.get('user_id')
+                'is_online': False
+            }, broadcast=True)
+            
+            # Leave user-specific room
+            leave_room(f'user_{current_user.id}')
+            
+            # Leave all lobby rooms
+            for lobby in current_user.lobbies:
+                leave_room(f'lobby_{lobby.id}')
     
-    if not user_id:
-        return
+    @socketio.on('join_lobby')
+    def handle_join_lobby(data):
+        """Handle user joining a specific lobby"""
+        lobby_id = data.get('lobby_id')
         
-    # Check if the user is authorized
-    if not current_user.is_authenticated or current_user.id != user_id:
-        return
+        if not lobby_id:
+            return
+        
+        # Check if lobby exists and user is a member
+        lobby = Lobby.query.get(lobby_id)
+        if not lobby or current_user not in lobby.users:
+            return
+        
+        # Join the lobby room
+        join_room(f'lobby_{lobby_id}')
     
-    # Join the user specific room
-    room_name = f'user_{user_id}'
-    join_room(room_name)
-    print(f"User {user_id} joined global notification room: {room_name}")
+    @socketio.on('leave_lobby')
+    def handle_leave_lobby(data):
+        """Handle user leaving a specific lobby"""
+        lobby_id = data.get('lobby_id')
+        
+        if lobby_id:
+            leave_room(f'lobby_{lobby_id}')
+    
+    @socketio.on('send_message')
+    def handle_send_message(data):
+        """Handle sending a text message"""
+        print(f"Received message: {data}")
+        message_text = data.get('message', '')
+        lobby_id = data.get('lobby_id')
+        
+        if not message_text or not lobby_id:
+            print("Missing message text or lobby_id")
+            return
+        
+        # Check if lobby exists and user is a member
+        lobby = Lobby.query.get(lobby_id)
+        if not lobby or current_user not in lobby.users:
+            print(f"Lobby {lobby_id} not found or user not in lobby")
+            return
+        
+        try:
+            # Create new message
+            new_message = Message(
+                sender_id=current_user.id,
+                lobby_id=lobby_id,
+                text=message_text,
+                message_type=MessageType.TEXT
+            )
+            
+            db.session.add(new_message)
+            db.session.flush()  # Flush to get the message ID
+            
+            # Automatically mark message as read by sender
+            receipt = ReadReceipt(message_id=new_message.id, user_id=current_user.id)
+            db.session.add(receipt)
+            db.session.commit()
+            
+            # Prepare message data
+            message_data = new_message.to_dict()
+            print(f"Created message: {message_data}")
+            
+            # Import notification module
+            from routes.notifications import create_message_notification
+            
+            # Emit message to all users in the lobby and create notifications
+            for user in lobby.users:
+                print(f"Emitting message to user {user.id}")
+                emit('new_message', message_data, room=f'user_{user.id}')
+                
+                # Create notification for other users
+                if user.id != current_user.id:
+                    # Create notification - do this after message emission
+                    try:
+                        # Use the imported function
+                        create_message_notification(user.id, current_user.id, lobby_id, message_text)
+                    except Exception as notification_error:
+                        print(f"Error creating notification: {str(notification_error)}")
+            
+            print("Message sent successfully")
+        except Exception as e:
+            print(f"Error sending message: {str(e)}")
+            db.session.rollback()
+    
+    @socketio.on('user_typing')
+    def handle_user_typing(data):
+        """Handle user typing indicator"""
+        lobby_id = data.get('lobby_id')
+        
+        if not lobby_id:
+            return
+        
+        # Check if lobby exists and user is a member
+        lobby = Lobby.query.get(lobby_id)
+        if not lobby or current_user not in lobby.users:
+            return
+        
+        # Emit typing indicator to all users in the lobby
+        for user in lobby.users:
+            if user.id != current_user.id:
+                emit('user_typing', {
+                    'lobby_id': lobby_id,
+                    'user_id': current_user.id,
+                    'username': current_user.username
+                }, room=f'user_{user.id}')
+    
+    @socketio.on('stop_typing')
+    def handle_stop_typing(data):
+        """Handle user stop typing indicator"""
+        lobby_id = data.get('lobby_id')
+        
+        if not lobby_id:
+            return
+        
+        # Check if lobby exists and user is a member
+        lobby = Lobby.query.get(lobby_id)
+        if not lobby or current_user not in lobby.users:
+            return
+        
+        # Emit stop typing indicator to all users in the lobby
+        for user in lobby.users:
+            if user.id != current_user.id:
+                emit('user_stop_typing', {
+                    'lobby_id': lobby_id,
+                    'user_id': current_user.id
+                }, room=f'user_{user.id}')
+    
+    @socketio.on('read_messages')
+    def handle_read_messages(data):
+        """Mark messages as read and notify other users"""
+        lobby_id = data.get('lobby_id')
+        
+        if not lobby_id:
+            return
+        
+        # Check if lobby exists and user is a member
+        lobby = Lobby.query.get(lobby_id)
+        if not lobby or current_user not in lobby.users:
+            return
+        
+        # Mark all messages in the lobby as read by the current user
+        unread_messages = Message.query.filter_by(lobby_id=lobby_id).filter(
+            Message.sender_id != current_user.id,
+            ~Message.read_by.any(ReadReceipt.user_id == current_user.id)
+        ).all()
+        
+        message_ids = []  # Список ID прочитанных сообщений
+        
+        for message in unread_messages:
+            receipt = ReadReceipt(message_id=message.id, user_id=current_user.id)
+            db.session.add(receipt)
+            message_ids.append(message.id)
+        
+        db.session.commit()
+        
+        # Notify other users that messages were read
+        for user in lobby.users:
+            if user.id != current_user.id:
+                emit('messages_read', {
+                    'lobby_id': lobby_id,
+                    'user_id': current_user.id,
+                    'message_ids': message_ids
+                }, room=f'user_{user.id}')
+
+    @socketio.on('join_user_room')
+    def handle_join_user_room(data):
+        """Handle user joining their personal notification room for global notifications"""
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return
+            
+        # Check if the user is authorized
+        if not current_user.is_authenticated or current_user.id != user_id:
+            return
+        
+        # Join the user specific room
+        room_name = f'user_{user_id}'
+        join_room(room_name)
+        print(f"User {user_id} joined global notification room: {room_name}")
+
+
+    @socketio.on('update_online_status')
+    def handle_online_status_update(data):
+        """Handle user online status update"""
+        if current_user.is_authenticated:
+            is_online = data.get('is_online', True)
+            
+            # Обновляем статус в базе данных
+            current_user.is_online = is_online
+            current_user.last_seen = datetime.utcnow()
+            db.session.commit()
+            
+            # Оповещаем других пользователей об изменении статуса
+            emit('user_status_change', {
+                'user_id': current_user.id,
+                'is_online': is_online
+            }, broadcast=True)
+            
+            return {'success': True}
+        
+        return {'success': False, 'error': 'Not authenticated'}

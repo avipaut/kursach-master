@@ -2,7 +2,7 @@
 
 /* Базовые стили для навигационной панели */
 :root {
-  --primary-color: #c71320;
+  --primary-color: #c9121e;
   --secondary-color: #f0f2f5;
   --text-color: #1a1a1a;
   --text-secondary: #65676b;
@@ -67,7 +67,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--primary-color);
+  color: #c9121e;
   font-weight: 600;
   font-size: 24px;
 }

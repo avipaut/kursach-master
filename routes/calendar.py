@@ -12,6 +12,7 @@ from flask import redirect
 from routes.notifications import notify_user
 
 
+
 # Setup logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -31,7 +32,9 @@ def admin_required(f):
 @calendar_bp.route('/')
 @login_required
 def calendar_page():
-    return render_template('calendar_zoom/calendar.html')
+    highlight_deadline = request.args.get('highlight_deadline')
+
+    return render_template('calendar_zoom/calendar.html', highlight_deadline=highlight_deadline)
 
 # Get users for participant selection
 @calendar_bp.route('/users', methods=['GET'])

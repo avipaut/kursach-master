@@ -8,8 +8,14 @@ from datetime import timedelta  # Для установки времени жи�
 from functools import wraps
 from routes.models import Role, User
 from werkzeug.security import generate_password_hash
+
+# Create SocketIO instance at the top level before importing blueprints
+# This avoids circular import issues
+socketio = SocketIO()
+
+# Now import blueprints
 from routes.documents import documents_bp
-from routes.chat import chat_bp, socketio
+from routes.chat import chat_bp, init_socketio  # Добавлен импорт функции init_socketio
 from routes.calendar import calendar_bp
 from routes.reports import reports_bp
 from routes.dashboard import dashboard_bp
@@ -23,12 +29,19 @@ from routes.admin_panel import admin_bp
 from routes.profile import profile_bp  # Импортируем Profile Blueprint
 from routes.card_assignment import card_assignment_bp, init_card_assignment_db  # Import new card assignment module
 
-
-
 # Инициализация Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
+
+# Initialize SocketIO with the app
 socketio.init_app(app, async_mode="eventlet", cors_allowed_origins="*", ping_timeout=5, ping_interval=25)
+
+# Make socketio instance available to app context so notifications.py can access it
+app.socketio = socketio
+
+# Инициализируем обработчики Socket.IO для чата
+init_socketio(socketio)
+
 # # Настройка приложения
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///main.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -67,7 +80,7 @@ migrate = Migrate(app, db)
 # Передаём login_manager в auth.py
 init_login_manager(login_manager)
 
-# Добавляем обработчики WebSocket (новый код)
+# Добавляем обработчики WebSocket
 @socketio.on('connect')
 def handle_connect():
     if current_user.is_authenticated:
@@ -80,6 +93,19 @@ def handle_connect():
 def handle_disconnect():
     if current_user.is_authenticated:
         print(f'User {current_user.id} disconnected from WebSocket')
+
+# Add a specific handler for users joining their notification rooms
+@socketio.on('join_user_room')
+def handle_join_user_room(data):
+    """Handle user joining their personal notification room"""
+    if current_user.is_authenticated:
+        user_id = data.get('user_id')
+        
+        # Make sure the user is only joining their own room
+        if str(user_id) == str(current_user.id):
+            room_name = f'user_{user_id}'
+            join_room(room_name)
+            print(f"User {user_id} joined their notification room: {room_name}")
 
 # Функция для создания начальных ролей и админа
 def create_initial_roles_and_admin():
@@ -165,9 +191,9 @@ def check_login():
     # Список путей, доступных без аутентификации
     open_paths = [
         '/login',
-        '/register',
+        # '/register',
         '/auth/login',
-        '/auth/register',
+        # '/auth/register',
         '/static',
         '/',
         '/test-session'

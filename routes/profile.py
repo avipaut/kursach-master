@@ -1,10 +1,11 @@
 # routes/profile.py
 
-from flask import Blueprint, render_template, current_app, request, redirect, url_for, flash
+from flask import Blueprint, render_template, current_app, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
+import json
 from routes.models import db, User
 from routes.notifications import add_notification
 
@@ -72,6 +73,28 @@ def remove_avatar():
     
     return redirect(url_for('profile.profile_page'))
 
+@profile_bp.route('/profile/update_profile_info', methods=['POST'])
+@login_required
+def update_profile_info():
+    # Получаем данные из формы
+    phone = request.form.get('phone')
+    department = request.form.get('department')
+    building = request.form.get('building')
+    faculty = request.form.get('faculty')
+    
+    # Обновляем данные пользователя
+    user = User.query.get(current_user.id)
+    user.phone = phone
+    user.department = department
+    user.building = building
+    user.faculty = faculty
+    
+    db.session.commit()
+    
+    add_notification(current_user.id, "Информация профиля успешно обновлена", category="success")
+    flash('Информация профиля успешно обновлена', 'success')
+    return redirect(url_for('profile.profile_page'))
+
 @profile_bp.route('/profile/change_password', methods=['POST'])
 @login_required
 def change_password():
@@ -121,22 +144,46 @@ def change_email():
 @profile_bp.route('/profile/notification_settings', methods=['POST'])
 @login_required
 def notification_settings():
-    # Здесь будет логика для настройки оповещений (нерабочая функция)
+    # Получаем настройки уведомлений из формы
+    message_notifications = 'message_notifications' in request.form
+    task_notifications = 'task_notifications' in request.form
+    meeting_notifications = 'meeting_notifications' in request.form
+    
+    # Здесь будет логика для сохранения настроек уведомлений в будущей реализации
+    # Можно добавить таблицу NotificationSettings в базу данных
+    
     flash('Настройки оповещений обновлены', 'success')
     return redirect(url_for('profile.profile_page'))
 
-@profile_bp.route('/profile/appearance_settings', methods=['POST'])
+# API для сохранения настроек через AJAX
+@profile_bp.route('/profile/api/save_theme', methods=['POST'])
 @login_required
-def appearance_settings():
-    theme = request.form.get('theme', 'light')
-    # Здесь будет логика для сохранения настроек темы (нерабочая функция)
-    flash('Настройки внешнего вида обновлены', 'success')
-    return redirect(url_for('profile.profile_page'))
+def save_theme():
+    try:
+        data = request.get_json()
+        theme = data.get('theme', 'dark')
+        
+        # В будущем можно сохранять тему в базу данных
+        # user = User.query.get(current_user.id)
+        # user.theme_preference = theme
+        # db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Тема успешно сохранена'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
 
-@profile_bp.route('/profile/language_settings', methods=['POST'])
+@profile_bp.route('/profile/api/save_background', methods=['POST'])
 @login_required
-def language_settings():
-    language = request.form.get('language', 'ru')
-    # Здесь будет логика для сохранения настроек языка (нерабочая функция)
-    flash('Язык интерфейса изменен', 'success')
-    return redirect(url_for('profile.profile_page'))
+def save_background():
+    try:
+        data = request.get_json()
+        background_index = data.get('background_index', 0)
+        
+        # В будущем можно сохранять фон в базу данных
+        # user = User.query.get(current_user.id)
+        # user.background_preference = background_index
+        # db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Фон успешно сохранен'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})

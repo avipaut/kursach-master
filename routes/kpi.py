@@ -1,14 +1,19 @@
-from flask import Blueprint, request, render_template, jsonify
+from flask import Blueprint, request, render_template, jsonify,current_app, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import insert
 from routes.models import db, KPI, User, KPITemplate
 import logging
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Dict, Any
+from werkzeug.utils import secure_filename
 import re
 import json
 import ast
 import operator
+import os
+import zipfile
 import math
+import pandas as pd
 from datetime import datetime
 from .notifications import notify_user
 logger = logging.getLogger(__name__)
@@ -51,7 +56,100 @@ SAFE_FUNCTIONS = {
     'ceil': math.ceil,
     'floor': math.floor,
 }
+@kpi_bp.route('/export_kpi', methods=['POST'])
+@login_required
+def export_kpi():
+    """Export KPI data to Excel for selected user or all users"""
+    try:
+        if not current_user.is_admin:
+            return jsonify({"status": "error", "message": "Admin access required"}), 403
 
+        data = request.get_json()
+        user_id = data.get('user_id')
+        export_all = data.get('export_all', False)
+
+        # Create exports directory if not exists
+        exports_dir = os.path.join(current_app.root_path, 'static', 'exports')
+        if not os.path.exists(exports_dir):
+            os.makedirs(exports_dir)
+
+        if export_all:
+            # Export all users
+            users = User.query.all()
+            for user in users:
+                export_user_kpi(user, exports_dir)
+            
+            # Create zip archive
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            zip_filename = f"all_kpi_{timestamp}.zip"
+            zip_path = os.path.join(exports_dir, zip_filename)
+            
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                for user in users:
+                    user_dir = os.path.join(exports_dir, str(user.id))
+                    if os.path.exists(user_dir):
+                        for file in os.listdir(user_dir):
+                            file_path = os.path.join(user_dir, file)
+                            # Store files in user-specific subfolders
+                            zipf.write(file_path, os.path.join(user.username, file))
+            
+            return jsonify({
+                "status": "success",
+                "download_url": url_for('static', filename=f'exports/{zip_filename}', _external=True)
+            })
+        else:
+            # Export single user
+            if not user_id:
+                return jsonify({"status": "error", "message": "User ID required"}), 400
+
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({"status": "error", "message": "User not found"}), 404
+
+            filename = export_user_kpi(user, exports_dir)
+            return jsonify({
+                "status": "success",
+                "download_url": url_for('static', filename=f'exports/{user.id}/{filename}', _external=True)
+            })
+
+    except Exception as e:
+        logger.error(f"Error exporting KPI: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
+def export_user_kpi(user, exports_dir):
+    """Helper function to export single user KPI"""
+    try:
+        # Create user directory if not exists
+        user_dir = os.path.join(exports_dir, str(user.id))
+        if not os.path.exists(user_dir):
+            os.makedirs(user_dir)
+
+        # Get KPI data
+        data, columns, formulas = get_kpi_data_from_db(user.id)
+        
+        # Create DataFrame
+        df = pd.DataFrame(data, columns=columns)
+        
+        # Add formulas as additional rows
+        formula_row = ["Formula" if col == columns[0] else "" for col in columns]
+        for i, col in enumerate(columns):
+            if any(row[i] for row in formulas):
+                formula_row[i] = "\n".join([f"Row {idx+1}: {row[i]}" for idx, row in enumerate(formulas) if row[i]])
+        
+        df.loc[len(df)] = formula_row
+        
+        # Generate filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{secure_filename(user.username)}_{timestamp}.xlsx"
+        filepath = os.path.join(user_dir, filename)
+        
+        # Save to Excel
+        df.to_excel(filepath, index=False, engine='openpyxl')
+        
+        return filename
+    except Exception as e:
+        logger.error(f"Error exporting user {user.id} KPI: {str(e)}")
+        raise
 def safe_eval(expr, variables):
     """Безопасное вычисление выражения"""
     try:
@@ -82,32 +180,55 @@ def safe_eval(expr, variables):
     
     return _eval(tree.body)
 
-def evaluate_formula(formula: str, row_data: dict, column_names: list = None) -> str:
-    """Улучшенная обработка формул"""
+def evaluate_formula(formula: str, row_data: dict, column_names: list = None, all_rows_data: list = None) -> str:
+    """Улучшенная обработка формул с поддержкой ссылок на другие строки"""
     if column_names is None:
         column_names = list(row_data.keys())
     
+    if all_rows_data is None:
+        all_rows_data = [row_data]
+    
     try:
         variables = {}
+        
+        # Обработка ссылок на другие строки [Column#Row]
+        formula = re.sub(r'\[([^\]#]+)#(\d+)\]', 
+                        lambda m: f'__row_{m.group(2)}__{m.group(1)}', 
+                        formula)
+        
+        # Обработка ссылок на текущую строку [Column]
+        formula = re.sub(r'\[([^\]#]+)\]', 
+                        lambda m: f'__current__{m.group(1)}', 
+                        formula)
+        
+        # Добавляем переменные из текущей строки
         for col_name, value in row_data.items():
-            safe_name = col_name.lower().replace(' ', '_')
+            safe_name = f'__current__{col_name}'
             try:
                 variables[safe_name] = float(value) if value else 0.0
             except (ValueError, TypeError):
                 variables[safe_name] = 0.0
         
+        # Добавляем переменные из других строк
+        for row_idx, other_row in enumerate(all_rows_data):
+            for col_name, value in other_row.items():
+                safe_name = f'__row_{row_idx}__{col_name}'
+                try:
+                    variables[safe_name] = float(value) if value else 0.0
+                except (ValueError, TypeError):
+                    variables[safe_name] = 0.0
+        
+        # Добавляем математические константы и функции
         variables.update({
             'pi': math.pi,
-            'e': math.e
+            'e': math.e,
+            'sum': sum,
+            'avg': lambda *args: sum(args)/len(args) if args else 0,
+            'min': min,
+            'max': max
         })
         
-        normalized_formula = formula
-        for col_name in column_names:
-            safe_name = col_name.lower().replace(' ', '_')
-            pattern = r'\[' + re.escape(col_name) + r'\]'
-            normalized_formula = re.sub(pattern, safe_name, normalized_formula)
-        
-        result = safe_eval(normalized_formula, variables)
+        result = safe_eval(formula, variables)
         if isinstance(result, (int, float)):
             return str(round(result, 4)).rstrip('0').rstrip('.') if '.' in str(result) else str(result)
         return str(result)
@@ -115,7 +236,6 @@ def evaluate_formula(formula: str, row_data: dict, column_names: list = None) ->
     except Exception as e:
         logger.error(f"Formula error: {e} in formula '{formula}'")
         return f"#ERROR: {str(e)}"
-
 def validate_formula(formula: str, column_names: list) -> Dict[str, Any]:
     """Validate formula syntax."""
     if not formula:
@@ -141,18 +261,28 @@ def validate_formula(formula: str, column_names: list) -> Dict[str, Any]:
 def sync_template_columns(user_id: int, template_columns: List[str], max_row: int):
     """Sync template columns to user's KPI table preserving column order."""
     try:
-        # Get existing columns for the user with original order
+        # Получаем шаблон с порядком колонок
+        template_columns_with_order = db.session.query(
+            KPITemplate.column_name, KPITemplate.column_order
+        ).distinct(KPITemplate.column_name).order_by(
+            KPITemplate.column_order, KPITemplate.id
+        ).all()
+        
+        # Создаем словарь с порядком колонок
+        column_orders = {col: order for col, order in template_columns_with_order}
+        
+        # Get existing columns for the user
         existing_columns = [col[0] for col in 
-                          db.session.query(KPI.column_name, KPI.id)
+                          db.session.query(KPI.column_name)
                           .filter(KPI.user_id == user_id)
                           .distinct(KPI.column_name)
-                          .order_by(KPI.id)
                           .all()]
         
         # Add any missing columns from the template in their original order
         new_columns = [col for col in template_columns if col not in existing_columns]
         
         for col in new_columns:
+            order = column_orders.get(col, 0)  # Получаем порядок из шаблона
             for row_idx in range(max_row + 1):
                 kpi_entry = KPI.query.filter_by(
                     row_index=row_idx,
@@ -165,7 +295,8 @@ def sync_template_columns(user_id: int, template_columns: List[str], max_row: in
                         column_name=col,
                         value="",
                         user_id=user_id,
-                        last_updated=datetime.utcnow()
+                        last_updated=datetime.utcnow(),
+                        column_order=order  # Устанавливаем тот же порядок, что и в шаблоне
                     )
                     db.session.add(new_kpi)
         
@@ -175,72 +306,67 @@ def sync_template_columns(user_id: int, template_columns: List[str], max_row: in
         db.session.rollback()
         logger.error(f"Database error syncing columns: {e}")
         raise
+
 def get_kpi_data_from_db(user_id=None, admin_view=False, template=False):
-    """Get KPI or template data from database and format for template with column order preserved."""
+    """Получение данных KPI в табличном формате"""
     try:
         if template:
-            # Получаем все записи шаблона
-            kpis = KPITemplate.query.order_by(KPITemplate.row_index, KPITemplate.column_name).all()
+            # Получаем названия колонок, сортируя по column_order
+            columns = [
+                col[0] for col in db.session.query(
+                    KPITemplate.column_name
+                ).distinct().order_by(KPITemplate.column_order, KPITemplate.id).all()
+            ]
             
-            # Получаем уникальные названия столбцов с сохранением порядка добавления
-            db_columns = db.session.query(KPITemplate.column_name, KPITemplate.id)\
-                                  .distinct(KPITemplate.column_name)\
-                                  .order_by(KPITemplate.id)\
-                                  .all()
-            columns = [col[0] for col in db_columns]
+            # Получаем все данные
+            all_entries = KPITemplate.query.order_by(KPITemplate.row_index, KPITemplate.id).all()
             
-            # Определяем максимальный индекс строки
-            max_row = db.session.query(db.func.max(KPITemplate.row_index)).scalar() or 0
+            # Определяем количество строк
+            max_row = max([e.row_index for e in all_entries] or [0]) + 1
             
-            # Создаём матрицы данных и формул
-            data = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]
-            formulas = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]
+            # Инициализируем таблицы
+            data = [["" for _ in columns] for _ in range(max_row)]
+            formulas = [["" for _ in columns] for _ in range(max_row)]
             
-            # Заполняем данные и формулы с учетом порядка колонок
-            for kpi in kpis:
-                try:
-                    col_idx = columns.index(kpi.column_name)
-                    data[kpi.row_index][col_idx] = kpi.calculated_value or kpi.value or ""
-                    formulas[kpi.row_index][col_idx] = kpi.formula or ""
-                except (ValueError, IndexError) as e:
-                    logger.warning(f"Error placing KPI data: {e}")
+            # Заполняем данными
+            for entry in all_entries:
+                if entry.column_name in columns:
+                    col_idx = columns.index(entry.column_name)
+                    row_idx = entry.row_index
+                    data[row_idx][col_idx] = entry.calculated_value or entry.value or ""
+                    formulas[row_idx][col_idx] = entry.formula or ""
             
             return data, columns, formulas
-        else:
-            # Для пользовательских данных
-            query = db.session.query(KPI)
-            if not admin_view:
-                query = query.filter(KPI.user_id == user_id)
-            kpis = query.order_by(KPI.user_id, KPI.row_index, KPI.column_name).all()
-            
-            # Получаем колонки с сохранением порядка добавления
-            columns_query = db.session.query(KPI.column_name, KPI.id)\
-                                    .filter(KPI.user_id == user_id)\
-                                    .distinct(KPI.column_name)\
-                                    .order_by(KPI.id)
-            if admin_view:
-                columns_query = db.session.query(KPI.column_name, KPI.id)\
-                                       .distinct(KPI.column_name)\
-                                       .order_by(KPI.id)
 
-            db_columns = columns_query.all()
-            columns = [col[0] for col in db_columns]
-            max_row = db.session.query(db.func.max(KPI.row_index)).filter(KPI.user_id == user_id).scalar() or 0
-            data = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]
-            formulas = [["" for _ in range(len(columns))] for _ in range(max_row + 1)]
-
-            for kpi in kpis:
-                try:
-                    col_idx = columns.index(kpi.column_name)
-                    data[kpi.row_index][col_idx] = kpi.calculated_value or kpi.value or ""
-                    formulas[kpi.row_index][col_idx] = kpi.formula or ""
-                except (ValueError, IndexError) as e:
-                    logger.warning(f"Error placing KPI data: {e}")
+        # Аналогично для пользовательских данных
+        columns = [
+            col[0] for col in db.session.query(
+                KPI.column_name
+            ).filter(KPI.user_id == user_id)
+            .distinct().order_by(KPI.column_order, KPI.id).all()
+        ]
+        
+        all_entries = KPI.query.filter(KPI.user_id == user_id)\
+            .order_by(KPI.row_index, KPI.id).all()
+        
+        max_row = max([e.row_index for e in all_entries] or [0]) + 1
+        
+        data = [["" for _ in columns] for _ in range(max_row)]
+        formulas = [["" for _ in columns] for _ in range(max_row)]
+        
+        for entry in all_entries:
+            if entry.column_name in columns:
+                col_idx = columns.index(entry.column_name)
+                row_idx = entry.row_index
+                data[row_idx][col_idx] = entry.calculated_value or entry.value or ""
+                formulas[row_idx][col_idx] = entry.formula or ""
         
         return data, columns, formulas
-    except SQLAlchemyError as e:
-        logger.error(f"Database error fetching KPI data: {e}")
+
+    except Exception as e:
+        logger.error(f"Error in get_kpi_data_from_db: {str(e)}")
         return [], [], []
+    
 @kpi_bp.route('/kpi', methods=['GET'])
 @login_required
 def kpi_constructor():
@@ -287,6 +413,9 @@ def kpi_constructor():
     except Exception as e:
         logger.error(f"Error displaying KPI constructor: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
 @kpi_bp.route('/validate_formula', methods=['POST'])
 @login_required
 def validate_formula(formula: str, column_names: list) -> Dict[str, Any]:
@@ -330,6 +459,9 @@ def add_column():
         elif user_id != current_user.id:
             return jsonify({"status": "error", "message": "Unauthorized"}), 403
         
+        # Получаем максимальный column_order для пользователя
+        max_order = db.session.query(db.func.max(KPI.column_order)).filter(KPI.user_id == user_id).scalar() or 0
+        
         max_row = db.session.query(db.func.max(KPI.row_index)).filter(KPI.user_id == user_id).scalar() or 0
         for row_idx in range(max_row + 1):
             kpi_entry = KPI.query.filter_by(
@@ -343,12 +475,13 @@ def add_column():
                     column_name=column_name,
                     value="",
                     user_id=user_id,
-                    last_updated=datetime.utcnow()
+                    last_updated=datetime.utcnow(),
+                    column_order=max_order + 1  # Устанавливаем порядок колонки
                 )
                 db.session.add(new_kpi)
         
         db.session.commit()
-        logger.info(f"Added new column: {column_name} for user {user_id}")
+        logger.info(f"Added new column: {column_name} for user {user_id} with order {max_order + 1}")
         return jsonify({
             "status": "success",
             "new_column": column_name,
@@ -379,17 +512,21 @@ def add_template_column():
         if KPITemplate.query.filter_by(column_name=column_name).first():
             return jsonify({"status": "error", "message": "Column already exists"}), 400
         
+        # Получаем максимальный column_order для шаблона
+        max_order = db.session.query(db.func.max(KPITemplate.column_order)).scalar() or 0
+        
         max_row = db.session.query(db.func.max(KPITemplate.row_index)).scalar() or 0
         for row_idx in range(max_row + 1):
             new_template = KPITemplate(
                 row_index=row_idx,
                 column_name=column_name,
-                value=""
+                value="",
+                column_order=max_order + 1  # Устанавливаем порядок колонки
             )
             db.session.add(new_template)
         
         db.session.commit()
-        logger.info(f"Added new template column: {column_name}")
+        logger.info(f"Added new template column: {column_name} with order {max_order + 1}")
         return jsonify({
             "status": "success",
             "new_column": column_name,
@@ -554,17 +691,21 @@ def save_kpi():
         if user_id != current_user.id and not current_user.is_admin:
             return jsonify({"status": "error", "message": "Unauthorized"}), 403
 
-        # Получаем порядок колонок из данных формы
+        # Получаем порядок колонок
         column_order = []
+        column_order_dict = {}
         for key in sorted(data.keys()):
             if key.startswith('column_name_'):
                 col_idx = int(key.split('_')[2])
                 column_name = str(data[key])
                 if column_name and column_name not in column_order:
                     column_order.append(column_name)
+                    column_order_dict[column_name] = col_idx
 
-        # Собираем все данные для сохранения
-        cells_to_save = {}
+        # Собираем все данные таблицы
+        max_row = max([int(key.split('_')[1]) for key in data 
+                      if key.startswith('cell_') or key.startswith('formula_')] + [0]) + 1
+        all_rows_data = [{} for _ in range(max_row)]
         formulas_to_save = {}
 
         for key, value in data.items():
@@ -574,7 +715,7 @@ def save_kpi():
                 col_idx = int(parts[3])
                 if col_idx < len(column_order):
                     column_name = column_order[col_idx]
-                    cells_to_save[(row_idx, column_name)] = str(value) if value is not None else ""
+                    all_rows_data[row_idx][column_name] = str(value) if value is not None else ""
             
             elif key.startswith('formula_'):
                 parts = key.split('_')
@@ -586,65 +727,39 @@ def save_kpi():
 
         with db.session.begin_nested():
             # Сохраняем данные ячеек
-            for (row_idx, col_name), value in cells_to_save.items():
-                kpi_entry = KPI.query.filter_by(
-                    user_id=user_id,
-                    row_index=row_idx,
-                    column_name=col_name
-                ).first()
-
-                if kpi_entry:
-                    kpi_entry.value = value
-                    kpi_entry.last_updated = datetime.utcnow()
-                else:
-                    new_kpi = KPI(
+            for row_idx, row_data in enumerate(all_rows_data):
+                for col_name, value in row_data.items():
+                    kpi_entry = KPI.query.filter_by(
                         user_id=user_id,
                         row_index=row_idx,
-                        column_name=col_name,
-                        value=value,
-                        last_updated=datetime.utcnow()
-                    )
-                    db.session.add(new_kpi)
+                        column_name=col_name
+                    ).first()
 
-            # Сохраняем формулы
-            for (row_idx, col_name), formula in formulas_to_save.items():
-                kpi_entry = KPI.query.filter_by(
-                    user_id=user_id,
-                    row_index=row_idx,
-                    column_name=col_name
-                ).first()
+                    if kpi_entry:
+                        kpi_entry.value = value
+                        kpi_entry.column_order = column_order_dict[col_name]  # Обновляем порядок
+                        kpi_entry.last_updated = datetime.utcnow()
+                    else:
+                        new_kpi = KPI(
+                            user_id=user_id,
+                            row_index=row_idx,
+                            column_name=col_name,
+                            value=value,
+                            column_order=column_order_dict[col_name],  # Устанавливаем порядок
+                            last_updated=datetime.utcnow()
+                        )
+                        db.session.add(new_kpi)
 
-                if kpi_entry:
-                    kpi_entry.formula = formula
-                    kpi_entry.last_updated = datetime.utcnow()
-                else:
-                    new_kpi = KPI(
-                        user_id=user_id,
-                        row_index=row_idx,
-                        column_name=col_name,
-                        formula=formula,
-                        last_updated=datetime.utcnow()
-                    )
-                    db.session.add(new_kpi)
-
-            # Пересчитываем формулы
+            # Сохраняем и вычисляем формулы
             for (row_idx, col_name), formula in formulas_to_save.items():
                 if not formula:
                     continue
                     
                 try:
-                    # Получаем все значения строки
-                    row_data = {}
-                    for entry in KPI.query.filter_by(
-                        user_id=user_id,
-                        row_index=row_idx
-                    ).all():
-                        row_data[entry.column_name] = entry.value or ""
-
-                    # Вычисляем формулу
-                    calculated = evaluate_formula(formula, row_data, column_order)
+                    # Вычисляем формулу, передавая все строки
+                    calculated = evaluate_formula(formula, all_rows_data[row_idx], column_order, all_rows_data)
                     
-                    # Обновляем calculated_value
+                    # Обновляем kpi_entry
                     kpi_entry = KPI.query.filter_by(
                         user_id=user_id,
                         row_index=row_idx,
@@ -652,7 +767,21 @@ def save_kpi():
                     ).first()
                     
                     if kpi_entry:
+                        kpi_entry.formula = formula
                         kpi_entry.calculated_value = calculated
+                        kpi_entry.column_order = column_order_dict[col_name]  # Обновляем порядок
+                        kpi_entry.last_updated = datetime.utcnow()
+                    else:
+                        new_kpi = KPI(
+                            user_id=user_id,
+                            row_index=row_idx,
+                            column_name=col_name,
+                            formula=formula,
+                            calculated_value=calculated,
+                            column_order=column_order_dict[col_name],  # Устанавливаем порядок
+                            last_updated=datetime.utcnow()
+                        )
+                        db.session.add(new_kpi)
                 except Exception as e:
                     logger.error(f"Error evaluating formula: {str(e)}")
                     if kpi_entry:
@@ -662,6 +791,7 @@ def save_kpi():
         return jsonify({"status": "success", "message": "KPI data saved with correct column order"})
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Error saving KPI: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @kpi_bp.route('/save_template', methods=['POST'])
@@ -676,12 +806,14 @@ def save_template():
         
         # Получаем порядок колонок из данных формы
         column_order = []
+        column_order_dict = {}
         for key in sorted(data.keys()):
             if key.startswith('template_column_name_'):
                 col_idx = int(key.split('_')[3])
                 column_name = str(data[key])
                 if column_name and column_name not in column_order:
                     column_order.append(column_name)
+                    column_order_dict[column_name] = col_idx
 
         with db.session.begin_nested():
             # Очищаем старый шаблон
@@ -707,6 +839,7 @@ def save_template():
                         column_name=column_name,
                         value=str(cell_value) if cell_value is not None else "",
                         formula=formula_value,
+                        column_order=column_order_dict[column_name],  # Устанавливаем порядок
                         last_updated=datetime.utcnow()
                     )
                     db.session.add(template_entry)
@@ -720,50 +853,55 @@ def save_template():
 @kpi_bp.route('/apply_template_to_all', methods=['POST'])
 @login_required
 def apply_template_to_all():
-    """Apply template to all users with column order preservation."""
     try:
         if not current_user.is_admin:
             return jsonify({"status": "error", "message": "Admin access required"}), 403
+
+        # Получаем все данные шаблона
+        template_data = KPITemplate.query.all()
         
-        # Получаем данные шаблона с порядком колонок
-        template_columns = [col[0] for col in 
-                          db.session.query(KPITemplate.column_name, KPITemplate.id)
-                          .distinct(KPITemplate.column_name)
-                          .order_by(KPITemplate.id)
-                          .all()]
+        # Создаем словарь для хранения порядка колонок
+        column_orders = {}
+        for entry in template_data:
+            column_orders[entry.column_name] = entry.column_order
         
-        max_row_template = db.session.query(db.func.max(KPITemplate.row_index)).scalar() or 0
         users = User.query.all()
         
         with db.session.begin_nested():
             for user in users:
-                # Удаляем старые данные пользователя
+                # Удаляем старые данные
                 db.session.query(KPI).filter(KPI.user_id == user.id).delete()
                 
-                # Копируем шаблон с сохранением порядка колонок
-                for row_idx in range(max_row_template + 1):
-                    for col_idx, column_name in enumerate(template_columns):
-                        template_entry = KPITemplate.query.filter_by(
-                            row_index=row_idx,
-                            column_name=column_name
-                        ).first()
-                        
-                        if template_entry:
-                            new_kpi = KPI(
-                                row_index=row_idx,
-                                column_name=column_name,
-                                value=template_entry.value or "",
-                                formula=template_entry.formula,
-                                calculated_value=template_entry.calculated_value,
-                                user_id=user.id,
-                                last_updated=datetime.utcnow()
-                            )
-                            db.session.add(new_kpi)
+                # Готовим новые данные
+                new_kpis = []
+                for entry in template_data:
+                    new_kpis.append({
+                        'row_index': entry.row_index,
+                        'column_name': entry.column_name,
+                        'value': entry.value or "",
+                        'formula': entry.formula or "",
+                        'calculated_value': entry.calculated_value or "",
+                        'user_id': user.id,
+                        'column_order': column_orders[entry.column_name],  # Сохраняем порядок колонок
+                        'last_updated': datetime.utcnow()
+                    })
+                
+                # Массовая вставка
+                if new_kpis:
+                    db.session.execute(
+                        insert(KPI),
+                        new_kpis
+                    )
         
         db.session.commit()
-        return jsonify({"status": "success", "message": "Template applied to all users with correct column order"})
+        return jsonify({
+            "status": "success",
+            "message": f"Template applied to {len(users)} users",
+            "records_added": len(template_data) * len(users)
+        })
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Error applying template: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @kpi_bp.route('/get_chart_data', methods=['GET'])

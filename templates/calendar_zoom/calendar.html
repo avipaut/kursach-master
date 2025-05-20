@@ -164,6 +164,27 @@
         .modal-content::-webkit-scrollbar-thumb:hover {
             background: #555;
         }
+        /* Add this to the style section in calendar.html */
+@keyframes highlight-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.7);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(255, 87, 34, 0);
+        transform: scale(1.05);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 87, 34, 0);
+        transform: scale(1);
+    }
+}
+
+.highlight-pulse {
+    animation: highlight-pulse 1s infinite;
+    z-index: 1000 !important;
+    position: relative;
+}
     </style>
 </head>
 <body class="min-h-screen bg-gray-50 flex flex-col">
@@ -395,21 +416,30 @@
         const isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
         
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize select2 for participants selectors
-            $('.participants-select').select2({
-                placeholder: 'Выберите участников',
-                width: '100%'
-            });
-            
-            // Load users for participant selection
-            loadUsers();
-            
-            // Initialize the calendar
-            initializeCalendar();
-            
-            // Add event listeners
-            initializeEventListeners();
-        });
+    // Initialize select2 for participants selectors
+    $('.participants-select').select2({
+        placeholder: 'Выберите участников',
+        width: '100%'
+    });
+    
+    // Load users for participant selection
+    loadUsers();
+    
+    // Check if we have a deadline to highlight
+    const urlParams = new URLSearchParams(window.location.search);
+    const highlightDeadline = urlParams.get('highlight_deadline');
+    
+    // Initialize the calendar
+    initializeCalendar();
+    
+    // Highlight deadline if needed (after calendar is initialized)
+    if (highlightDeadline) {
+        setTimeout(() => highlightDeadlineOnCalendar(highlightDeadline), 1000);
+    }
+    
+    // Add event listeners
+    initializeEventListeners();
+});
         
         function initializeCalendar() {
             const calendarEl = document.getElementById('calendar');
@@ -1113,6 +1143,60 @@
     } else {
         // Если board_id не найден, используем серверный маршрут для определения доски
         window.location.href = `/calendar/goto-card/${cardId}`;
+    }
+}
+// Add this new function to highlight a deadline
+function highlightDeadlineOnCalendar(deadlineStr) {
+    try {
+        const deadlineDate = new Date(deadlineStr);
+        
+        // Find all deadline events on this date
+        const deadlineEvents = calendar.getEvents().filter(event => {
+            // Check if it's a card deadline
+            if (!event.extendedProps.is_card) return false;
+            
+            // Compare dates (ignoring time)
+            const eventDate = new Date(event.start);
+            return eventDate.toDateString() === deadlineDate.toDateString();
+        });
+        
+        // If we found matching deadline events
+        if (deadlineEvents.length > 0) {
+            // Go to the date of the deadline
+            calendar.gotoDate(deadlineDate);
+            
+            // Find the event element in the DOM
+            deadlineEvents.forEach(event => {
+                // Try to find the event element
+                setTimeout(() => {
+                    const eventElements = document.querySelectorAll('.fc-event');
+                    
+                    eventElements.forEach(element => {
+                        // We don't have direct access to the event ID in the element,
+                        // so we check if it contains the event title and is a deadline event
+                        if (element.textContent.includes(event.title) && 
+                            element.classList.contains('card-deadline-event')) {
+                            
+                            // Apply highlight style
+                            element.classList.add('highlight-pulse');
+                            
+                            // Scroll to the element
+                            element.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'center'
+                            });
+                            
+                            // Remove highlight after 5 seconds
+                            setTimeout(() => {
+                                element.classList.remove('highlight-pulse');
+                            }, 5000);
+                        }
+                    });
+                }, 300); // Small delay to ensure calendar is rendered
+            });
+        }
+    } catch (error) {
+        console.error('Error highlighting deadline:', error);
     }
 }
     </script>

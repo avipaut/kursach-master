@@ -187,9 +187,6 @@
                     <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='excel', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-success export-btn">
                         <i class="fas fa-file-excel"></i> Excel
                     </a>
-                    <a href="{{ url_for('reports.export_report', report_type=report_type, board_id=board_id, period_type=period_type, format='json', start_date=start_date, end_date=end_date) }}" class="btn btn-sm btn-outline-primary export-btn">
-                        <i class="fas fa-file-code"></i> JSON
-                    </a>
                     <a href="{{ url_for('reports.reports_dashboard') }}" class="btn btn-sm btn-outline-secondary">
                         <i class="fas fa-arrow-left"></i> Назад
                     </a>
@@ -268,29 +265,22 @@
                             </div>
                             
                             <!-- Распределение по приоритетам -->
-                            <p><strong>Задачи по приоритетам:</strong></p>
                             <div class="d-flex justify-content-between mb-2">
-                                {% if user_data.priority.low > 0 %}
-                                <span class="badge badge-low">Низкий: {{ user_data.priority.low }}</span>
-                                {% endif %}
-                                {% if user_data.priority.medium > 0 %}
-                                <span class="badge badge-medium">Средний: {{ user_data.priority.medium }}</span>
-                                {% endif %}
-                                {% if user_data.priority.high > 0 %}
-                                <span class="badge badge-high">Высокий: {{ user_data.priority.high }}</span>
-                                {% endif %}
+                                <span class="badge badge-low">Низкий: {{ user_data.priority.low if user_data.priority.low is defined else 0 }}</span>
+                                <span class="badge badge-medium">Средний: {{ user_data.priority.medium if user_data.priority.medium is defined else 0 }}</span>
+                                <span class="badge badge-high">Высокий: {{ user_data.priority.high if user_data.priority.high is defined else 0 }}</span>
                             </div>
-                            
+
                             <!-- Индикатор приоритетов -->
                             <div class="priority-indicator">
                                 {% if user_data.total > 0 %}
-                                    {% if user_data.priority.low > 0 %}
+                                    {% if user_data.priority.low is defined and user_data.priority.low > 0 %}
                                     <div class="priority-bar priority-low" style="width: {{ (user_data.priority.low / user_data.total * 100)|round(1) }}%"></div>
                                     {% endif %}
-                                    {% if user_data.priority.medium > 0 %}
+                                    {% if user_data.priority.medium is defined and user_data.priority.medium > 0 %}
                                     <div class="priority-bar priority-medium" style="width: {{ (user_data.priority.medium / user_data.total * 100)|round(1) }}%"></div>
                                     {% endif %}
-                                    {% if user_data.priority.high > 0 %}
+                                    {% if user_data.priority.high is defined and user_data.priority.high > 0 %}
                                     <div class="priority-bar priority-high" style="width: {{ (user_data.priority.high / user_data.total * 100)|round(1) }}%"></div>
                                     {% endif %}
                                 {% endif %}
@@ -311,7 +301,6 @@
     </div>
 
     <!-- Скрипты -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script>

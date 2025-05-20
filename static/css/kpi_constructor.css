@@ -47,6 +47,10 @@ body {
     padding: 12px 15px;
     transition: all 0.2s;
     min-width: 120px;
+    max-width: 550px; /* Максимальная ширина */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    vertical-align: top; /* Выравнивание по верху для более естественного вида с текстовыми областями */
 }
 
 .kpi-table td:first-child {
@@ -81,6 +85,11 @@ body {
     font-family: 'Inter', sans-serif;
     font-size: 14px;
     min-width: 100px;
+    resize: none; /* Отключаем ручное изменение размера */
+    overflow: hidden; /* Скрываем полосы прокрутки */
+    min-height: 36px; /* Минимальная высота */
+    line-height: 1.4; /* Улучшение читаемости */
+    white-space: pre-wrap; /* Сохраняем переводы строк и пробелы */
 }
 
 .kpi-input:focus {
@@ -89,10 +98,23 @@ body {
     box-shadow: 0 0 0 2px rgba(199, 19, 32, 0.2);
 }
 
+/* Стили для ячеек с формулами */
+.formula-cell .kpi-input {
+    background-color: #f0fdf4 !important;
+    font-weight: 500;
+}
+
+.formula-error .kpi-input {
+    background-color: #fee2e2 !important;
+    color: #dc2626;
+}
+
 .formula-btn {
+    position: absolute;
+    top: 12px;
+    right: 15px;
     font-size: 11px;
     padding: 3px 6px;
-    margin-left: 5px;
     background-color: rgba(199, 19, 32, 0.1);
     color: var(--primary-red);
     border-radius: 4px;
@@ -100,10 +122,16 @@ body {
     cursor: pointer;
     transition: all 0.2s;
     opacity: 0;
+    z-index: 2;
 }
 
 .formula-btn:hover {
     background-color: rgba(199, 19, 32, 0.2);
+}
+
+/* Позиционирование кнопки формулы */
+.kpi-cell {
+    position: relative;
 }
 
 .kpi-cell:hover .formula-btn {
