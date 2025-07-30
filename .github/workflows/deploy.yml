@@ -12,12 +12,12 @@ jobs:
 
     steps:
     - name:  Клонируем репозиторий
-      uses: actions/checkoutv3
+      uses: actions/checkout@v3
 
     - name:  Устанавливаем Python
-      uses: actions/setup-pythonv4
+      uses: actions/setup-python@v4
       with:
-        python-version: 3.10
+        python-version: 3.12.3
 
     - name:  Устанавливаем зависимости
       run: |
