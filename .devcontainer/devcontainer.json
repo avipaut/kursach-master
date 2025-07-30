@@ -1,0 +1,25 @@
+{
+    "name": "Flask Development",
+    "image": "mcr.microsoft.com/devcontainers/python:3.12",
+    "features": {
+      "ghcr.io/devcontainers/features/git:1": {}
+    },
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "ms-python.python",
+          "ms-python.flake8",
+          "ms-python.autopep8",
+          "ms-toolsai.jupyter"
+        ]
+      }
+    },
+    "postCreateCommand": "pip install -r requirements.txt",
+    "forwardPorts": [5000],
+    "portsAttributes": {
+      "5000": {
+        "label": "Flask App",
+        "onAutoForward": "notify"
+      }
+    }
+  }
